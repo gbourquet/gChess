@@ -2,7 +2,7 @@ package com.gchess.domain.model
 
 data class Game(
     val id: String,
-    val board: BitBoard = BitBoard.initial(),
+    val board: ChessPosition = ChessPosition.initial(),
     val currentPlayer: Color = Color.WHITE,
     val status: GameStatus = GameStatus.IN_PROGRESS,
     val moveHistory: List<Move> = emptyList()

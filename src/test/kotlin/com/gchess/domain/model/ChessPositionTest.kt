@@ -6,10 +6,10 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.assertions.throwables.shouldThrow
 
-class BitBoardTest : StringSpec({
+class ChessPositionTest : StringSpec({
 
     "initial board should have correct white pawns" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
 
         for (file in 0..7) {
             val position = Position(file, 1)
@@ -21,7 +21,7 @@ class BitBoardTest : StringSpec({
     }
 
     "initial board should have correct black pawns" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
 
         for (file in 0..7) {
             val position = Position(file, 6)
@@ -33,7 +33,7 @@ class BitBoardTest : StringSpec({
     }
 
     "initial board should have all pieces in correct positions" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
 
         // White back rank
         bitBoard.pieceAt(Position.fromAlgebraic("a1"))?.type shouldBe PieceType.ROOK
@@ -57,7 +57,7 @@ class BitBoardTest : StringSpec({
     }
 
     "initial board should have empty squares in the middle" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
 
         for (rank in 2..5) {
             for (file in 0..7) {
@@ -69,7 +69,7 @@ class BitBoardTest : StringSpec({
     }
 
     "setPiece should place piece at correct position" {
-        val bitBoard = BitBoard()
+        val bitBoard = ChessPosition()
         val position = Position.fromAlgebraic("e4")
         val piece = Piece(PieceType.KNIGHT, Color.WHITE)
 
@@ -80,7 +80,7 @@ class BitBoardTest : StringSpec({
     }
 
     "setPiece with null should remove piece" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val position = Position.fromAlgebraic("e2")
 
         bitBoard.pieceAt(position).shouldNotBeNull()
@@ -92,7 +92,7 @@ class BitBoardTest : StringSpec({
     }
 
     "setPiece should replace piece at occupied square" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val position = Position.fromAlgebraic("e2")
         val newPiece = Piece(PieceType.QUEEN, Color.BLACK)
 
@@ -109,7 +109,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece should move piece from one square to another" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val from = Position.fromAlgebraic("e2")
         val to = Position.fromAlgebraic("e4")
 
@@ -125,7 +125,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece should mark piece as moved" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val from = Position.fromAlgebraic("e2")
         val to = Position.fromAlgebraic("e4")
 
@@ -141,7 +141,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece from empty square should return unchanged board" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val from = Position.fromAlgebraic("e4")
         val to = Position.fromAlgebraic("e5")
 
@@ -151,7 +151,7 @@ class BitBoardTest : StringSpec({
     }
 
     "capture move should remove captured piece" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val afterFirstMove = bitBoard.movePiece(
             Position.fromAlgebraic("e2"),
             Position.fromAlgebraic("e4")
@@ -172,42 +172,42 @@ class BitBoardTest : StringSpec({
     }
 
     "whitePieces should return all white pieces" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val whitePieces = bitBoard.whitePieces()
 
         whitePieces.countOneBits() shouldBe 16
     }
 
     "blackPieces should return all black pieces" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val blackPieces = bitBoard.blackPieces()
 
         blackPieces.countOneBits() shouldBe 16
     }
 
     "occupiedSquares should return all occupied squares" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val occupied = bitBoard.occupiedSquares()
 
         occupied.countOneBits() shouldBe 32
     }
 
     "emptySquares should return all empty squares" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val empty = bitBoard.emptySquares()
 
         empty.countOneBits() shouldBe 32
     }
 
     "getAllPieces should return all pieces with positions" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val pieces = bitBoard.getAllPieces()
 
         pieces.size shouldBe 32
     }
 
     "getPiecesByColor should return only white pieces" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val whitePieces = bitBoard.getPiecesByColor(Color.WHITE)
 
         whitePieces.size shouldBe 16
@@ -215,7 +215,7 @@ class BitBoardTest : StringSpec({
     }
 
     "getPiecesByColor should return only black pieces" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val blackPieces = bitBoard.getPiecesByColor(Color.BLACK)
 
         blackPieces.size shouldBe 16
@@ -223,45 +223,45 @@ class BitBoardTest : StringSpec({
     }
 
     "positionToIndex should convert position to correct index" {
-        BitBoard.positionToIndex(Position(0, 0)) shouldBe 0
-        BitBoard.positionToIndex(Position(7, 0)) shouldBe 7
-        BitBoard.positionToIndex(Position(0, 1)) shouldBe 8
-        BitBoard.positionToIndex(Position(7, 7)) shouldBe 63
+        ChessPosition.positionToIndex(Position(0, 0)) shouldBe 0
+        ChessPosition.positionToIndex(Position(7, 0)) shouldBe 7
+        ChessPosition.positionToIndex(Position(0, 1)) shouldBe 8
+        ChessPosition.positionToIndex(Position(7, 7)) shouldBe 63
     }
 
     "indexToPosition should convert index to correct position" {
-        BitBoard.indexToPosition(0) shouldBe Position(0, 0)
-        BitBoard.indexToPosition(7) shouldBe Position(7, 0)
-        BitBoard.indexToPosition(8) shouldBe Position(0, 1)
-        BitBoard.indexToPosition(63) shouldBe Position(7, 7)
+        ChessPosition.indexToPosition(0) shouldBe Position(0, 0)
+        ChessPosition.indexToPosition(7) shouldBe Position(7, 0)
+        ChessPosition.indexToPosition(8) shouldBe Position(0, 1)
+        ChessPosition.indexToPosition(63) shouldBe Position(7, 7)
     }
 
     "indexToPosition should throw for invalid index" {
         shouldThrow<IllegalArgumentException> {
-            BitBoard.indexToPosition(-1)
+            ChessPosition.indexToPosition(-1)
         }
         shouldThrow<IllegalArgumentException> {
-            BitBoard.indexToPosition(64)
+            ChessPosition.indexToPosition(64)
         }
     }
 
     "positionToBit should create correct bit mask" {
-        BitBoard.positionToBit(Position(0, 0)) shouldBe 1L
-        BitBoard.positionToBit(Position(7, 0)) shouldBe (1L shl 7)
-        BitBoard.positionToBit(Position(7, 7)) shouldBe (1L shl 63)
+        ChessPosition.positionToBit(Position(0, 0)) shouldBe 1L
+        ChessPosition.positionToBit(Position(7, 0)) shouldBe (1L shl 7)
+        ChessPosition.positionToBit(Position(7, 7)) shouldBe (1L shl 63)
     }
 
     "visualize should produce readable output" {
         val bitboard = 0x00000000000000FFL
-        val visualization = BitBoard.visualize(bitboard)
+        val visualization = ChessPosition.visualize(bitboard)
 
         visualization.shouldNotBeNull()
         visualization.contains("a b c d e f g h") shouldBe true
         visualization.contains("1") shouldBe true
     }
 
-    "empty BitBoard should have no pieces" {
-        val bitBoard = BitBoard()
+    "empty ChessPosition should have no pieces" {
+        val bitBoard = ChessPosition()
 
         bitBoard.whitePieces() shouldBe 0L
         bitBoard.blackPieces() shouldBe 0L
@@ -270,49 +270,49 @@ class BitBoardTest : StringSpec({
     }
 
     "initial position should generate correct FEN" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val fen = bitBoard.toFen()
 
         fen shouldBe "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     }
 
     "toFen should include en passant square when provided" {
-        val bitBoard = BitBoard.initial().copy(enPassantSquare = "e3")
+        val bitBoard = ChessPosition.initial().copy(enPassantSquare = "e3")
         val fen = bitBoard.toFen()
 
         fen.split(" ")[3] shouldBe "e3"
     }
 
     "toFen should show no en passant when not provided" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
         val fen = bitBoard.toFen()
 
         fen.split(" ")[3] shouldBe "-"
     }
 
     "toFen should include halfmove clock" {
-        val bitBoard = BitBoard.initial().copy(halfmoveClock = 5)
+        val bitBoard = ChessPosition.initial().copy(halfmoveClock = 5)
         val fen = bitBoard.toFen()
 
         fen.split(" ")[4] shouldBe "5"
     }
 
     "toFen should include fullmove number" {
-        val bitBoard = BitBoard.initial().copy(fullmoveNumber = 42)
+        val bitBoard = ChessPosition.initial().copy(fullmoveNumber = 42)
         val fen = bitBoard.toFen()
 
         fen.split(" ")[5] shouldBe "42"
     }
 
     "empty board should generate correct FEN" {
-        val bitBoard = BitBoard()
+        val bitBoard = ChessPosition()
         val fen = bitBoard.toFen()
 
         fen shouldBe "8/8/8/8/8/8/8/8 w - - 0 1"
     }
 
     "castling rights should be correct after king moves" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
             .movePiece(Position.fromAlgebraic("e1"), Position.fromAlgebraic("e2"))
         val fen = bitBoard.toFen()
 
@@ -324,7 +324,7 @@ class BitBoardTest : StringSpec({
     }
 
     "castling rights should be correct after rook moves" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
             .movePiece(Position.fromAlgebraic("h1"), Position.fromAlgebraic("h2"))
         val fen = bitBoard.toFen()
 
@@ -336,7 +336,7 @@ class BitBoardTest : StringSpec({
     }
 
     "position with custom pieces should generate correct FEN" {
-        val bitBoard = BitBoard()
+        val bitBoard = ChessPosition()
             .setPiece(Position.fromAlgebraic("e4"), Piece(PieceType.KING, Color.WHITE))
             .setPiece(Position.fromAlgebraic("e8"), Piece(PieceType.KING, Color.BLACK))
             .setPiece(Position.fromAlgebraic("d1"), Piece(PieceType.QUEEN, Color.WHITE))
@@ -348,7 +348,7 @@ class BitBoardTest : StringSpec({
     }
 
     "FEN should count consecutive empty squares correctly" {
-        val bitBoard = BitBoard()
+        val bitBoard = ChessPosition()
             .setPiece(Position.fromAlgebraic("a8"), Piece(PieceType.ROOK, Color.BLACK))
             .setPiece(Position.fromAlgebraic("h8"), Piece(PieceType.ROOK, Color.BLACK))
 
@@ -358,9 +358,9 @@ class BitBoardTest : StringSpec({
         position shouldBe "r6r/8/8/8/8/8/8/8"
     }
 
-    "String.toBitBoard should parse initial position FEN" {
+    "String.toChessPosition should parse initial position FEN" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        val bitBoard = fen.toBitBoard()
+        val bitBoard = fen.toChessPosition()
 
         bitBoard.getAllPieces().size shouldBe 32
         bitBoard.pieceAt(Position.fromAlgebraic("e1"))?.type shouldBe PieceType.KING
@@ -368,17 +368,17 @@ class BitBoardTest : StringSpec({
         bitBoard.pieceAt(Position.fromAlgebraic("e2"))?.type shouldBe PieceType.PAWN
     }
 
-    "String.toBitBoard should parse empty board FEN" {
+    "String.toChessPosition should parse empty board FEN" {
         val fen = "8/8/8/8/8/8/8/8 w - - 0 1"
-        val bitBoard = fen.toBitBoard()
+        val bitBoard = fen.toChessPosition()
 
         bitBoard.getAllPieces().size shouldBe 0
         bitBoard.occupiedSquares() shouldBe 0L
     }
 
-    "String.toBitBoard should parse custom position FEN" {
+    "String.toChessPosition should parse custom position FEN" {
         val fen = "4k3/8/8/8/4K3/8/8/3Q4 w - - 0 1"
-        val bitBoard = fen.toBitBoard()
+        val bitBoard = fen.toChessPosition()
 
         bitBoard.pieceAt(Position.fromAlgebraic("e4"))?.type shouldBe PieceType.KING
         bitBoard.pieceAt(Position.fromAlgebraic("e4"))?.color shouldBe Color.WHITE
@@ -388,9 +388,9 @@ class BitBoardTest : StringSpec({
         bitBoard.pieceAt(Position.fromAlgebraic("d1"))?.color shouldBe Color.WHITE
     }
 
-    "String.toBitBoard should handle castling rights correctly" {
+    "String.toChessPosition should handle castling rights correctly" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        val bitBoard = fen.toBitBoard()
+        val bitBoard = fen.toChessPosition()
 
         // All pieces should not be marked as moved
         bitBoard.pieceAt(Position.fromAlgebraic("e1"))?.hasMoved shouldBe false
@@ -398,9 +398,9 @@ class BitBoardTest : StringSpec({
         bitBoard.pieceAt(Position.fromAlgebraic("a1"))?.hasMoved shouldBe false
     }
 
-    "String.toBitBoard should handle no castling rights" {
+    "String.toChessPosition should handle no castling rights" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
-        val bitBoard = fen.toBitBoard()
+        val bitBoard = fen.toChessPosition()
 
         // Kings and rooks should be marked as moved
         bitBoard.pieceAt(Position.fromAlgebraic("e1"))?.hasMoved shouldBe true
@@ -411,9 +411,9 @@ class BitBoardTest : StringSpec({
         bitBoard.pieceAt(Position.fromAlgebraic("h8"))?.hasMoved shouldBe true
     }
 
-    "String.toBitBoard should handle partial castling rights" {
+    "String.toChessPosition should handle partial castling rights" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kq - 0 1"
-        val bitBoard = fen.toBitBoard()
+        val bitBoard = fen.toChessPosition()
 
         // White kingside rook and black queenside rook should not be marked as moved
         bitBoard.pieceAt(Position.fromAlgebraic("h1"))?.hasMoved shouldBe false
@@ -424,33 +424,33 @@ class BitBoardTest : StringSpec({
         bitBoard.pieceAt(Position.fromAlgebraic("h8"))?.hasMoved shouldBe true
     }
 
-    "String.toBitBoard should throw for invalid FEN with wrong number of parts" {
+    "String.toChessPosition should throw for invalid FEN with wrong number of parts" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq"
 
         shouldThrow<IllegalArgumentException> {
-            fen.toBitBoard()
+            fen.toChessPosition()
         }
     }
 
-    "String.toBitBoard should throw for invalid FEN with wrong number of ranks" {
+    "String.toChessPosition should throw for invalid FEN with wrong number of ranks" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP w KQkq - 0 1"
 
         shouldThrow<IllegalArgumentException> {
-            fen.toBitBoard()
+            fen.toChessPosition()
         }
     }
 
-    "String.toBitBoard should throw for invalid piece character" {
+    "String.toChessPosition should throw for invalid piece character" {
         val fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPXPPP/RNBQKBNR w KQkq - 0 1"
 
         shouldThrow<IllegalArgumentException> {
-            fen.toBitBoard()
+            fen.toChessPosition()
         }
     }
 
     "round trip FEN conversion should preserve position" {
         val originalFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        val bitBoard = originalFen.toBitBoard()
+        val bitBoard = originalFen.toChessPosition()
         val reconstructedFen = bitBoard.toFen()
 
         reconstructedFen shouldBe originalFen
@@ -458,14 +458,14 @@ class BitBoardTest : StringSpec({
 
     "round trip FEN conversion with custom position should preserve position" {
         val originalFen = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
-        val bitBoard = originalFen.toBitBoard()
+        val bitBoard = originalFen.toChessPosition()
         val reconstructedFen = bitBoard.toFen()
 
         reconstructedFen shouldBe originalFen
     }
 
     "movePiece should increment halfmove clock for non-pawn, non-capture moves" {
-        val bitBoard = BitBoard.initial().copy(halfmoveClock = 3)
+        val bitBoard = ChessPosition.initial().copy(halfmoveClock = 3)
         val newBoard = bitBoard.movePiece(
             Position.fromAlgebraic("b1"),
             Position.fromAlgebraic("c3")
@@ -475,7 +475,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece should reset halfmove clock on pawn move" {
-        val bitBoard = BitBoard.initial().copy(halfmoveClock = 5)
+        val bitBoard = ChessPosition.initial().copy(halfmoveClock = 5)
         val newBoard = bitBoard.movePiece(
             Position.fromAlgebraic("e2"),
             Position.fromAlgebraic("e4")
@@ -485,7 +485,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece should reset halfmove clock on capture" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
             .copy(halfmoveClock = 5)
             .movePiece(Position.fromAlgebraic("e2"), Position.fromAlgebraic("e4"))
             .setPiece(Position.fromAlgebraic("d5"), Piece(PieceType.PAWN, Color.BLACK))
@@ -499,7 +499,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece should not increment fullmove number after White's move" {
-        val bitBoard = BitBoard.initial().copy(fullmoveNumber = 10)
+        val bitBoard = ChessPosition.initial().copy(fullmoveNumber = 10)
         val newBoard = bitBoard.movePiece(
             Position.fromAlgebraic("e2"),
             Position.fromAlgebraic("e4")
@@ -509,7 +509,7 @@ class BitBoardTest : StringSpec({
     }
 
     "movePiece should increment fullmove number after Black's move" {
-        val bitBoard = BitBoard.initial()
+        val bitBoard = ChessPosition.initial()
             .copy(sideToMove = Color.BLACK, fullmoveNumber = 10)
         val newBoard = bitBoard.movePiece(
             Position.fromAlgebraic("e7"),
@@ -517,5 +517,16 @@ class BitBoardTest : StringSpec({
         )
 
         newBoard.fullmoveNumber shouldBe 11
+    }
+
+    // ========== Integration Test - Delegation to ChessRules ==========
+
+    "getLegalMoves should delegate to ChessRules service" {
+        // Simple integration test to verify delegation works
+        val position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+        val moves = position.getLegalMoves()
+
+        // Should return some legal moves (detailed tests are in StandardChessRulesTest)
+        moves.isNotEmpty() shouldBe true
     }
 })

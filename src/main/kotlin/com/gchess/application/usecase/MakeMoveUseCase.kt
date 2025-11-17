@@ -3,11 +3,11 @@ package com.gchess.application.usecase
 import com.gchess.domain.model.Game
 import com.gchess.domain.model.Move
 import com.gchess.domain.port.GameRepository
-import com.gchess.domain.port.MoveValidator
+import com.gchess.domain.service.ChessRules
 
 class MakeMoveUseCase(
     private val gameRepository: GameRepository,
-    private val moveValidator: MoveValidator
+    private val chessRules: ChessRules
 ) {
     suspend fun execute(gameId: String, move: Move): Result<Game> {
         val game = gameRepository.findById(gameId)
@@ -17,7 +17,7 @@ class MakeMoveUseCase(
             return Result.failure(Exception("Game is already finished"))
         }
 
-        if (!moveValidator.isValidMove(game, move)) {
+        if (!chessRules.isMoveLegal(game.board, move)) {
             return Result.failure(Exception("Invalid move"))
         }
 

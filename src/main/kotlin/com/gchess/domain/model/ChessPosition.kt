@@ -1,5 +1,8 @@
 package com.gchess.domain.model
 
+import com.gchess.domain.service.ChessRules
+import com.gchess.domain.service.StandardChessRules
+
 /**
  * Bitboard representation of a chess board.
  * Uses 64-bit integers where each bit represents a square on the board.
@@ -8,7 +11,7 @@ package com.gchess.domain.model
  * This is an efficient representation for chess engines, allowing fast
  * bitwise operations for move generation and board evaluation.
  */
-data class BitBoard(
+data class ChessPosition(
     val whitePawns: Long = 0L,
     val whiteKnights: Long = 0L,
     val whiteBishops: Long = 0L,
@@ -23,10 +26,7 @@ data class BitBoard(
     val blackKings: Long = 0L,
     val movedPieces: Long = 0L, // Tracks which pieces have moved
     val sideToMove: Color = Color.WHITE, // Which side has the move
-    val whiteKingSideCastle: Boolean = false, // White can castle kingside
-    val whiteQueenSideCastle: Boolean = false, // White can castle queenside
-    val blackKingSideCastle: Boolean = false, // Black can castle kingside
-    val blackQueenSideCastle: Boolean = false, // Black can castle queenside
+    val castlingRights: CastlingRights = CastlingRights.NONE, // Castling availability for both players
     val enPassantSquare: String? = null, // En passant target square in algebraic notation (e.g., "e3")
     val halfmoveClock: Int = 0, // Number of halfmoves since last capture or pawn move (for 50-move rule)
     val fullmoveNumber: Int = 1 // The full move number (starts at 1, incremented after Black's move)
@@ -86,7 +86,7 @@ data class BitBoard(
     /**
      * Sets a piece at a given position
      */
-    fun setPiece(position: Position, piece: Piece?): BitBoard {
+    fun setPiece(position: Position, piece: Piece?): ChessPosition {
         val bit = positionToBit(position)
         val clearedBoard = clearSquare(position)
 
@@ -156,7 +156,7 @@ data class BitBoard(
     /**
      * Clears a square (removes any piece at this position)
      */
-    private fun clearSquare(position: Position): BitBoard {
+    private fun clearSquare(position: Position): ChessPosition {
         val clearMask = positionToBit(position).inv()
         return copy(
             whitePawns = whitePawns and clearMask,
@@ -178,11 +178,17 @@ data class BitBoard(
     /**
      * Moves a piece from one position to another, switches the side to move,
      * and updates castling rights if necessary
+     * @param promotion The piece type to promote to (for pawn promotions)
      */
-    fun movePiece(from: Position, to: Position): BitBoard {
+    fun movePiece(from: Position, to: Position, promotion: PieceType? = null): ChessPosition {
         val piece = pieceAt(from) ?: return this
         val isCapture = pieceAt(to) != null
         val isPawnMove = piece.type == PieceType.PAWN
+
+        // Detect en passant capture
+        val isEnPassant = isPawnMove &&
+            enPassantSquare != null &&
+            to.toAlgebraic() == enPassantSquare
 
         // Calculate en passant square if a pawn moves two squares
         val newEnPassant = if (isPawnMove) {
@@ -208,8 +214,17 @@ data class BitBoard(
         // Update fullmove number: increment after Black's move
         val newFullmoveNumber = if (sideToMove == Color.BLACK) fullmoveNumber + 1 else fullmoveNumber
 
+        // Determine the piece to place on the destination square
+        val destinationPiece = if (promotion != null && isPawnMove) {
+            // Pawn promotion: replace with promoted piece
+            Piece(promotion, piece.color, hasMoved = true)
+        } else {
+            // Normal move: same piece, marked as moved
+            piece.withMoved()
+        }
+
         var newBoard = setPiece(from, null)
-            .setPiece(to, piece.withMoved())
+            .setPiece(to, destinationPiece)
             .copy(
                 sideToMove = sideToMove.opposite(),
                 enPassantSquare = newEnPassant,
@@ -217,37 +232,90 @@ data class BitBoard(
                 fullmoveNumber = newFullmoveNumber
             )
 
+        // Handle en passant capture: remove the captured pawn
+        if (isEnPassant) {
+            // The captured pawn is on the same file as 'to', but one rank behind
+            val capturedPawnRank = if (piece.color == Color.WHITE) to.rank - 1 else to.rank + 1
+            val capturedPawnPosition = Position(to.file, capturedPawnRank)
+            newBoard = newBoard.setPiece(capturedPawnPosition, null)
+        }
+
+        // Handle castling: move the rook if king moves 2 squares horizontally
+        val isCastling = piece.type == PieceType.KING && kotlin.math.abs(to.file - from.file) == 2
+        if (isCastling) {
+            // Determine which side is castling based on the king's destination
+            val isKingsideCastling = to.file > from.file // King moves to the right
+
+            if (piece.color == Color.WHITE) {
+                if (isKingsideCastling) {
+                    // White kingside castling: move rook from h1 to f1
+                    val h1 = Position.fromAlgebraic("h1")
+                    val f1 = Position.fromAlgebraic("f1")
+                    val rook = newBoard.pieceAt(h1)
+                    if (rook != null) {
+                        newBoard = newBoard.setPiece(h1, null).setPiece(f1, rook.withMoved())
+                    }
+                } else {
+                    // White queenside castling: move rook from a1 to d1
+                    val a1 = Position.fromAlgebraic("a1")
+                    val d1 = Position.fromAlgebraic("d1")
+                    val rook = newBoard.pieceAt(a1)
+                    if (rook != null) {
+                        newBoard = newBoard.setPiece(a1, null).setPiece(d1, rook.withMoved())
+                    }
+                }
+            } else {
+                if (isKingsideCastling) {
+                    // Black kingside castling: move rook from h8 to f8
+                    val h8 = Position.fromAlgebraic("h8")
+                    val f8 = Position.fromAlgebraic("f8")
+                    val rook = newBoard.pieceAt(h8)
+                    if (rook != null) {
+                        newBoard = newBoard.setPiece(h8, null).setPiece(f8, rook.withMoved())
+                    }
+                } else {
+                    // Black queenside castling: move rook from a8 to d8
+                    val a8 = Position.fromAlgebraic("a8")
+                    val d8 = Position.fromAlgebraic("d8")
+                    val rook = newBoard.pieceAt(a8)
+                    if (rook != null) {
+                        newBoard = newBoard.setPiece(a8, null).setPiece(d8, rook.withMoved())
+                    }
+                }
+            }
+        }
+
         // Update castling rights based on piece type and position
         when {
-            // White king moves - lose both white castling rights
-            piece.type == PieceType.KING && piece.color == Color.WHITE -> {
+            // King moves - lose both castling rights for that color
+            piece.type == PieceType.KING -> {
                 newBoard = newBoard.copy(
-                    whiteKingSideCastle = false,
-                    whiteQueenSideCastle = false
-                )
-            }
-            // Black king moves - lose both black castling rights
-            piece.type == PieceType.KING && piece.color == Color.BLACK -> {
-                newBoard = newBoard.copy(
-                    blackKingSideCastle = false,
-                    blackQueenSideCastle = false
+                    castlingRights = castlingRights.withoutRightsFor(piece.color)
                 )
             }
             // White kingside rook moves
             piece.type == PieceType.ROOK && piece.color == Color.WHITE && from == Position.fromAlgebraic("h1") -> {
-                newBoard = newBoard.copy(whiteKingSideCastle = false)
+                newBoard = newBoard.copy(
+                    castlingRights = castlingRights.withoutKingsideFor(Color.WHITE)
+                )
             }
             // White queenside rook moves
             piece.type == PieceType.ROOK && piece.color == Color.WHITE && from == Position.fromAlgebraic("a1") -> {
-                newBoard = newBoard.copy(whiteQueenSideCastle = false)
+                newBoard = newBoard.copy(
+                    castlingRights = castlingRights.withoutQueensideFor(Color.WHITE)
+                )
             }
             // Black kingside rook moves
             piece.type == PieceType.ROOK && piece.color == Color.BLACK && from == Position.fromAlgebraic("h8") -> {
-                newBoard = newBoard.copy(blackKingSideCastle = false)
+                newBoard = newBoard.copy(
+                    castlingRights = castlingRights.withoutKingsideFor(Color.BLACK)
+                )
             }
             // Black queenside rook moves
             piece.type == PieceType.ROOK && piece.color == Color.BLACK && from == Position.fromAlgebraic("a8") -> {
-                newBoard = newBoard.copy(blackQueenSideCastle = false)
+                newBoard = newBoard.copy(
+                    castlingRights = castlingRights.withoutQueensideFor(Color.BLACK)
+                )
             }
         }
 
@@ -276,7 +344,21 @@ data class BitBoard(
     }
 
     /**
-     * Converts this BitBoard to FEN (Forsyth-Edwards Notation)
+     * Generates all legal moves for the current position.
+     *
+     * Delegates to the ChessRules domain service which encapsulates
+     * all the business logic for move generation.
+     *
+     * Uses a singleton instance of StandardChessRules for performance.
+     *
+     * @return List of all legal moves in the current position
+     */
+    fun getLegalMoves(): List<Move> {
+        return standardRules.legalMovesFor(this)
+    }
+
+    /**
+     * Converts this ChessPosition to FEN (Forsyth-Edwards Notation)
      *
      * FEN format: position activeColor castling enPassant halfmove fullmove
      *
@@ -334,62 +416,50 @@ data class BitBoard(
      * Builds the castling rights part of FEN notation
      */
     private fun buildCastlingRights(): String {
-        var rights = ""
-
-        if (whiteKingSideCastle) rights += "K"
-        if (whiteQueenSideCastle) rights += "Q"
-        if (blackKingSideCastle) rights += "k"
-        if (blackQueenSideCastle) rights += "q"
-
-        return rights.ifEmpty { "-" }
+        return castlingRights.toFenString()
     }
 
     /**
      * Sets the castling rights based on FEN notation
      */
-    internal fun updateCastlingRights(castlingRights: String): BitBoard {
-        return copy(
-            whiteKingSideCastle = castlingRights.contains('K'),
-            whiteQueenSideCastle = castlingRights.contains('Q'),
-            blackKingSideCastle = castlingRights.contains('k'),
-            blackQueenSideCastle = castlingRights.contains('q')
-        )
+    internal fun updateCastlingRights(castlingRightsFen: String): ChessPosition {
+        return copy(castlingRights = CastlingRights.fromFenString(castlingRightsFen))
     }
 
     /**
      * Marks pieces (kings and rooks) as moved based on castling rights
      * If a castling right is absent, the corresponding pieces should be marked as moved
      */
-    internal fun markPiecesBasedOnCastlingRights(castlingRights: String): BitBoard {
+    internal fun markPiecesBasedOnCastlingRights(): ChessPosition {
         var result = this
 
-        // White king should be marked as moved if neither K nor Q is present
-        if (!castlingRights.contains('K') && !castlingRights.contains('Q')) {
+        // White king should be marked as moved if neither castling right is available
+        if (!castlingRights.canCastleKingside(Color.WHITE) && !castlingRights.canCastleQueenside(Color.WHITE)) {
             result = result.markPieceAsMoved(Position.fromAlgebraic("e1"))
         }
 
-        // Black king should be marked as moved if neither k nor q is present
-        if (!castlingRights.contains('k') && !castlingRights.contains('q')) {
+        // Black king should be marked as moved if neither castling right is available
+        if (!castlingRights.canCastleKingside(Color.BLACK) && !castlingRights.canCastleQueenside(Color.BLACK)) {
             result = result.markPieceAsMoved(Position.fromAlgebraic("e8"))
         }
 
-        // White kingside rook should be marked as moved if K is not present
-        if (!castlingRights.contains('K')) {
+        // White kingside rook should be marked as moved if right not available
+        if (!castlingRights.canCastleKingside(Color.WHITE)) {
             result = result.markPieceAsMoved(Position.fromAlgebraic("h1"))
         }
 
-        // White queenside rook should be marked as moved if Q is not present
-        if (!castlingRights.contains('Q')) {
+        // White queenside rook should be marked as moved if right not available
+        if (!castlingRights.canCastleQueenside(Color.WHITE)) {
             result = result.markPieceAsMoved(Position.fromAlgebraic("a1"))
         }
 
-        // Black kingside rook should be marked as moved if k is not present
-        if (!castlingRights.contains('k')) {
+        // Black kingside rook should be marked as moved if right not available
+        if (!castlingRights.canCastleKingside(Color.BLACK)) {
             result = result.markPieceAsMoved(Position.fromAlgebraic("h8"))
         }
 
-        // Black queenside rook should be marked as moved if q is not present
-        if (!castlingRights.contains('q')) {
+        // Black queenside rook should be marked as moved if right not available
+        if (!castlingRights.canCastleQueenside(Color.BLACK)) {
             result = result.markPieceAsMoved(Position.fromAlgebraic("a8"))
         }
 
@@ -399,12 +469,18 @@ data class BitBoard(
     /**
      * Marks a piece at the given position as moved
      */
-    private fun markPieceAsMoved(position: Position): BitBoard {
+    private fun markPieceAsMoved(position: Position): ChessPosition {
         val piece = pieceAt(position) ?: return this
         return setPiece(position, piece.withMoved())
     }
 
     companion object {
+        /**
+         * Singleton instance of StandardChessRules for move generation.
+         * Since StandardChessRules is stateless, we can safely reuse the same instance.
+         */
+        private val standardRules = StandardChessRules()
+
         /**
          * Converts a Position to a bit index (0-63)
          */
@@ -428,10 +504,10 @@ data class BitBoard(
         }
 
         /**
-         * Creates a BitBoard with the initial chess position
+         * Creates a ChessPosition with the initial chess position
          */
-        fun initial(): BitBoard {
-            return BitBoard(
+        fun initial(): ChessPosition {
+            return ChessPosition(
                 // White pieces
                 whitePawns = 0x000000000000FF00L,   // rank 2
                 whiteKnights = 0x0000000000000042L, // b1, g1
@@ -449,10 +525,7 @@ data class BitBoard(
                 blackKings = (0x10L shl 56),        // e8
 
                 // Castling rights (all available at start)
-                whiteKingSideCastle = true,
-                whiteQueenSideCastle = true,
-                blackKingSideCastle = true,
-                blackQueenSideCastle = true
+                castlingRights = CastlingRights.ALL
             )
         }
 
@@ -476,18 +549,18 @@ data class BitBoard(
 }
 
 /**
- * Extension function to convert a FEN string to a BitBoard
+ * Extension function to convert a FEN string to a ChessPosition
  *
  * @receiver FEN string (e.g., "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
- * @return BitBoard representing the position
+ * @return ChessPosition representing the position
  * @throws IllegalArgumentException if the FEN string is invalid
  */
-fun String.toBitBoard(): BitBoard {
+fun String.toChessPosition(): ChessPosition {
     val parts = this.trim().split(" ")
     require(parts.size == 6) { "Invalid FEN: must have 6 parts separated by spaces" }
 
     val positionPart = parts[0]
-    var bitBoard = BitBoard()
+    var bitBoard = ChessPosition()
 
     // Parse piece positions
     val ranks = positionPart.split("/")
@@ -535,7 +608,7 @@ fun String.toBitBoard(): BitBoard {
     val fullmove = parts[5].toIntOrNull() ?: throw IllegalArgumentException("Invalid FEN: fullmove number must be a number, got '${parts[5]}'")
 
     bitBoard = bitBoard.updateCastlingRights(castlingRights)
-        .markPiecesBasedOnCastlingRights(castlingRights)
+        .markPiecesBasedOnCastlingRights()
         .copy(
             sideToMove = activeColor,
             enPassantSquare = enPassant,
