@@ -26,14 +26,24 @@ gChess is a chess game application built with Kotlin, using Ktor as the web fram
 ./gradlew run
 ```
 
-### Run tests
+### Run unit tests
 ```bash
-./gradlew test
+./gradlew unitTest
+```
+
+### Run architecture tests
+```bash
+./gradlew architectureTest
+```
+
+### Run all tests
+```bash
+./gradlew check
 ```
 
 ### Run a specific test class
 ```bash
-./gradlew test --tests "com.gchess.domain.model.ChessPositionTest"
+./gradlew unitTest --tests "com.gchess.domain.model.ChessPositionTest"
 ```
 
 ### Clean build artifacts
@@ -138,6 +148,33 @@ The `StandardChessRules` domain service implements:
 - In-memory storage only - games are lost on server restart
 - No authentication or player management
 - No WebSocket support for real-time updates (though Ktor WebSocket dependency is included)
+
+## Architecture Testing
+
+The project uses **ArchUnit** to enforce hexagonal architecture rules automatically. These tests ensure:
+
+### Layer Dependency Rules
+- ✅ Domain layer has **no dependencies** on application or infrastructure layers
+- ✅ Domain layer is **framework-agnostic** (no Ktor, Koin, or serialization dependencies)
+- ✅ Application layer depends **only on domain** (and standard Kotlin libraries)
+- ✅ Infrastructure can access application and domain
+- ✅ Dependencies flow **inward** toward the domain
+
+### Naming Conventions
+- ✅ Use cases end with `UseCase`
+- ✅ Repository interfaces end with `Repository`
+- ✅ Domain services end with `Rules` or `Service`
+
+### Package Organization
+- ✅ Domain services are interfaces or implementations of domain interfaces
+- ✅ Ports (repository interfaces) reside in `domain.port` package
+- ✅ Adapters (implementations) reside in `infrastructure` layer
+- ✅ Domain models (entities, value objects) reside in `domain.model` package
+
+Run architecture tests:
+```bash
+./gradlew architectureTest
+```
 
 ## Development Notes
 
