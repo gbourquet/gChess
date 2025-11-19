@@ -10,7 +10,9 @@ A high-performance chess application built with Kotlin, featuring bitboard-based
   - All piece movements (Pawn, Knight, Bishop, Rook, Queen, King)
   - Special moves: Castling (kingside & queenside), En passant, Pawn promotion
   - Check detection and pinned piece handling
-  - Move validation ensuring king safety
+  - Move validation ensuring king safety (including protected piece validation)
+  - **Game-ending conditions**: Checkmate and Stalemate detection
+  - **Draw rules**: Fifty-move rule, Threefold repetition, Insufficient material
 - 📊 **FEN notation support** for position import/export
 - 🎯 **Legal move generation** with full rule compliance
 
@@ -25,7 +27,7 @@ A high-performance chess application built with Kotlin, featuring bitboard-based
 - 🏗️ **Hexagonal architecture** (ports and adapters)
 - 🎯 **Domain-Driven Design** with bounded contexts (Chess + User)
 - 🔄 **Anti-Corruption Layer** for context communication
-- 🧪 **Comprehensive test coverage** (80+ tests including architecture tests)
+- 🧪 **Comprehensive test coverage** (108+ unit tests, architecture tests, integration tests)
 - 💉 **Dependency injection** with Koin
 - 📦 **In-memory storage** for games and users
 
@@ -190,15 +192,19 @@ curl -X POST http://localhost:8080/api/games/{gameId}/moves \
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Basic Moves | ✅ | All piece types (Pawn, Knight, Bishop, Rook, Queen, King) |
-| Pawn Promotion | ✅ | Promote to Queen, Rook, Bishop, or Knight |
-| Castling | ✅ | Kingside and queenside for both colors |
-| En Passant | ✅ | Special pawn capture |
-| Check Detection | ✅ | Validates king safety |
-| Pinned Pieces | ✅ | Pieces that cannot move without exposing king |
-| FEN Support | ✅ | Import/export positions via Forsyth-Edwards Notation |
-| Checkmate | ⏳ | Detection not yet implemented |
-| Stalemate | ⏳ | Detection not yet implemented |
+| **Basic Moves** | ✅ | All piece types (Pawn, Knight, Bishop, Rook, Queen, King) |
+| **Pawn Promotion** | ✅ | Promote to Queen, Rook, Bishop, or Knight |
+| **Castling** | ✅ | Kingside and queenside for both colors |
+| **En Passant** | ✅ | Special pawn capture |
+| **Check Detection** | ✅ | Validates king safety |
+| **Pinned Pieces** | ✅ | Pieces that cannot move without exposing king |
+| **Protected Pieces** | ✅ | King cannot capture protected pieces |
+| **FEN Support** | ✅ | Import/export positions via Forsyth-Edwards Notation |
+| **Checkmate** | ✅ | King in check with no legal moves |
+| **Stalemate** | ✅ | King not in check with no legal moves |
+| **Fifty-Move Rule** | ✅ | Draw after 50 moves without capture/pawn move |
+| **Threefold Repetition** | ✅ | Draw when same position occurs 3 times |
+| **Insufficient Material** | ✅ | Draw when checkmate is impossible (K vs K, K+B vs K, etc.) |
 
 ## Architecture
 
@@ -342,8 +348,8 @@ src/
 Tests are organized into three separate source sets for clarity and focused execution:
 
 **Unit Tests** (`src/unitTest/kotlin/`):
-- Domain model tests (67+ tests)
-- Chess rules implementation tests
+- Domain model tests (108+ tests)
+- Chess rules implementation tests (move generation, checkmate, stalemate, draw rules)
 - Use case tests
 - Fast execution, run frequently during development
 
@@ -395,23 +401,23 @@ These tests run automatically with `./gradlew check` and fail the build if archi
 
 ## Current Limitations
 
-- Checkmate and stalemate detection not yet implemented
 - In-memory storage only (games and users lost on restart)
 - JWT secret stored in code (should be in environment variables for production)
 - No token refresh mechanism
 - No WebSocket support for real-time updates
 - No game history or replay functionality
+- Draw by mutual agreement not yet implemented (requires player interaction/API endpoint)
 
 ## Future Enhancements
 
-- [ ] Implement checkmate/stalemate detection
 - [ ] Add persistent storage (database)
-- [ ] Implement threefold repetition and fifty-move rule
 - [ ] Add move history with algebraic notation (e.g., "Nf3", "O-O")
+- [ ] Implement draw by mutual agreement
 - [ ] WebSocket support for real-time games
-- [ ] Player authentication and game sessions
 - [ ] Chess clock/timer functionality
+- [ ] Game replay and analysis features
 - [ ] Opening book and endgame tablebase integration
+- [ ] Move suggestion and hints functionality
 
 ## Contributing
 

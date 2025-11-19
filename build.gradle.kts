@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm") version "1.9.22"
     kotlin("plugin.serialization") version "1.9.22"
     application
+    idea
 }
 
 group = "com.gchess"
@@ -274,4 +275,15 @@ val generateOpenApiSpec = tasks.register<JavaExec>("generateOpenApiSpec") {
 // Run OpenAPI generation before integration tests to ensure it's up to date
 tasks.named("integrationTest") {
     dependsOn(generateOpenApiSpec)
+}
+
+// Configure IntelliJ IDEA to recognize custom test source sets
+idea {
+    module {
+        testSources.from(
+            sourceSets["unitTest"].kotlin.srcDirs,
+            sourceSets["architectureTest"].kotlin.srcDirs,
+            sourceSets["integrationTest"].kotlin.srcDirs
+        )
+    }
 }

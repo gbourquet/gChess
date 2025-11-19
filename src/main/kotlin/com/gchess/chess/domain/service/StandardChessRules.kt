@@ -63,13 +63,119 @@ class StandardChessRules : ChessRules {
     }
 
     override fun isCheckmate(position: ChessPosition): Boolean {
-        // TODO: Implement checkmate detection
-        return false
+        val sideToMove = position.sideToMove
+
+        // Checkmate requires:
+        // 1. The king must be in check
+        // 2. There must be no legal moves available
+        return isInCheck(position, sideToMove) && legalMovesFor(position).isEmpty()
     }
 
     override fun isStalemate(position: ChessPosition): Boolean {
-        // TODO: Implement stalemate detection
+        val sideToMove = position.sideToMove
+
+        // Stalemate requires:
+        // 1. The king must NOT be in check
+        // 2. There must be no legal moves available
+        return !isInCheck(position, sideToMove) && legalMovesFor(position).isEmpty()
+    }
+
+    override fun isFiftyMoveRule(position: ChessPosition): Boolean {
+        // The fifty-move rule applies when 50 consecutive moves (100 half-moves)
+        // have been made without any pawn move or capture
+        return position.halfmoveClock >= 100
+    }
+
+    override fun isThreefoldRepetition(currentPosition: ChessPosition, positionHistory: List<ChessPosition>): Boolean {
+        // Extract the significant part of FEN (excluding move counters)
+        // Two positions are the same if they have identical:
+        // - Piece placement
+        // - Side to move
+        // - Castling rights
+        // - En passant target square
+        val currentKey = positionKey(currentPosition)
+
+        // Count how many times this position appears in history
+        val occurrences = positionHistory.count { positionKey(it) == currentKey }
+
+        // Threefold repetition occurs when the position appears 3 or more times
+        return occurrences >= 3
+    }
+
+    /**
+     * Extracts a position key for comparison (FEN without move counters).
+     * Two positions are considered identical if they have the same key.
+     */
+    private fun positionKey(position: ChessPosition): String {
+        // FEN format: "position activeColor castling enPassant halfmove fullmove"
+        // We only care about the first 4 parts for position equality
+        val fen = position.toFen()
+        val parts = fen.split(" ")
+        return "${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}"
+    }
+
+    override fun isInsufficientMaterial(position: ChessPosition): Boolean {
+        // Count pieces for each side
+        val whitePieces = position.getPiecesBySide(PlayerSide.WHITE)
+        val blackPieces = position.getPiecesBySide(PlayerSide.BLACK)
+
+        // Count piece types (excluding kings)
+        val whiteCounts = countPieceTypes(whitePieces)
+        val blackCounts = countPieceTypes(blackPieces)
+
+        // Total non-king pieces
+        val whiteTotalPieces = whiteCounts.values.sum()
+        val blackTotalPieces = blackCounts.values.sum()
+
+        // Case 1: King vs King
+        if (whiteTotalPieces == 0 && blackTotalPieces == 0) {
+            return true
+        }
+
+        // Case 2: King + Bishop vs King
+        if (whiteTotalPieces == 1 && whiteCounts[PieceType.BISHOP] == 1 && blackTotalPieces == 0) {
+            return true
+        }
+        if (blackTotalPieces == 1 && blackCounts[PieceType.BISHOP] == 1 && whiteTotalPieces == 0) {
+            return true
+        }
+
+        // Case 3: King + Knight vs King
+        if (whiteTotalPieces == 1 && whiteCounts[PieceType.KNIGHT] == 1 && blackTotalPieces == 0) {
+            return true
+        }
+        if (blackTotalPieces == 1 && blackCounts[PieceType.KNIGHT] == 1 && whiteTotalPieces == 0) {
+            return true
+        }
+
+        // Case 4: King + Bishop vs King + Bishop (same color bishops)
+        if (whiteTotalPieces == 1 && whiteCounts[PieceType.BISHOP] == 1 &&
+            blackTotalPieces == 1 && blackCounts[PieceType.BISHOP] == 1) {
+            // Check if bishops are on same color squares
+            val whiteBishopSquare = whitePieces.entries.find { it.value.type == PieceType.BISHOP }?.key
+            val blackBishopSquare = blackPieces.entries.find { it.value.type == PieceType.BISHOP }?.key
+
+            if (whiteBishopSquare != null && blackBishopSquare != null) {
+                val whiteBishopColor = (whiteBishopSquare.file + whiteBishopSquare.rank) % 2
+                val blackBishopColor = (blackBishopSquare.file + blackBishopSquare.rank) % 2
+                if (whiteBishopColor == blackBishopColor) {
+                    return true
+                }
+            }
+        }
+
+        // All other cases: sufficient material for checkmate
         return false
+    }
+
+    /**
+     * Counts the number of pieces of each type (excluding kings).
+     */
+    private fun countPieceTypes(pieces: Map<Position, Piece>): Map<PieceType, Int> {
+        return pieces.values
+            .filter { it.type != PieceType.KING }
+            .groupingBy { it.type }
+            .eachCount()
     }
 
     // ========== Private: Move Generation ==========
@@ -448,9 +554,10 @@ class StandardChessRules : ChessRules {
         // Special case for king moves: check if destination square is attacked
         if (movingPiece?.type == PieceType.KING) {
             // For king moves, check if the destination square is threatened
-            // Temporarily remove the king to check if destination is threatened
+            // Temporarily remove the king AND any piece being captured to check if destination is threatened
             val boardWithoutKing = board.setPiece(move.from, null)
-            val threatenedSquares = threatenedSquares(boardWithoutKing, opponentSide)
+            val boardWithoutKingAndTarget = boardWithoutKing.setPiece(move.to, null)
+            val threatenedSquares = threatenedSquares(boardWithoutKingAndTarget, opponentSide)
             return threatenedSquares.contains(move.to)
         }
 

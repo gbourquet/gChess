@@ -76,4 +76,39 @@ interface ChessRules {
      * @return true if it's stalemate, false otherwise
      */
     fun isStalemate(position: ChessPosition): Boolean
+
+    /**
+     * Checks if the fifty-move rule applies.
+     * The game is drawn if 50 consecutive moves (100 half-moves) have been made
+     * without any pawn move or capture.
+     *
+     * @param position The current chess position (contains halfmoveClock)
+     * @return true if the fifty-move rule applies, false otherwise
+     */
+    fun isFiftyMoveRule(position: ChessPosition): Boolean
+
+    /**
+     * Checks if the threefold repetition rule applies.
+     * The game is drawn if the same position occurs three times
+     * (same pieces on same squares, same side to move, same castling/en passant rights).
+     *
+     * @param currentPosition The current chess position
+     * @param positionHistory List of all previous positions in the game (including current)
+     * @return true if threefold repetition occurred, false otherwise
+     */
+    fun isThreefoldRepetition(currentPosition: ChessPosition, positionHistory: List<ChessPosition>): Boolean
+
+    /**
+     * Checks if there is insufficient material to checkmate.
+     * The game is drawn if neither player has enough pieces to deliver checkmate.
+     * Examples:
+     * - King vs King
+     * - King + Bishop vs King
+     * - King + Knight vs King
+     * - King + Bishop vs King + Bishop (same color bishops)
+     *
+     * @param position The current chess position
+     * @return true if insufficient material for checkmate, false otherwise
+     */
+    fun isInsufficientMaterial(position: ChessPosition): Boolean
 }

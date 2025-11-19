@@ -288,17 +288,37 @@ The application exposes a REST API on port 8080:
 ## Chess Rules Implementation
 
 The `StandardChessRules` domain service implements:
+
+### Move Generation & Validation
 - ✅ Complete move generation for all piece types (Pawn, Knight, Bishop, Rook, Queen, King)
 - ✅ En passant captures
 - ✅ Pawn promotion (Queen, Rook, Bishop, Knight)
 - ✅ Check detection
 - ✅ Pinned pieces (pieces that cannot move without exposing king to check)
+- ✅ King cannot capture protected pieces (validates destination square threats after removing both king and captured piece)
 - ✅ Castling (kingside and queenside for both colors)
   - King and rook must not have moved (castling rights tracked)
   - No pieces between king and rook
   - King not in check, doesn't pass through check, doesn't end in check
-- ⏳ Checkmate detection (TODO - interface defined but not implemented)
-- ⏳ Stalemate detection (TODO - interface defined but not implemented)
+
+### Game-Ending Conditions
+- ✅ **Checkmate detection** (`isCheckmate()`)
+  - King in check AND no legal moves available
+- ✅ **Stalemate detection** (`isStalemate()`)
+  - King NOT in check AND no legal moves available
+
+### Draw Rules
+- ✅ **Fifty-move rule** (`isFiftyMoveRule()`)
+  - Draw when 50 consecutive moves (100 half-moves) without pawn move or capture
+  - Uses `halfmoveClock` from position (automatically reset on capture/pawn move)
+- ✅ **Threefold repetition** (`isThreefoldRepetition()`)
+  - Draw when same position occurs 3 times
+  - Compares piece placement, side to move, castling rights, and en passant (excludes move counters)
+- ✅ **Insufficient material** (`isInsufficientMaterial()`)
+  - King vs King
+  - King + Bishop vs King
+  - King + Knight vs King
+  - King + Bishop vs King + Bishop (same color bishops only)
 
 ## Anti-Corruption Layer (ACL)
 
@@ -381,11 +401,11 @@ The ACL pattern protects the Chess context from changes in the User context:
 
 ## Current Limitations
 
-- Checkmate and stalemate detection not yet implemented (interface exists)
 - In-memory storage only - games and users are lost on server restart
 - JWT secret stored in code (should be in environment variables for production)
 - No token refresh mechanism
 - No WebSocket support for real-time updates (though Ktor WebSocket dependency is included)
+- Draw by mutual agreement not yet implemented (requires player interaction/API endpoint)
 
 ## Architecture Testing
 

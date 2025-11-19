@@ -1103,4 +1103,392 @@ class StandardChessRulesTest : StringSpec({
         afterKingMove.castlingRights.whiteKingSide shouldBe false
         afterKingMove.castlingRights.whiteQueenSide shouldBe false
     }
+
+    // ========== Checkmate Detection Tests ==========
+
+    "should detect fool's mate (fastest checkmate)" {
+        // Arrange: Fool's mate - Queen on h4 delivers checkmate
+        // f2-f3, e7-e5, g2-g4, Qd8-h4#
+        val position = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 1".toChessPosition()
+
+        // Act & Assert: White is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    "should detect back-rank checkmate with queen" {
+        // Arrange: Black king trapped on back rank, white queen delivers mate from f8
+        val position = "4Q1k1/5ppp/8/8/8/8/8/6K1 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    "should detect two-rook checkmate (ladder mate)" {
+        // Arrange: Black king on h8, white rooks on g7 and h6
+        val position = "7k/8/7R/6R1/8/8/8/4K3 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    "should detect queen and king checkmate" {
+        // Arrange: Black king on h8, white queen on g7, white king on f6
+        // Queen on g7 gives check via diagonal, controls g8 and h7, king on f6 prevents escape
+        val position = "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    "should detect Scholar's mate" {
+        // Arrange: Classic Scholar's mate position
+        // Black king on e8, white queen on f7, white bishop on c4
+        val position = "r1bqk2r/pppp1Qpp/2n2n2/2b1p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    "should detect smothered mate with knight" {
+        // Arrange: Black king on h8 surrounded by own pieces, white knight on f7
+        val position = "6rk/5Npp/8/8/8/8/8/4K3 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    "should not detect checkmate when king can move out of check" {
+        // Arrange: Black king on e8 in check from white rook on e1, but can move to d8/f8
+        val position = "4k3/8/8/8/8/8/8/4R3 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Not checkmate - king has escape squares
+        rules.isCheckmate(position) shouldBe false
+    }
+
+    "should not detect checkmate when piece can block the check" {
+        // Arrange: Black king on e8, white queen on e1, black bishop on c6 can block
+        val position = "4k3/8/2b5/8/8/8/8/4Q3 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Not checkmate - bishop can block on e6
+        rules.isCheckmate(position) shouldBe false
+    }
+
+    "should not detect checkmate when checking piece can be captured" {
+        // Arrange: Black king on e8, white rook on e1, black rook on e7 can capture
+        val position = "4k3/4r3/8/8/8/8/8/4R3 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Not checkmate - black rook can capture white rook
+        rules.isCheckmate(position) shouldBe false
+    }
+
+    "should not detect checkmate when not in check (stalemate position)" {
+        // Arrange: Black king on a8, not in check but no legal moves (stalemate, not checkmate)
+        val position = "k7/2Q5/1K6/8/8/8/8/8 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Not checkmate - king is not in check (this is stalemate)
+        rules.isCheckmate(position) shouldBe false
+    }
+
+    "should detect checkmate for white when it's white's turn" {
+        // Arrange: White king on h1, black rook on h8 and g2
+        val position = "7r/8/8/8/8/6r1/8/7K w - - 0 1".toChessPosition()
+
+        // Act & Assert: White is in checkmate
+        rules.isCheckmate(position) shouldBe true
+    }
+
+    // ========== Stalemate Detection Tests ==========
+
+    "should detect stalemate with king in corner" {
+        // Arrange: Black king on a8, white queen on b6, white king on c6
+        // Black king not in check but has no legal moves
+        val position = "k7/8/1QK5/8/8/8/8/8 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in stalemate
+        rules.isStalemate(position) shouldBe true
+    }
+
+    "should detect stalemate with king on edge" {
+        // Arrange: Black king on h8, white queen on f7, white king on f6
+        // King trapped on edge, not in check but no moves
+        val position = "7k/5Q2/5K2/8/8/8/8/8 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in stalemate
+        rules.isStalemate(position) shouldBe true
+    }
+
+    "should detect stalemate with blocked pawn" {
+        // Arrange: White king on a8, white pawn on a7 blocked, black king on c7
+        // White has no legal moves (pawn blocked, king has no squares)
+        val position = "K7/P1k5/8/8/8/8/8/8 w - - 0 1".toChessPosition()
+
+        // Act & Assert: White is in stalemate
+        rules.isStalemate(position) shouldBe true
+    }
+
+    "should detect stalemate with multiple pieces blocked" {
+        // Arrange: Complex stalemate position with multiple blocked pieces
+        val position = "5k2/5P2/5K2/8/8/8/8/8 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Black is in stalemate
+        rules.isStalemate(position) shouldBe true
+    }
+
+    "should not detect stalemate when king is in check" {
+        // Arrange: Black king on e8 in check from white rook on e1
+        // This is NOT stalemate (it's check, potentially checkmate)
+        val position = "4k3/8/8/8/8/8/8/4R3 b - - 0 1".toChessPosition()
+
+        // Act & Assert: Not stalemate - king is in check
+        rules.isStalemate(position) shouldBe false
+    }
+
+    "should not detect stalemate when legal moves exist" {
+        // Arrange: Normal position with legal moves available
+        val position = "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Not stalemate - white has legal moves
+        rules.isStalemate(position) shouldBe false
+    }
+
+    "should not detect stalemate when it's checkmate" {
+        // Arrange: Fool's mate position (checkmate, not stalemate)
+        val position = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 1".toChessPosition()
+
+        // Act & Assert: Not stalemate - this is checkmate (king in check with no moves)
+        rules.isStalemate(position) shouldBe false
+    }
+
+    "should not detect stalemate in starting position" {
+        // Arrange: Standard chess starting position
+        val position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+
+        // Act & Assert: Not stalemate - many moves available
+        rules.isStalemate(position) shouldBe false
+    }
+
+    // ========== Fifty-Move Rule Tests ==========
+
+    "should detect fifty-move rule when halfmove clock equals 100" {
+        // Arrange: Position with exactly 100 halfmoves (50 full moves) without capture/pawn move
+        val position = "4k3/8/8/8/8/8/8/4K3 w - - 100 50".toChessPosition()
+
+        // Act & Assert: Fifty-move rule applies
+        rules.isFiftyMoveRule(position) shouldBe true
+    }
+
+    "should detect fifty-move rule when halfmove clock exceeds 100" {
+        // Arrange: Position with 120 halfmoves
+        val position = "4k3/8/8/8/8/8/8/4K3 w - - 120 60".toChessPosition()
+
+        // Act & Assert: Fifty-move rule applies
+        rules.isFiftyMoveRule(position) shouldBe true
+    }
+
+    "should not detect fifty-move rule when halfmove clock is 99" {
+        // Arrange: Position with 99 halfmoves (just before the rule applies)
+        val position = "4k3/8/8/8/8/8/8/4K3 w - - 99 50".toChessPosition()
+
+        // Act & Assert: Fifty-move rule does NOT apply yet
+        rules.isFiftyMoveRule(position) shouldBe false
+    }
+
+    "should not detect fifty-move rule at game start" {
+        // Arrange: Starting position with halfmove clock at 0
+        val position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+
+        // Act & Assert: Fifty-move rule does NOT apply
+        rules.isFiftyMoveRule(position) shouldBe false
+    }
+
+    "should not detect fifty-move rule after recent pawn move" {
+        // Arrange: Position after pawn move (halfmove clock reset to 0)
+        val position = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1".toChessPosition()
+
+        // Act & Assert: Fifty-move rule does NOT apply
+        rules.isFiftyMoveRule(position) shouldBe false
+    }
+
+    "should not detect fifty-move rule when capture at 99 halfmoves resets counter" {
+        // Arrange: Position with 99 halfmoves where white can capture black pawn
+        val positionBefore = "4k3/8/8/8/8/8/3p4/4K3 w - - 99 50".toChessPosition()
+
+        // Verify we're at 99 halfmoves (one away from the rule)
+        positionBefore.halfmoveClock shouldBe 99
+
+        // Act: White king captures black pawn (Ke1xd2)
+        val positionAfter = positionBefore.movePiece(
+            Position.fromAlgebraic("e1"),
+            Position.fromAlgebraic("d2")
+        )
+
+        // Assert: Halfmove clock reset to 0 due to capture
+        positionAfter.halfmoveClock shouldBe 0
+
+        // Assert: Fifty-move rule does NOT apply after the capture
+        rules.isFiftyMoveRule(positionAfter) shouldBe false
+    }
+
+    // ========== Threefold Repetition Tests ==========
+
+    "should detect threefold repetition when same position occurs 3 times" {
+        // Arrange: Position that appears 3 times in history
+        val pos1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+        val pos2 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1".toChessPosition()
+        val pos3 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 2 2".toChessPosition() // Same as pos1
+        val pos4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 2 2".toChessPosition()
+        val pos5 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 4 3".toChessPosition() // Same as pos1 again
+
+        val history = listOf(pos1, pos2, pos3, pos4, pos5)
+
+        // Act & Assert: Threefold repetition detected
+        rules.isThreefoldRepetition(pos5, history) shouldBe true
+    }
+
+    "should detect threefold repetition with current position appearing 3 times total" {
+        // Arrange: Current position appeared twice before
+        val current = "4k3/8/8/8/8/8/8/4K3 w - - 0 1".toChessPosition()
+        val other = "4k3/8/8/8/8/8/4P3/4K3 b - - 0 1".toChessPosition()
+
+        val history = listOf(
+            current, // 1st occurrence
+            other,
+            current, // 2nd occurrence
+            other,
+            current  // 3rd occurrence (current)
+        )
+
+        // Act & Assert: Threefold repetition detected
+        rules.isThreefoldRepetition(current, history) shouldBe true
+    }
+
+    "should not detect threefold repetition when position occurs only twice" {
+        // Arrange: Position appears only 2 times
+        val pos1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+        val pos2 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1".toChessPosition()
+        val pos3 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 2 2".toChessPosition() // Same as pos1
+
+        val history = listOf(pos1, pos2, pos3)
+
+        // Act & Assert: Not threefold repetition - only 2 occurrences
+        rules.isThreefoldRepetition(pos3, history) shouldBe false
+    }
+
+    "should not detect threefold repetition when position never repeated" {
+        // Arrange: All unique positions
+        val pos1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+        val pos2 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1".toChessPosition()
+        val pos3 = "rnbqkbnr/pppppppp/8/8/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 1 2".toChessPosition()
+
+        val history = listOf(pos1, pos2, pos3)
+
+        // Act & Assert: Not threefold repetition - all unique
+        rules.isThreefoldRepetition(pos3, history) shouldBe false
+    }
+
+    "should not detect threefold repetition with different castling rights" {
+        // Arrange: Same piece positions but different castling rights
+        val pos1 = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1".toChessPosition()
+        val pos2 = "r3k2r/8/8/8/8/8/8/R3K2R w Qkq - 0 1".toChessPosition() // Lost kingside castling
+        val pos3 = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1".toChessPosition()
+
+        val history = listOf(pos1, pos2, pos3)
+
+        // Act & Assert: Different castling rights = different positions
+        rules.isThreefoldRepetition(pos3, history) shouldBe false
+    }
+
+    "should not detect threefold repetition with different side to move" {
+        // Arrange: Same board position but different side to move
+        val pos1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+        val pos2 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1".toChessPosition()
+        val pos3 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+
+        val history = listOf(pos1, pos2, pos3)
+
+        // Act & Assert: Different side to move = different positions
+        rules.isThreefoldRepetition(pos3, history) shouldBe false
+    }
+
+    // ========== Insufficient Material Tests ==========
+
+    "should detect insufficient material with king vs king" {
+        // Arrange: Only two kings on the board
+        val position = "4k3/8/8/8/8/8/8/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Insufficient material - cannot checkmate
+        rules.isInsufficientMaterial(position) shouldBe true
+    }
+
+    "should detect insufficient material with king and bishop vs king" {
+        // Arrange: White has king + bishop, black has only king
+        val position = "4k3/8/8/8/8/8/3B4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Insufficient material - king + bishop cannot checkmate lone king
+        rules.isInsufficientMaterial(position) shouldBe true
+    }
+
+    "should detect insufficient material with king vs king and knight" {
+        // Arrange: White has only king, black has king + knight
+        val position = "4k2n/8/8/8/8/8/8/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Insufficient material - king + knight cannot checkmate
+        rules.isInsufficientMaterial(position) shouldBe true
+    }
+
+    "should detect insufficient material with king and bishop vs king and bishop same color" {
+        // Arrange: Both sides have king + bishop on light squares (c1 and f8 are light)
+        val position = "5b2/8/8/8/8/8/8/2B1K2k w - - 0 1".toChessPosition()
+
+        // Act & Assert: Insufficient material - same color bishops cannot checkmate
+        rules.isInsufficientMaterial(position) shouldBe true
+    }
+
+    "should not detect insufficient material with king and bishop vs king and bishop opposite colors" {
+        // Arrange: Bishops on opposite colored squares (c1 light, a8 dark)
+        val position = "b7/8/8/8/8/8/8/2B1K2k w - - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - opposite color bishops can checkmate
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
+
+    "should not detect insufficient material with king and queen vs king" {
+        // Arrange: White has king + queen, black has only king
+        val position = "4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - queen can checkmate
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
+
+    "should not detect insufficient material with king and rook vs king" {
+        // Arrange: White has king + rook, black has only king
+        val position = "4k3/8/8/8/8/8/3R4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - rook can checkmate
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
+
+    "should not detect insufficient material with king and pawn vs king" {
+        // Arrange: White has king + pawn, black has only king
+        val position = "4k3/8/8/8/8/8/3P4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - pawn can promote and checkmate
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
+
+    "should not detect insufficient material in starting position" {
+        // Arrange: Standard chess starting position
+        val position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - many pieces
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
+
+    "should not detect insufficient material with multiple minor pieces" {
+        // Arrange: King + two knights vs king (can checkmate with 2 knights)
+        val position = "4k3/8/8/8/8/8/3NN3/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - two knights can potentially checkmate
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
 })
