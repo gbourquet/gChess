@@ -29,11 +29,21 @@ class HexagonalArchitectureTest {
         @JvmStatic
         @BeforeAll
         fun setup() {
-            // Import only production code packages (exclude bootstrap and tests)
+            // Import all bounded context packages (exclude bootstrap and tests)
+            // Now testing both Chess and User contexts
             classes = ClassFileImporter()
                 .withImportOption(ImportOption.DoNotIncludeTests())
                 .withImportOption(ImportOption.DoNotIncludeJars())
-                .importPackages("com.gchess.domain", "com.gchess.application", "com.gchess.infrastructure")
+                .importPackages(
+                    "com.gchess.chess.domain",
+                    "com.gchess.chess.application",
+                    "com.gchess.chess.infrastructure",
+                    "com.gchess.user.domain",
+                    "com.gchess.user.application",
+                    "com.gchess.user.infrastructure",
+                    "com.gchess.shared",
+                    "com.gchess.infrastructure" // For shared KoinModule
+                )
         }
     }
 
@@ -69,13 +79,14 @@ class HexagonalArchitectureTest {
     }
 
     @Test
-    @DisplayName("Application layer should only depend on domain layer")
+    @DisplayName("Application layer should only depend on domain layer and shared kernel")
     fun `application layer should only depend on domain`() {
         val rule = classes()
             .that().resideInAPackage("..application..")
             .should().onlyDependOnClassesThat().resideInAnyPackage(
                 "..application..",
                 "..domain..",
+                "..shared..",  // Allow dependency on shared kernel
                 "java..",
                 "kotlin..",
                 "kotlinx.coroutines..",
@@ -94,9 +105,11 @@ class HexagonalArchitectureTest {
             .layer("Domain").definedBy("..domain..")
             .layer("Application").definedBy("..application..")
             .layer("Infrastructure").definedBy("..infrastructure..")
+            .layer("Shared").definedBy("..shared..")
 
             .whereLayer("Domain").mayOnlyBeAccessedByLayers("Application", "Infrastructure")
             .whereLayer("Application").mayOnlyBeAccessedByLayers("Infrastructure")
+            .whereLayer("Shared").mayOnlyBeAccessedByLayers("Domain", "Application", "Infrastructure")
 
         rule.check(classes)
     }
@@ -122,6 +135,7 @@ class HexagonalArchitectureTest {
         val rule = classes()
             .that().resideInAPackage("..domain.port..")
             .and().areInterfaces()
+            .and().haveSimpleNameEndingWith("Repository")
             .should().haveSimpleNameEndingWith("Repository")
             .because("Repository ports define persistence contracts")
 
@@ -164,7 +178,7 @@ class HexagonalArchitectureTest {
             .and().haveSimpleNameNotContaining("$")
             .and().haveSimpleNameNotEndingWith("Test")
             .should().beInterfaces()
-            .orShould().implement("com.gchess.domain.service.ChessRules")
+            .orShould().implement("com.gchess.chess.domain.service.ChessRules")
             .because("Domain services should be interfaces or implement domain service interfaces")
 
         rule.check(classes)

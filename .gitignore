@@ -27,3 +27,6 @@ bin/
 
 # Environment
 .env
+
+# Auto-generated OpenAPI configuration
+src/main/kotlin/com/gchess/infrastructure/config/OpenApiConfig.kt

@@ -1,0 +1,14 @@
+{
+  "title": "gChess API",
+  "description": "A chess application built with Kotlin following Domain-Driven Design.\n\n## Features\n- User registration and authentication with JWT\n- Chess game creation with player validation\n- Move validation according to FIDE rules\n- Bitboard-based chess engine\n\n## Authentication\nMost endpoints require JWT authentication. Use the `/api/auth/login` endpoint\nto obtain a token, then include it in the `Authorization` header as `Bearer <token>`.",
+  "contact": {
+    "name": "gChess Team",
+    "email": "gbourquet@gmail.com"
+  },
+  "servers": {
+    "local": {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    }
+  }
+}
