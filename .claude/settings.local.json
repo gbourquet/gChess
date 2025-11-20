@@ -1,8 +1,9 @@
 {
-  "outputStyle": "default",
   "permissions": {
     "allow": [
-      "Bash(./gradlew unitTest:*)"
+      "Bash(./gradlew unitTest:*)",
+      "Bash(./gradlew build:*)"
     ]
-  }
+  },
+  "outputStyle": "default"
 }

@@ -98,6 +98,9 @@ dependencies {
     // ULID for unique identifiers
     implementation("de.huxhorn.sulky:de.huxhorn.sulky.ulid:8.3.0")
 
+    // Date/Time (kotlinx-datetime for multiplatform support)
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
+
     // Password hashing (BCrypt)
     implementation("org.mindrot:jbcrypt:0.4")
 
