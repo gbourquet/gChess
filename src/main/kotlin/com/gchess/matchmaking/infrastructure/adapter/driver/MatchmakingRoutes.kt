@@ -37,10 +37,12 @@ fun Application.configureMatchmakingRoutes() {
         route("/api/matchmaking") {
             // All matchmaking routes require authentication
             authenticate("jwt-auth") {
-                // POST /api/matchmaking/queue - Join matchmaking
+                // /api/matchmaking/queue - Join and leave matchmaking
                 route("/queue") {
                     install(NotarizedRoute()) {
                         tags = setOf("Matchmaking")
+
+                        // POST /api/matchmaking/queue - Join matchmaking
                         post = PostInfo.builder {
                             summary("Join matchmaking queue")
                             description("""
@@ -70,6 +72,30 @@ fun Application.configureMatchmakingRoutes() {
                                 responseCode(HttpStatusCode.BadRequest)
                                 responseType<Map<String, String>>()
                                 description("Player does not exist")
+                            }
+                            canRespond {
+                                responseCode(HttpStatusCode.Unauthorized)
+                                responseType<Map<String, String>>()
+                                description("Missing or invalid JWT token")
+                            }
+                        }
+
+                        // DELETE /api/matchmaking/queue - Leave matchmaking
+                        delete = DeleteInfo.builder {
+                            summary("Leave matchmaking queue")
+                            description("""
+                                Remove the authenticated player from the matchmaking queue.
+
+                                If the player is not in queue, this operation succeeds silently.
+
+                                Note: Once matched, players cannot leave via this endpoint.
+                                The match has already been created and they should join the game.
+                            """.trimIndent())
+                            security = mapOf("JWT" to listOf())
+                            response {
+                                responseCode(HttpStatusCode.OK)
+                                responseType<Map<String, Boolean>>()
+                                description("Success (removed: true if was in queue, false otherwise)")
                             }
                             canRespond {
                                 responseCode(HttpStatusCode.Unauthorized)
@@ -120,35 +146,6 @@ fun Application.configureMatchmakingRoutes() {
                                 call.respond(statusCode, mapOf("error" to (exception.message ?: "Unknown error")))
                             }
                         )
-                    }
-                }
-
-                // DELETE /api/matchmaking/queue - Leave matchmaking
-                route("/queue") {
-                    install(NotarizedRoute()) {
-                        tags = setOf("Matchmaking")
-                        delete = DeleteInfo.builder {
-                            summary("Leave matchmaking queue")
-                            description("""
-                                Remove the authenticated player from the matchmaking queue.
-
-                                If the player is not in queue, this operation succeeds silently.
-
-                                Note: Once matched, players cannot leave via this endpoint.
-                                The match has already been created and they should join the game.
-                            """.trimIndent())
-                            security = mapOf("JWT" to listOf())
-                            response {
-                                responseCode(HttpStatusCode.OK)
-                                responseType<Map<String, Boolean>>()
-                                description("Success (removed: true if was in queue, false otherwise)")
-                            }
-                            canRespond {
-                                responseCode(HttpStatusCode.Unauthorized)
-                                responseType<Map<String, String>>()
-                                description("Missing or invalid JWT token")
-                            }
-                        }
                     }
 
                     delete {

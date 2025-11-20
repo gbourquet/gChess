@@ -16,6 +16,17 @@ import com.gchess.user.domain.port.PasswordHasher
 import com.gchess.user.domain.port.UserRepository
 import com.gchess.user.infrastructure.adapter.driven.BcryptPasswordHasher
 import com.gchess.user.infrastructure.adapter.driven.InMemoryUserRepository
+import com.gchess.matchmaking.application.usecase.CleanupExpiredMatchesUseCase
+import com.gchess.matchmaking.application.usecase.CreateGameFromMatchUseCase
+import com.gchess.matchmaking.application.usecase.GetMatchStatusUseCase
+import com.gchess.matchmaking.application.usecase.JoinMatchmakingUseCase
+import com.gchess.matchmaking.application.usecase.LeaveMatchmakingUseCase
+import com.gchess.matchmaking.domain.port.GameCreator
+import com.gchess.matchmaking.domain.port.MatchRepository
+import com.gchess.matchmaking.domain.port.MatchmakingQueue
+import com.gchess.matchmaking.infrastructure.adapter.driven.ChessContextGameCreator
+import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchRepository
+import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
 import org.koin.dsl.module
 
 val appModule = module {
@@ -48,5 +59,22 @@ val appModule = module {
     single { RegisterUserUseCase(get(), get()) }
     single { LoginUseCase(get(), get()) }
     single { GetUserUseCase(get()) }
+
+    // ========== Matchmaking Context ==========
+
+    // Repositories (Output Adapters)
+    single<MatchmakingQueue> { InMemoryMatchmakingQueue() }
+    single<MatchRepository> { InMemoryMatchRepository() }
+
+    // Anti-Corruption Layer (ACL)
+    // Connects Matchmaking context to Chess context for game creation
+    single<GameCreator> { ChessContextGameCreator(get()) }
+
+    // Use Cases (Application Layer)
+    single { CreateGameFromMatchUseCase(get()) }
+    single { CleanupExpiredMatchesUseCase(get()) }
+    single { LeaveMatchmakingUseCase(get()) }
+    single { GetMatchStatusUseCase(get(), get(), get()) }
+    single { JoinMatchmakingUseCase(get(), get(), get(), get()) }
 }
 

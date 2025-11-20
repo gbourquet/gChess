@@ -1,11 +1,10 @@
 package com.gchess
 
-import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.gchess.chess.infrastructure.adapter.driver.configureGameRoutes
 import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.infrastructure.config.OpenApiConfig
 import com.gchess.infrastructure.config.appModule
+import com.gchess.matchmaking.infrastructure.adapter.driver.configureMatchmakingRoutes
 import com.gchess.user.infrastructure.adapter.driver.configureAuthRoutes
 import com.gchess.user.infrastructure.adapter.driver.configureUserRoutes
 import io.bkbn.kompendium.core.plugin.NotarizedApplication
@@ -87,9 +86,10 @@ fun Application.module() {
     }
 
     // Configure routes
-    configureGameRoutes()  // Chess context routes (will be protected with JWT)
-    configureAuthRoutes()  // User context auth routes (register, login) - public
-    configureUserRoutes()  // User context user routes (get user)
+    configureGameRoutes()       // Chess context routes (protected with JWT)
+    configureAuthRoutes()       // User context auth routes (register, login) - public
+    configureUserRoutes()       // User context user routes (get user)
+    configureMatchmakingRoutes() // Matchmaking context routes (protected with JWT)
 
     routing {
         get("/") {

@@ -352,6 +352,157 @@
                     "description": "User ID (ULID format)"
                 }
             ]
+        },
+        "/api/matchmaking/queue": {
+            "post": {
+                "tags": [
+                    "Matchmaking"
+                ],
+                "summary": "Join matchmaking queue",
+                "description": "Add the authenticated player to the matchmaking queue.\n\nIf another player is already waiting, a match is created automatically:\n- Colors are assigned randomly (50/50)\n- A chess game is created\n- Both players receive MATCHED status\n\nIf no other player is waiting:\n- Player is added to queue with WAITING status\n- Poll GET /api/matchmaking/status to check for match",
+                "parameters": [
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Matchmaking status (WAITING or MATCHED)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MatchmakingStatusDTO"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Player already in queue or already matched",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Player does not exist",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid JWT token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "JWT": [
+                        ]
+                    },
+                    {
+                        "jwt-auth": [
+                        ]
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Matchmaking"
+                ],
+                "summary": "Leave matchmaking queue",
+                "description": "Remove the authenticated player from the matchmaking queue.\n\nIf the player is not in queue, this operation succeeds silently.\n\nNote: Once matched, players cannot leave via this endpoint.\nThe match has already been created and they should join the game.",
+                "parameters": [
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success (removed: true if was in queue, false otherwise)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-Boolean"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid JWT token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "JWT": [
+                        ]
+                    },
+                    {
+                        "jwt-auth": [
+                        ]
+                    }
+                ]
+            },
+            "parameters": [
+            ]
+        },
+        "/api/matchmaking/status": {
+            "get": {
+                "tags": [
+                    "Matchmaking"
+                ],
+                "summary": "Get matchmaking status",
+                "description": "Get the current matchmaking status for the authenticated player.\n\nPossible statuses:\n- WAITING: Player is in queue, waiting for an opponent\n- MATCHED: Player has been matched, game created\n- NOT_FOUND: Player is neither in queue nor matched\n\nWhen MATCHED, the response includes:\n- gameId: ID of the created game\n- yourColor: WHITE or BLACK (randomly assigned)\n\nClients should poll this endpoint periodically (e.g., every 2-3 seconds)\nto check for match updates.",
+                "parameters": [
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current matchmaking status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MatchmakingStatusDTO"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid JWT token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "JWT": [
+                        ]
+                    },
+                    {
+                        "jwt-auth": [
+                        ]
+                    }
+                ]
+            },
+            "parameters": [
+            ]
         }
     },
     "components": {
@@ -539,6 +690,50 @@
                 "required": [
                     "password",
                     "username"
+                ]
+            },
+            "Map-String-Boolean": {
+                "additionalProperties": {
+                    "type": "boolean"
+                }
+            },
+            "MatchmakingStatusDTO": {
+                "type": "object",
+                "properties": {
+                    "gameId": {
+                        "oneOf": [
+                            {
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    },
+                    "queuePosition": {
+                        "oneOf": [
+                            {
+                            },
+                            {
+                                "type": "number",
+                                "format": "int32"
+                            }
+                        ]
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "yourColor": {
+                        "oneOf": [
+                            {
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "status"
                 ]
             }
         }
