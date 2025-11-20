@@ -4,7 +4,9 @@
       "Bash(./gradlew unitTest:*)",
       "Bash(./gradlew build:*)",
       "Bash(./gradlew compileKotlin:*)",
-      "Bash(./gradlew run:*)"
+      "Bash(./gradlew run:*)",
+      "Bash(./gradlew integrationTest:*)",
+      "Bash(./gradlew clean integrationTest)"
     ]
   },
   "outputStyle": "default"

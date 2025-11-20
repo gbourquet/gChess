@@ -9,6 +9,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.*
+import org.koin.core.context.stopKoin
 
 /**
  * End-to-end integration test for the game API.
@@ -19,6 +20,11 @@ import kotlinx.serialization.json.*
  * - Only the correct player can make moves on their turn
  */
 class GameE2ETest : StringSpec({
+
+    // Clean up Koin after each test to avoid conflicts
+    afterTest {
+        stopKoin()
+    }
 
     "complete game flow: register users, create game, make valid moves, and reject invalid turn" {
         testApplication {
