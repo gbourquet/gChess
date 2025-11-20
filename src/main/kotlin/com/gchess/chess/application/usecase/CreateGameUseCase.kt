@@ -6,7 +6,7 @@ import com.gchess.chess.domain.port.PlayerExistenceChecker
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.PlayerId
 
-class CreateGameUseCase(
+open class CreateGameUseCase(
     private val gameRepository: GameRepository,
     private val playerExistenceChecker: PlayerExistenceChecker
 ) {
@@ -21,7 +21,7 @@ class CreateGameUseCase(
      * @param blackPlayerId The ID of the black player
      * @return Result.success(Game) if game is created, Result.failure if validation fails
      */
-    suspend fun execute(whitePlayerId: PlayerId, blackPlayerId: PlayerId): Result<Game> {
+    open suspend fun execute(whitePlayerId: PlayerId, blackPlayerId: PlayerId): Result<Game> {
         // Validate that players are different
         if (whitePlayerId == blackPlayerId) {
             return Result.failure(Exception("White and black players must be different"))
