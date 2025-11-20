@@ -43,6 +43,28 @@ This document describes the relationships between bounded contexts in the gChess
 - `POST /api/auth/login` - Authenticate user (public)
 - `GET /api/users/{id}` - Get user profile (public)
 
+### Matchmaking Context
+**Purpose**: Pairs players together for chess games automatically
+
+**Ubiquitous Language**:
+- QueueEntry, Match, MatchmakingQueue
+- MatchmakingStatus (WAITING, MATCHED), MatchmakingResult
+- GameCreator (ACL port), TTL (Time To Live)
+
+**Responsibilities**:
+- Manage FIFO matchmaking queue
+- Pair waiting players automatically
+- Assign colors randomly (50/50 WHITE/BLACK)
+- Create chess games automatically upon match
+- Track match TTL (default: 5 minutes expiration)
+- Validate player existence before queueing
+- Cleanup expired matches
+
+**Public API**:
+- `POST /api/matchmaking/queue` - Join matchmaking queue (authenticated)
+- `DELETE /api/matchmaking/queue` - Leave matchmaking queue (authenticated)
+- `GET /api/matchmaking/status` - Get matchmaking status (authenticated)
+
 ### Shared Kernel
 **Purpose**: Common value objects shared across all contexts
 
@@ -128,25 +150,153 @@ This document describes the relationships between bounded contexts in the gChess
 - If player doesn't exist → Error returned
 - No fallback or caching (consistency over availability)
 
-### Shared Kernel Relationships
+### Matchmaking Context → Chess Context (Anti-Corruption Layer)
 
-Both Chess and User contexts depend on the Shared Kernel:
+**Relationship Type**: Customer-Supplier with Anti-Corruption Layer
+
+**Direction**: Matchmaking context depends on Chess context (one-way)
+
+**Integration Pattern**: Anti-Corruption Layer (ACL)
 
 ```
-┌────────────────────────────────────────┐
-│         Shared Kernel                  │
-│   - PlayerId (ULID value object)       │
-│   - GameId (ULID value object)         │
-└────────────────────────────────────────┘
-         ↑                        ↑
-         │                        │
-┌────────┴────────┐    ┌──────────┴───────┐
-│  Chess Context  │    │   User Context   │
-│                 │    │                  │
-│  Uses:          │    │  Uses:           │
-│  - GameId       │    │  - PlayerId      │
-│  - PlayerId     │    │                  │
-└─────────────────┘    └──────────────────┘
+┌──────────────────────────────┐
+│  Matchmaking Context         │
+│                              │
+│  ┌────────────────────────┐  │
+│  │  Domain                │  │
+│  │  - GameCreator (port)  │  │     Port defined in Matchmaking domain
+│  └───────────┬────────────┘  │
+│              │               │
+│  ┌───────────┴────────────┐  │
+│  │  Infrastructure        │  │
+│  │  - ChessContextGame    │  │     ACL Adapter in Matchmaking infrastructure
+│  │    Creator (adapter)   │──┼──┐
+│  └────────────────────────┘  │  │
+└──────────────────────────────┘  │
+                                  │
+                ┌─────────────────┘
+                │
+                ↓
+┌──────────────────────────────┐
+│     Chess Context            │
+│                              │
+│  ┌────────────────────────┐  │
+│  │  Application           │  │
+│  │  - CreateGameUseCase   │  │     Called by Matchmaking ACL
+│  └────────────────────────┘  │
+│                              │
+└──────────────────────────────┘
+```
+
+**ACL Components**:
+
+1. **Port (Matchmaking Domain)**:
+   - `GameCreator` interface
+   - Defines what Matchmaking needs to create games
+   - Domain remains isolated from Chess context
+
+2. **Adapter (Matchmaking Infrastructure)**:
+   - `ChessContextGameCreator` implementation
+   - Translates Matchmaking domain calls to Chess context calls
+   - Calls `CreateGameUseCase` from Chess context
+   - Extracts `GameId` from created game
+
+**Game Creation Flow**:
+```
+1. JoinMatchmakingUseCase finds a match
+2. CreateGameFromMatchUseCase assigns colors randomly
+3. Calls GameCreator.createGame(whitePlayerId, blackPlayerId)
+4. ChessContextGameCreator (ACL) translates call
+5. Invokes CreateGameUseCase.execute(white, black)
+6. Returns GameId to Matchmaking context
+7. Matchmaking saves Match with gameId
+```
+
+### Matchmaking Context → User Context (Port Reuse)
+
+**Relationship Type**: Shared Port
+
+**Direction**: Matchmaking reuses Chess's PlayerExistenceChecker port
+
+**Integration Pattern**: Port Reuse via Dependency Injection
+
+```
+┌──────────────────────────────┐
+│  Matchmaking Context         │
+│                              │
+│  ┌────────────────────────┐  │
+│  │  Application           │  │
+│  │  - Uses PlayerExist    │──┼──┐  Reuses port from Chess
+│  │    enceChecker         │  │  │
+│  └────────────────────────┘  │  │
+└──────────────────────────────┘  │
+                                  │
+        ┌─────────────────────────┘
+        │
+        ↓
+┌──────────────────────────────┐
+│     Chess Context            │
+│                              │
+│  ┌────────────────────────┐  │
+│  │  Domain Port           │  │
+│  │  - PlayerExistence     │  │     Port defined in Chess
+│  │    Checker             │  │
+│  └────────────────────────┘  │
+│                              │
+│  ┌────────────────────────┐  │
+│  │  Infrastructure        │  │
+│  │  - UserContextPlayer   │──┼──┐  Shared adapter (via DI)
+│  │    Checker (ACL)       │  │  │
+│  └────────────────────────┘  │  │
+└──────────────────────────────┘  │
+                                  │
+                ┌─────────────────┘
+                │
+                ↓
+┌──────────────────────────────┐
+│     User Context             │
+│                              │
+│  ┌────────────────────────┐  │
+│  │  Application           │  │
+│  │  - GetUserUseCase      │  │     Called by shared ACL
+│  └────────────────────────┘  │
+└──────────────────────────────┘
+```
+
+**Port Reuse Rationale**:
+- Both Chess and Matchmaking need to validate player existence
+- Same contract (`PlayerExistenceChecker` interface)
+- Avoids port duplication
+- Maintains context isolation (depends on interface, not implementation)
+- Acceptable trade-off for consistency
+
+**Dependency Injection**:
+- Koin provides same `UserContextPlayerChecker` instance
+- Both contexts depend on the interface (port)
+- Neither knows about the User context directly
+
+### Shared Kernel Relationships
+
+All three contexts depend on the Shared Kernel:
+
+```
+              ┌────────────────────────────────────────┐
+              │         Shared Kernel                  │
+              │   - PlayerId (ULID value object)       │
+              │   - GameId (ULID value object)         │
+              └────────────────────────────────────────┘
+                    ↑            ↑            ↑
+                    │            │            │
+       ┌────────────┘            │            └────────────┐
+       │                         │                         │
+┌──────┴───────┐      ┌──────────┴───────┐      ┌─────────┴─────────┐
+│Chess Context │      │Matchmaking       │      │   User Context    │
+│              │      │Context           │      │                   │
+│Uses:         │      │                  │      │  Uses:            │
+│- GameId      │      │Uses:             │      │  - PlayerId       │
+│- PlayerId    │      │- PlayerId        │      │                   │
+│              │      │- GameId          │      │                   │
+└──────────────┘      └──────────────────┘      └───────────────────┘
 ```
 
 **Shared Kernel Rules**:
@@ -160,8 +310,11 @@ Both Chess and User contexts depend on the Shared Kernel:
 | From Context | To Context | Pattern | Direction | Why |
 |--------------|------------|---------|-----------|-----|
 | Chess | User | Anti-Corruption Layer | One-way | Chess needs to verify player existence without tight coupling |
-| Chess | Shared Kernel | Shared Kernel | Depends on | Common identifier types |
-| User | Shared Kernel | Shared Kernel | Depends on | Common identifier types |
+| Matchmaking | Chess | Anti-Corruption Layer | One-way | Matchmaking needs to create games without tight coupling |
+| Matchmaking | User | Port Reuse (via Chess) | Indirect | Reuses PlayerExistenceChecker port for player validation |
+| Chess | Shared Kernel | Shared Kernel | Depends on | Common identifier types (GameId, PlayerId) |
+| User | Shared Kernel | Shared Kernel | Depends on | Common identifier types (PlayerId) |
+| Matchmaking | Shared Kernel | Shared Kernel | Depends on | Common identifier types (GameId, PlayerId) |
 
 ## Design Decisions
 
@@ -216,19 +369,71 @@ Both Chess and User contexts depend on the Shared Kernel:
 - Rejected: Risk of stale data, cache invalidation complexity
 - May revisit if performance becomes an issue
 
+### Why Port Reuse in Matchmaking?
+
+**Decision**: Matchmaking reuses `PlayerExistenceChecker` port from Chess context instead of defining its own.
+
+**Rationale**:
+- Same validation need: check if player exists
+- Same contract: boolean result for playerId input
+- Avoids port duplication (DRY principle)
+- Maintains isolation: depends on interface, not implementation
+- Simplifies dependency injection (single ACL adapter)
+
+**Trade-offs Accepted**:
+- ⚠️ Coupling to Chess domain port (interface dependency)
+- ⚠️ If Chess changes port signature, Matchmaking affected
+- ✅ Worth it: Unlikely to change, benefits outweigh risks
+- ✅ Alternative: Could duplicate port in Matchmaking domain
+
+**Why Not Separate Port?**:
+- Would require duplicate port interface
+- Would require duplicate ACL adapter (or adapter wrapping)
+- Same User context integration regardless
+- Added complexity for minimal isolation gain
+
+### Why Random Color Assignment?
+
+**Decision**: Matchmaking assigns WHITE/BLACK randomly (50/50) when creating matches.
+
+**Rationale**:
+- Simple and fair for MVP
+- No ELO or skill-based matching yet
+- Prevents first-mover advantage exploitation
+- Easy to implement and test
+
+**Future Enhancement**:
+- Could use ELO ratings for fairness (higher ELO gets WHITE more often)
+- Could use player preferences
+- Could use tournament rules (alternating colors)
+
 ## Future Evolution
 
 ### Potential Context Extraction
 
 **Game History Context** (future):
-- Could extract move history, game archives, PGN export
-- Would subscribe to Chess context events
+- Extract move history, game archives, PGN export
+- Subscribe to Chess context events
 - Read-only view of completed games
+- Game replay functionality
 
-**Matchmaking Context** (future):
-- Pair players for games
-- ELO ratings, rankings
-- Would coordinate between User and Chess contexts
+**Tournament Context** (future):
+- Organize tournaments (Swiss, Round-Robin, Knockout)
+- Bracket management
+- Prize pools and rankings
+- Would coordinate with Matchmaking and Chess contexts
+
+**Notification Context** (future):
+- Real-time notifications (WebSocket)
+- Email notifications for game invites
+- Push notifications for mobile
+- Event sourcing for notification history
+
+**Rating Context** (future):
+- ELO rating calculations
+- Player statistics and analytics
+- Leaderboards and rankings
+- Could enhance Matchmaking with skill-based pairing
 
 ### Microservices Migration Path
 

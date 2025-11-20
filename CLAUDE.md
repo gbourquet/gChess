@@ -158,6 +158,68 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
   - `BcryptPasswordHasher`: BCrypt implementation of PasswordHasher
     - Configurable work factor (default: 12)
 
+#### Matchmaking Bounded Context (`com.gchess.matchmaking`)
+
+**Domain Layer** (`com.gchess.matchmaking.domain`):
+- `model/`: Core matchmaking entities
+  - `QueueEntry`: Value object for players in matchmaking queue
+    - `playerId: PlayerId` - Player identifier
+    - `joinedAt: Instant` - Timestamp when player joined (FIFO ordering)
+  - `Match`: Entity representing successful match with TTL
+    - `whitePlayerId: PlayerId` - Player assigned white pieces
+    - `blackPlayerId: PlayerId` - Player assigned black pieces
+    - `gameId: GameId` - Created game identifier
+    - `matchedAt: Instant` - When match was created
+    - `expiresAt: Instant` - When match expires (default: 5 minutes TTL)
+    - `isExpired()` method for TTL validation
+  - `MatchmakingStatus`: Enum (WAITING, MATCHED)
+- `port/`: Interfaces defining contracts
+  - `MatchmakingQueue`: FIFO queue operations (add, remove, findMatch)
+  - `MatchRepository`: Match persistence (save, find, delete expired)
+  - `GameCreator`: **ACL port** for Chess context game creation
+  - Reuses `PlayerExistenceChecker` from Chess context (port sharing)
+- No dependencies on external frameworks or other contexts - pure business logic
+
+**Application Layer** (`com.gchess.matchmaking.application`):
+- `usecase/`: Matchmaking orchestration use cases
+  - `JoinMatchmakingUseCase`: Main matchmaking orchestrator
+    - Validates player exists via `PlayerExistenceChecker` (ACL)
+    - Checks player not already in queue or matched
+    - Adds to queue, attempts to find match
+    - If match found: creates game automatically, assigns colors randomly (50/50)
+    - Returns `MatchmakingResult` (WAITING or MATCHED with game details)
+  - `GetMatchStatusUseCase`: Check player's matchmaking status
+    - Returns WAITING (with queue position), MATCHED (with gameId + color), or NOT_FOUND
+  - `LeaveMatchmakingUseCase`: Remove player from queue
+    - Returns boolean indicating if player was removed
+  - `CreateGameFromMatchUseCase`: Create game with random color assignment
+    - Uses `GameCreator` port (ACL to Chess context)
+    - 50/50 random assignment of WHITE/BLACK
+  - `CleanupExpiredMatchesUseCase`: Remove expired matches (TTL enforcement)
+- `MatchmakingResult`: Sealed class for result types (NotFound, Waiting, Matched)
+- Depends only on Matchmaking domain, shared ports, and Shared Kernel
+
+**Infrastructure Layer** (`com.gchess.matchmaking.infrastructure`):
+- `adapter/driver/`: Entry points (REST API routes)
+  - `MatchmakingRoutes.kt`: Matchmaking endpoints (**all require JWT authentication**)
+    - `POST /api/matchmaking/queue` - Join matchmaking queue
+      - Returns WAITING (solo) or MATCHED (if opponent found)
+      - Automatic game creation on match
+    - `DELETE /api/matchmaking/queue` - Leave matchmaking queue
+    - `GET /api/matchmaking/status` - Poll for matchmaking status
+      - Clients should poll every 2-3 seconds for match updates
+  - `dto/`: DTOs (MatchmakingStatusDTO with status, queuePosition, gameId, yourColor)
+- `adapter/driven/`: External integrations and ACL
+  - `InMemoryMatchmakingQueue`: Thread-safe FIFO queue
+    - Uses `ConcurrentLinkedQueue` for queue + `ConcurrentHashMap` for index
+    - `ReentrantLock` for race condition protection
+  - `InMemoryMatchRepository`: Match storage with expiration
+  - `ChessContextGameCreator`: **Anti-Corruption Layer** adapter
+    - Implements `GameCreator` port
+    - Calls `CreateGameUseCase` from Chess context
+    - Translates between contexts (GameId extraction)
+  - Reuses `UserContextPlayerChecker` via dependency injection
+
 #### Shared Kernel (`com.gchess.shared`)
 
 - `domain/model/`: Common value objects shared across contexts
@@ -173,10 +235,13 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 
 #### Infrastructure Configuration (`com.gchess.infrastructure.config`)
 
-- `KoinModule.kt`: Dependency injection wiring for all contexts
-  - **Chess Context** dependencies
-  - **User Context** dependencies
-  - **Anti-Corruption Layer** wiring: `PlayerExistenceChecker` → `UserContextPlayerChecker`
+- `KoinModule.kt`: Dependency injection wiring for all contexts (19 definitions total)
+  - **Chess Context** dependencies (repositories, services, use cases)
+  - **User Context** dependencies (repositories, services, use cases)
+  - **Matchmaking Context** dependencies (queues, repositories, use cases)
+  - **Anti-Corruption Layer** wiring:
+    - `PlayerExistenceChecker` → `UserContextPlayerChecker` (Chess → User)
+    - `GameCreator` → `ChessContextGameCreator` (Matchmaking → Chess)
 - `JwtConfig.kt`: JWT token generation and validation
   - HMAC256 algorithm
   - 24-hour token validity
@@ -185,21 +250,27 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 
 ### Key Design Patterns
 
-- **Bounded Contexts**: Chess and User contexts with clear boundaries (see CONTEXT_MAP.md)
-- **Shared Kernel**: Common value objects (PlayerId, GameId) shared across contexts
-- **Anti-Corruption Layer (ACL)**: UserContextPlayerChecker protects Chess context from User context changes
-  - Chess domain defines `PlayerExistenceChecker` port (what it needs)
-  - Infrastructure provides adapter (how to get it from User context)
+- **Bounded Contexts**: Three contexts (Chess, User, Matchmaking) with clear boundaries (see CONTEXT_MAP.md)
+- **Shared Kernel**: Common value objects (PlayerId, GameId) shared across all contexts
+- **Anti-Corruption Layer (ACL)**: Multiple ACL adapters protect context isolation
+  - `UserContextPlayerChecker`: Chess → User (player validation)
+  - `ChessContextGameCreator`: Matchmaking → Chess (game creation)
+  - Domain defines ports (what it needs), infrastructure provides adapters (how to get it)
   - Fail-fast strategy for consistency
+- **Port Reuse**: Matchmaking reuses `PlayerExistenceChecker` port from Chess domain
+  - Acceptable trade-off: avoids port duplication while maintaining isolation
+  - Both contexts validate players through the same contract
 - **Hexagonal Architecture**: Ports and adapters within each bounded context
 - **Domain Services**: Business logic that doesn't belong to a single entity (e.g., ChessRules)
-- **Value Objects**: Immutable objects defined by their attributes (e.g., CastlingRights, Position, Move, PlayerId, GameId)
+- **Value Objects**: Immutable objects defined by their attributes (e.g., CastlingRights, Position, Move, QueueEntry, Match)
 - **Repository Pattern**: Abstraction for data persistence
 - **Use Case Pattern**: Each user action is a dedicated class
 - **Dependency Inversion**: Domain defines interfaces; infrastructure implements
 - **DTO Pattern**: Separation between domain models (pure) and API contracts (serializable)
 - **Immutability**: Domain models are immutable data classes
 - **Encapsulation**: Domain concepts encapsulated in dedicated classes with business methods
+- **Thread Safety**: Concurrent data structures (ConcurrentHashMap, ConcurrentLinkedQueue) + ReentrantLock
+- **TTL Pattern**: Time-bound entities (Match with expiration) for resource cleanup
 
 ### Data Flow
 
@@ -243,6 +314,26 @@ HTTP Request (with JWT)
   - `passwordHash: String` - BCrypt hashed password (never exposed in DTOs)
 - **Credentials**: Username and password for authentication
 
+### Matchmaking Context
+
+- **QueueEntry**: Value object for queue management
+  - `playerId: PlayerId` - Player in queue
+  - `joinedAt: Instant` - Join timestamp (for FIFO ordering)
+- **Match**: Entity representing a successful match
+  - `whitePlayerId: PlayerId` - Player assigned WHITE
+  - `blackPlayerId: PlayerId` - Player assigned BLACK
+  - `gameId: GameId` - Created game identifier
+  - `matchedAt: Instant` - Match creation time
+  - `expiresAt: Instant` - Expiration time (TTL)
+  - `isExpired(): Boolean` - Check if match has expired
+  - **Default TTL**: 5 minutes
+- **MatchmakingStatus**: WAITING, MATCHED (enum)
+- **MatchmakingResult**: Sealed class for use case results
+  - `NotFound`: Player not in queue or matched
+  - `Waiting(queuePosition: Int)`: Player in queue at position
+  - `Matched(gameId: GameId, yourColor: PlayerSide)`: Match found with game details
+- **PlayerSide**: WHITE or BLACK (reused from Chess context for color assignment)
+
 ### Shared Kernel
 
 - **PlayerId**: ULID-based identifier for players (value class)
@@ -284,6 +375,30 @@ The application exposes a REST API on port 8080:
   - Player ID extracted from JWT token
   - Request body: `{"from": "e2", "to": "e4"}` or `{"from": "e7", "to": "e8", "promotion": "QUEEN"}`
   - Validates it's the authenticated player's turn
+
+### Matchmaking Operations (All Require JWT Authentication)
+
+- `POST /api/matchmaking/queue` - Join matchmaking queue
+  - Request header: `Authorization: Bearer <JWT_TOKEN>`
+  - Player ID extracted from JWT token
+  - No request body needed
+  - Response:
+    - If no opponent: `{"status": "WAITING", "queuePosition": 1}`
+    - If opponent found: `{"status": "MATCHED", "gameId": "01HQZN...", "yourColor": "WHITE"}`
+  - Automatic game creation when two players match
+  - Random color assignment (50/50)
+  - Returns 409 Conflict if already in queue or matched
+- `GET /api/matchmaking/status` - Get current matchmaking status
+  - Request header: `Authorization: Bearer <JWT_TOKEN>`
+  - Response:
+    - `{"status": "NOT_FOUND"}` - Not in queue or matched
+    - `{"status": "WAITING", "queuePosition": 1}` - In queue
+    - `{"status": "MATCHED", "gameId": "01HQZN...", "yourColor": "BLACK"}` - Matched
+  - Poll this endpoint every 2-3 seconds to check for match
+- `DELETE /api/matchmaking/queue` - Leave matchmaking queue
+  - Request header: `Authorization: Bearer <JWT_TOKEN>`
+  - Response: `{"removed": true}` if removed, `{"removed": false}` if not in queue
+  - Cannot leave once matched (game already created)
 
 ## Chess Rules Implementation
 
@@ -401,10 +516,15 @@ The ACL pattern protects the Chess context from changes in the User context:
 
 ## Current Limitations
 
-- In-memory storage only - games and users are lost on server restart
+- In-memory storage only - games, users, and matchmaking state lost on server restart
 - JWT secret stored in code (should be in environment variables for production)
 - No token refresh mechanism
-- No WebSocket support for real-time updates (though Ktor WebSocket dependency is included)
+- No WebSocket support for real-time updates (matchmaking requires polling)
+  - Clients must poll `GET /api/matchmaking/status` every 2-3 seconds
+  - Ideal: WebSocket push notifications when match is found
+- Matchmaking is simple FIFO (no ELO/skill-based matching)
+- No reconnection handling if client disconnects while in queue
+- Match TTL cleanup is passive (no background job, cleanup on next operation)
 - Draw by mutual agreement not yet implemented (requires player interaction/API endpoint)
 
 ## Architecture Testing
@@ -433,21 +553,29 @@ The project uses **ArchUnit** to enforce architecture rules automatically.
 
 ### Bounded Context Isolation Tests (`BoundedContextTest.kt`)
 
-**Context Isolation**:
-- ✅ Chess domain cannot depend on User context
-- ✅ Chess application cannot depend on User context
-- ✅ User domain cannot depend on Chess context
-- ✅ User application cannot depend on Chess context
+**Context Isolation** (29 tests total):
+- ✅ Chess domain cannot depend on User or Matchmaking contexts
+- ✅ Chess application cannot depend on User or Matchmaking contexts
+- ✅ User domain cannot depend on Chess or Matchmaking contexts
+- ✅ User application cannot depend on Chess or Matchmaking contexts
+- ✅ Matchmaking domain cannot depend on Chess or User contexts
+- ✅ Matchmaking application cannot depend on Chess or User contexts (except shared ports)
 
 **ACL Enforcement**:
 - ✅ Only infrastructure layer can cross context boundaries
-- ✅ ACL adapter (UserContextPlayerChecker) can call User application
+- ✅ ACL adapters reside in infrastructure layer:
+  - `UserContextPlayerChecker` (Chess → User)
+  - `ChessContextGameCreator` (Matchmaking → Chess)
 - ✅ Domain and application layers remain isolated
+
+**Port Reuse**:
+- ✅ Matchmaking reuses `PlayerExistenceChecker` port from Chess domain
+- ✅ Acceptable trade-off to avoid port duplication while maintaining isolation
 
 **Shared Kernel**:
 - ✅ Shared Kernel contains only value objects (no services/use cases)
 - ✅ Shared Kernel has no external framework dependencies
-- ✅ Both contexts can depend on Shared Kernel
+- ✅ All three contexts can depend on Shared Kernel
 
 Run architecture tests:
 ```bash
@@ -467,10 +595,17 @@ The project includes **end-to-end integration tests** that verify the full appli
 - ✅ Complete authentication flow: Register → Login → JWT token
 - ✅ Game creation with player validation (ACL)
 - ✅ Move execution with turn validation
-- ✅ JWT authentication and authorization
+- ✅ **Matchmaking flow**: Join queue → Match → Game creation
+  - Single player: WAITING status with queue position
+  - Two players: Automatic MATCHED status with game creation
+  - Random color assignment (WHITE/BLACK)
+  - Queue operations: join, leave, status polling
+  - Error handling: already in queue, unauthorized access
+- ✅ JWT authentication and authorization on all endpoints
 - ✅ DTO serialization/deserialization
-- ✅ HTTP status codes and error responses
+- ✅ HTTP status codes and error responses (200, 401, 409, etc.)
 - ✅ Full integration of all layers (infrastructure → application → domain → ACL)
+- ✅ Cross-context communication via ACL (Matchmaking → Chess → User)
 
 Run integration tests:
 ```bash
