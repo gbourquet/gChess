@@ -6,7 +6,8 @@
       "Bash(./gradlew compileKotlin:*)",
       "Bash(./gradlew run:*)",
       "Bash(./gradlew integrationTest:*)",
-      "Bash(./gradlew clean integrationTest)"
+      "Bash(./gradlew clean integrationTest)",
+      "Bash(./gradlew architectureTest:*)"
     ]
   },
   "outputStyle": "default"

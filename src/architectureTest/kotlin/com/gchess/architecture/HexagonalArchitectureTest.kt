@@ -30,7 +30,7 @@ class HexagonalArchitectureTest {
         @BeforeAll
         fun setup() {
             // Import all bounded context packages (exclude bootstrap and tests)
-            // Now testing both Chess and User contexts
+            // Testing Chess, User, and Matchmaking contexts
             classes = ClassFileImporter()
                 .withImportOption(ImportOption.DoNotIncludeTests())
                 .withImportOption(ImportOption.DoNotIncludeJars())
@@ -41,6 +41,9 @@ class HexagonalArchitectureTest {
                     "com.gchess.user.domain",
                     "com.gchess.user.application",
                     "com.gchess.user.infrastructure",
+                    "com.gchess.matchmaking.domain",
+                    "com.gchess.matchmaking.application",
+                    "com.gchess.matchmaking.infrastructure",
                     "com.gchess.shared",
                     "com.gchess.infrastructure" // For shared KoinModule
                 )
@@ -123,6 +126,7 @@ class HexagonalArchitectureTest {
             .that().resideInAPackage("..application.usecase..")
             .and().areNotAnonymousClasses()
             .and().areNotMemberClasses()
+            .and().haveSimpleNameNotEndingWith("Result") // Exclude result types (e.g. MatchmakingResult)
             .should().haveSimpleNameEndingWith("UseCase")
             .because("Use cases represent application-level operations")
 

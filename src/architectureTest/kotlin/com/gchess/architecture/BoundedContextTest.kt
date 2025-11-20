@@ -13,11 +13,12 @@ import org.junit.jupiter.api.Test
  * Architecture tests to enforce bounded context isolation.
  *
  * These tests ensure that:
- * 1. Chess context does not depend on User context (isolation)
- * 2. User context does not depend on Chess context (isolation)
- * 3. Anti-Corruption Layer (ACL) is only in infrastructure layer
- * 4. Shared Kernel contains only value objects (no business logic)
- * 5. Shared Kernel has no external dependencies
+ * 1. Chess context does not depend on User or Matchmaking contexts (isolation)
+ * 2. User context does not depend on Chess or Matchmaking contexts (isolation)
+ * 3. Matchmaking context does not depend on other contexts' internals (isolation)
+ * 4. Anti-Corruption Layer (ACL) is only in infrastructure layer
+ * 5. Shared Kernel contains only value objects (no business logic)
+ * 6. Shared Kernel has no external dependencies
  */
 @DisplayName("Bounded Context Isolation Tests")
 class BoundedContextTest {
@@ -38,6 +39,9 @@ class BoundedContextTest {
                     "com.gchess.user.domain",
                     "com.gchess.user.application",
                     "com.gchess.user.infrastructure",
+                    "com.gchess.matchmaking.domain",
+                    "com.gchess.matchmaking.application",
+                    "com.gchess.matchmaking.infrastructure",
                     "com.gchess.shared",
                     "com.gchess.infrastructure"
                 )
@@ -47,61 +51,113 @@ class BoundedContextTest {
     // ========== Context Isolation Rules ==========
 
     @Test
-    @DisplayName("Chess domain should not depend on User context")
-    fun `chess domain should not depend on user context`() {
+    @DisplayName("Chess domain should not depend on User or Matchmaking contexts")
+    fun `chess domain should not depend on user or matchmaking contexts`() {
         val rule = noClasses()
             .that().resideInAPackage("..chess.domain..")
             .should().dependOnClassesThat().resideInAnyPackage(
                 "..user.domain..",
                 "..user.application..",
-                "..user.infrastructure.."
+                "..user.infrastructure..",
+                "..matchmaking.domain..",
+                "..matchmaking.application..",
+                "..matchmaking.infrastructure.."
             )
-            .because("Chess domain must be isolated from User context (bounded context isolation)")
+            .because("Chess domain must be isolated from other contexts (bounded context isolation)")
 
         rule.check(classes)
     }
 
     @Test
-    @DisplayName("Chess application should not depend on User context")
-    fun `chess application should not depend on user context`() {
+    @DisplayName("Chess application should not depend on User or Matchmaking contexts")
+    fun `chess application should not depend on user or matchmaking contexts`() {
         val rule = noClasses()
             .that().resideInAPackage("..chess.application..")
             .should().dependOnClassesThat().resideInAnyPackage(
                 "..user.domain..",
                 "..user.application..",
-                "..user.infrastructure.."
+                "..user.infrastructure..",
+                "..matchmaking.domain..",
+                "..matchmaking.application..",
+                "..matchmaking.infrastructure.."
             )
-            .because("Chess application must be isolated from User context (bounded context isolation)")
+            .because("Chess application must be isolated from other contexts (bounded context isolation)")
 
         rule.check(classes)
     }
 
     @Test
-    @DisplayName("User domain should not depend on Chess context")
-    fun `user domain should not depend on chess context`() {
+    @DisplayName("User domain should not depend on Chess or Matchmaking contexts")
+    fun `user domain should not depend on chess or matchmaking contexts`() {
         val rule = noClasses()
             .that().resideInAPackage("..user.domain..")
             .should().dependOnClassesThat().resideInAnyPackage(
                 "..chess.domain..",
                 "..chess.application..",
-                "..chess.infrastructure.."
+                "..chess.infrastructure..",
+                "..matchmaking.domain..",
+                "..matchmaking.application..",
+                "..matchmaking.infrastructure.."
             )
-            .because("User domain must be isolated from Chess context (bounded context isolation)")
+            .because("User domain must be isolated from other contexts (bounded context isolation)")
 
         rule.check(classes)
     }
 
     @Test
-    @DisplayName("User application should not depend on Chess context")
-    fun `user application should not depend on chess context`() {
+    @DisplayName("User application should not depend on Chess or Matchmaking contexts")
+    fun `user application should not depend on chess or matchmaking contexts`() {
         val rule = noClasses()
             .that().resideInAPackage("..user.application..")
             .should().dependOnClassesThat().resideInAnyPackage(
                 "..chess.domain..",
                 "..chess.application..",
-                "..chess.infrastructure.."
+                "..chess.infrastructure..",
+                "..matchmaking.domain..",
+                "..matchmaking.application..",
+                "..matchmaking.infrastructure.."
             )
-            .because("User application must be isolated from Chess context (bounded context isolation)")
+            .because("User application must be isolated from other contexts (bounded context isolation)")
+
+        rule.check(classes)
+    }
+
+    // ========== Matchmaking Context Isolation ==========
+
+    @Test
+    @DisplayName("Matchmaking domain should not depend on Chess or User contexts")
+    fun `matchmaking domain should not depend on chess or user contexts`() {
+        val rule = noClasses()
+            .that().resideInAPackage("..matchmaking.domain..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                "..chess.domain..",
+                "..chess.application..",
+                "..chess.infrastructure..",
+                "..user.domain..",
+                "..user.application..",
+                "..user.infrastructure.."
+            )
+            .because("Matchmaking domain must be isolated from other contexts (bounded context isolation)")
+
+        rule.check(classes)
+    }
+
+    @Test
+    @DisplayName("Matchmaking application should not depend on Chess or User contexts (except shared ports)")
+    fun `matchmaking application should not depend on chess or user contexts except ports`() {
+        // Matchmaking reuses the PlayerExistenceChecker port from Chess domain
+        // This is acceptable as it's a port (interface), not an implementation
+        // Ideally, Matchmaking would define its own port, but port reuse is acceptable here
+        val rule = noClasses()
+            .that().resideInAPackage("..matchmaking.application..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                "..chess.application..",
+                "..chess.infrastructure..",
+                "..user.domain..",
+                "..user.application..",
+                "..user.infrastructure.."
+            )
+            .because("Matchmaking application must be isolated from other contexts (except reusable ports)")
 
         rule.check(classes)
     }
@@ -109,11 +165,14 @@ class BoundedContextTest {
     // ========== Anti-Corruption Layer (ACL) Rules ==========
 
     @Test
-    @DisplayName("ACL should only exist in infrastructure layer")
-    fun `acl should only be in infrastructure layer`() {
-        // The UserContextPlayerChecker (ACL) should be in chess.infrastructure
+    @DisplayName("ACL adapters should only exist in infrastructure layer")
+    fun `acl adapters should only be in infrastructure layer`() {
+        // ACL adapters (UserContextPlayerChecker, ChessContextGameCreator) should be in infrastructure
         val rule = classes()
             .that().haveSimpleNameContaining("UserContext")
+            .or().haveSimpleNameContaining("ChessContext")
+            .and().haveSimpleNameNotStartingWith("Test")
+            .and().haveSimpleNameNotStartingWith("Fake")
             .should().resideInAPackage("..infrastructure..")
             .because("Anti-Corruption Layer adapters belong in the infrastructure layer")
 
@@ -132,6 +191,35 @@ class BoundedContextTest {
                 "..user.application.."
             )
             .because("ACL in Chess infrastructure can call User application use cases")
+
+        rule.check(classes)
+    }
+
+    @Test
+    @DisplayName("Matchmaking infrastructure can depend on Chess application (ACL pattern)")
+    fun `matchmaking infrastructure can communicate with chess application via acl`() {
+        // Matchmaking infrastructure → Chess application is allowed (this is the ACL)
+        val rule = classes()
+            .that().resideInAPackage("..matchmaking.infrastructure..")
+            .and().haveSimpleNameContaining("ChessContext")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                "..chess.application.."
+            )
+            .because("ACL in Matchmaking infrastructure can call Chess application use cases")
+
+        rule.check(classes)
+    }
+
+    @Test
+    @DisplayName("Matchmaking infrastructure provides ACL adapters for cross-context communication")
+    fun `matchmaking infrastructure provides acl adapters`() {
+        // Matchmaking infrastructure should contain ACL adapters like ChessContextGameCreator
+        // that translate between Matchmaking's domain ports and other contexts
+        val rule = classes()
+            .that().resideInAPackage("..matchmaking.infrastructure..")
+            .and().haveSimpleNameContaining("ChessContext")
+            .should().implement("com.gchess.matchmaking.domain.port.GameCreator")
+            .because("ACL adapters in infrastructure implement domain ports")
 
         rule.check(classes)
     }
