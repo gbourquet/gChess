@@ -1,0 +1,261 @@
+package com.gchess.matchmaking.infrastructure.adapter.driver
+
+import com.gchess.matchmaking.application.usecase.GetMatchStatusUseCase
+import com.gchess.matchmaking.application.usecase.JoinMatchmakingUseCase
+import com.gchess.matchmaking.application.usecase.LeaveMatchmakingUseCase
+import com.gchess.matchmaking.infrastructure.adapter.driver.dto.MatchmakingStatusDTO
+import com.gchess.matchmaking.infrastructure.adapter.driver.dto.toDTO
+import com.gchess.shared.domain.model.PlayerId
+import io.bkbn.kompendium.core.metadata.DeleteInfo
+import io.bkbn.kompendium.core.metadata.GetInfo
+import io.bkbn.kompendium.core.metadata.PostInfo
+import io.bkbn.kompendium.core.plugin.NotarizedRoute
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import org.koin.ktor.ext.inject
+
+/**
+ * Configures matchmaking routes for the application.
+ *
+ * These routes handle:
+ * - POST /api/matchmaking/queue - Join matchmaking queue
+ * - DELETE /api/matchmaking/queue - Leave matchmaking queue
+ * - GET /api/matchmaking/status - Get current matchmaking status
+ *
+ * All routes require JWT authentication.
+ */
+fun Application.configureMatchmakingRoutes() {
+    val joinMatchmakingUseCase by inject<JoinMatchmakingUseCase>()
+    val leaveMatchmakingUseCase by inject<LeaveMatchmakingUseCase>()
+    val getMatchStatusUseCase by inject<GetMatchStatusUseCase>()
+
+    routing {
+        route("/api/matchmaking") {
+            // All matchmaking routes require authentication
+            authenticate("jwt-auth") {
+                // POST /api/matchmaking/queue - Join matchmaking
+                route("/queue") {
+                    install(NotarizedRoute()) {
+                        tags = setOf("Matchmaking")
+                        post = PostInfo.builder {
+                            summary("Join matchmaking queue")
+                            description("""
+                                Add the authenticated player to the matchmaking queue.
+
+                                If another player is already waiting, a match is created automatically:
+                                - Colors are assigned randomly (50/50)
+                                - A chess game is created
+                                - Both players receive MATCHED status
+
+                                If no other player is waiting:
+                                - Player is added to queue with WAITING status
+                                - Poll GET /api/matchmaking/status to check for match
+                            """.trimIndent())
+                            security = mapOf("JWT" to listOf())
+                            response {
+                                responseCode(HttpStatusCode.OK)
+                                responseType<MatchmakingStatusDTO>()
+                                description("Matchmaking status (WAITING or MATCHED)")
+                            }
+                            canRespond {
+                                responseCode(HttpStatusCode.Conflict)
+                                responseType<Map<String, String>>()
+                                description("Player already in queue or already matched")
+                            }
+                            canRespond {
+                                responseCode(HttpStatusCode.BadRequest)
+                                responseType<Map<String, String>>()
+                                description("Player does not exist")
+                            }
+                            canRespond {
+                                responseCode(HttpStatusCode.Unauthorized)
+                                responseType<Map<String, String>>()
+                                description("Missing or invalid JWT token")
+                            }
+                        }
+                    }
+
+                    post {
+                        // Extract player ID from JWT token
+                        val principal = call.principal<JWTPrincipal>()
+                            ?: return@post call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("error" to "Missing authentication")
+                            )
+
+                        val playerIdString = principal.payload.getClaim("playerId").asString()
+                            ?: return@post call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("error" to "Invalid token: missing playerId")
+                            )
+
+                        val playerId = try {
+                            PlayerId.fromString(playerIdString)
+                        } catch (e: Exception) {
+                            return@post call.respond(
+                                HttpStatusCode.BadRequest,
+                                mapOf("error" to "Invalid playerId format")
+                            )
+                        }
+
+                        // Execute join matchmaking use case
+                        val result = joinMatchmakingUseCase.execute(playerId)
+
+                        result.fold(
+                            onSuccess = { matchmakingResult ->
+                                call.respond(HttpStatusCode.OK, matchmakingResult.toDTO())
+                            },
+                            onFailure = { exception ->
+                                // Determine appropriate HTTP status based on error
+                                val statusCode = when {
+                                    exception.message?.contains("already in") == true -> HttpStatusCode.Conflict
+                                    exception.message?.contains("already has") == true -> HttpStatusCode.Conflict
+                                    exception.message?.contains("does not exist") == true -> HttpStatusCode.BadRequest
+                                    else -> HttpStatusCode.InternalServerError
+                                }
+                                call.respond(statusCode, mapOf("error" to (exception.message ?: "Unknown error")))
+                            }
+                        )
+                    }
+                }
+
+                // DELETE /api/matchmaking/queue - Leave matchmaking
+                route("/queue") {
+                    install(NotarizedRoute()) {
+                        tags = setOf("Matchmaking")
+                        delete = DeleteInfo.builder {
+                            summary("Leave matchmaking queue")
+                            description("""
+                                Remove the authenticated player from the matchmaking queue.
+
+                                If the player is not in queue, this operation succeeds silently.
+
+                                Note: Once matched, players cannot leave via this endpoint.
+                                The match has already been created and they should join the game.
+                            """.trimIndent())
+                            security = mapOf("JWT" to listOf())
+                            response {
+                                responseCode(HttpStatusCode.OK)
+                                responseType<Map<String, Boolean>>()
+                                description("Success (removed: true if was in queue, false otherwise)")
+                            }
+                            canRespond {
+                                responseCode(HttpStatusCode.Unauthorized)
+                                responseType<Map<String, String>>()
+                                description("Missing or invalid JWT token")
+                            }
+                        }
+                    }
+
+                    delete {
+                        // Extract player ID from JWT token
+                        val principal = call.principal<JWTPrincipal>()
+                            ?: return@delete call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("error" to "Missing authentication")
+                            )
+
+                        val playerIdString = principal.payload.getClaim("playerId").asString()
+                            ?: return@delete call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("error" to "Invalid token: missing playerId")
+                            )
+
+                        val playerId = try {
+                            PlayerId.fromString(playerIdString)
+                        } catch (e: Exception) {
+                            return@delete call.respond(
+                                HttpStatusCode.BadRequest,
+                                mapOf("error" to "Invalid playerId format")
+                            )
+                        }
+
+                        // Execute leave matchmaking use case
+                        val result = leaveMatchmakingUseCase.execute(playerId)
+
+                        result.fold(
+                            onSuccess = { removed ->
+                                call.respond(HttpStatusCode.OK, mapOf("removed" to removed))
+                            },
+                            onFailure = { exception ->
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("error" to (exception.message ?: "Unknown error"))
+                                )
+                            }
+                        )
+                    }
+                }
+
+                // GET /api/matchmaking/status - Get matchmaking status
+                route("/status") {
+                    install(NotarizedRoute()) {
+                        tags = setOf("Matchmaking")
+                        get = GetInfo.builder {
+                            summary("Get matchmaking status")
+                            description("""
+                                Get the current matchmaking status for the authenticated player.
+
+                                Possible statuses:
+                                - WAITING: Player is in queue, waiting for an opponent
+                                - MATCHED: Player has been matched, game created
+                                - NOT_FOUND: Player is neither in queue nor matched
+
+                                When MATCHED, the response includes:
+                                - gameId: ID of the created game
+                                - yourColor: WHITE or BLACK (randomly assigned)
+
+                                Clients should poll this endpoint periodically (e.g., every 2-3 seconds)
+                                to check for match updates.
+                            """.trimIndent())
+                            security = mapOf("JWT" to listOf())
+                            response {
+                                responseCode(HttpStatusCode.OK)
+                                responseType<MatchmakingStatusDTO>()
+                                description("Current matchmaking status")
+                            }
+                            canRespond {
+                                responseCode(HttpStatusCode.Unauthorized)
+                                responseType<Map<String, String>>()
+                                description("Missing or invalid JWT token")
+                            }
+                        }
+                    }
+
+                    get {
+                        // Extract player ID from JWT token
+                        val principal = call.principal<JWTPrincipal>()
+                            ?: return@get call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("error" to "Missing authentication")
+                            )
+
+                        val playerIdString = principal.payload.getClaim("playerId").asString()
+                            ?: return@get call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("error" to "Invalid token: missing playerId")
+                            )
+
+                        val playerId = try {
+                            PlayerId.fromString(playerIdString)
+                        } catch (e: Exception) {
+                            return@get call.respond(
+                                HttpStatusCode.BadRequest,
+                                mapOf("error" to "Invalid playerId format")
+                            )
+                        }
+
+                        // Execute get match status use case
+                        val matchmakingResult = getMatchStatusUseCase.execute(playerId)
+
+                        call.respond(HttpStatusCode.OK, matchmakingResult.toDTO())
+                    }
+                }
+            }
+        }
+    }
+}
