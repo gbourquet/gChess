@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!-- ============================================ -->
+    <!-- Table: users                                 -->
+    <!-- ============================================ -->
+    <changeSet id="001-create-users-table" author="gchess">
+        <createTable tableName="users">
+            <column name="id" type="VARCHAR(26)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="username" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="email" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="password_hash" type="VARCHAR(60)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Index case-insensitive pour username -->
+        <sql>
+            CREATE INDEX idx_users_username_lower ON users(LOWER(username));
+        </sql>
+
+        <!-- Index case-insensitive pour email -->
+        <sql>
+            CREATE INDEX idx_users_email_lower ON users(LOWER(email));
+        </sql>
+    </changeSet>
+
+    <!-- ============================================ -->
+    <!-- Table: games                                 -->
+    <!-- ============================================ -->
+    <changeSet id="002-create-games-table" author="gchess">
+        <createTable tableName="games">
+            <column name="id" type="VARCHAR(26)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="white_player_id" type="VARCHAR(26)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="black_player_id" type="VARCHAR(26)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="board_fen" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="current_side" type="VARCHAR(10)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Foreign keys -->
+        <addForeignKeyConstraint
+            baseTableName="games"
+            baseColumnNames="white_player_id"
+            constraintName="fk_games_white_player"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <addForeignKeyConstraint
+            baseTableName="games"
+            baseColumnNames="black_player_id"
+            constraintName="fk_games_black_player"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <!-- Indexes -->
+        <createIndex tableName="games" indexName="idx_games_white_player">
+            <column name="white_player_id"/>
+        </createIndex>
+
+        <createIndex tableName="games" indexName="idx_games_black_player">
+            <column name="black_player_id"/>
+        </createIndex>
+
+        <createIndex tableName="games" indexName="idx_games_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- ============================================ -->
+    <!-- Table: game_moves                            -->
+    <!-- ============================================ -->
+    <changeSet id="003-create-game-moves-table" author="gchess">
+        <createTable tableName="game_moves">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="game_id" type="VARCHAR(26)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="move_number" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="from_square" type="VARCHAR(2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="to_square" type="VARCHAR(2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="promotion" type="VARCHAR(10)"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Foreign key avec CASCADE delete -->
+        <addForeignKeyConstraint
+            baseTableName="game_moves"
+            baseColumnNames="game_id"
+            constraintName="fk_game_moves_game"
+            referencedTableName="games"
+            referencedColumnNames="id"
+            onDelete="CASCADE"/>
+
+        <!-- Unique constraint sur (game_id, move_number) -->
+        <addUniqueConstraint
+            tableName="game_moves"
+            columnNames="game_id, move_number"
+            constraintName="uk_game_moves_game_number"/>
+
+        <!-- Index sur game_id pour les requêtes de récupération -->
+        <createIndex tableName="game_moves" indexName="idx_game_moves_game">
+            <column name="game_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- ============================================ -->
+    <!-- Table: matches                               -->
+    <!-- ============================================ -->
+    <changeSet id="004-create-matches-table" author="gchess">
+        <createTable tableName="matches">
+            <column name="game_id" type="VARCHAR(26)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="white_player_id" type="VARCHAR(26)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="black_player_id" type="VARCHAR(26)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="matched_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Foreign keys -->
+        <addForeignKeyConstraint
+            baseTableName="matches"
+            baseColumnNames="game_id"
+            constraintName="fk_matches_game"
+            referencedTableName="games"
+            referencedColumnNames="id"
+            onDelete="CASCADE"/>
+
+        <addForeignKeyConstraint
+            baseTableName="matches"
+            baseColumnNames="white_player_id"
+            constraintName="fk_matches_white_player"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <addForeignKeyConstraint
+            baseTableName="matches"
+            baseColumnNames="black_player_id"
+            constraintName="fk_matches_black_player"
+            referencedTableName="users"
+            referencedColumnNames="id"/>
+
+        <!-- Indexes pour les recherches par joueur -->
+        <createIndex tableName="matches" indexName="idx_matches_white_player">
+            <column name="white_player_id"/>
+        </createIndex>
+
+        <createIndex tableName="matches" indexName="idx_matches_black_player">
+            <column name="black_player_id"/>
+        </createIndex>
+
+        <!-- Index pour le cleanup des matches expirés -->
+        <createIndex tableName="matches" indexName="idx_matches_expires_at">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

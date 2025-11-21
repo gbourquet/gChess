@@ -1,7 +1,7 @@
 package com.gchess.chess.integration
 
-import com.gchess.module
-import io.kotest.core.spec.style.StringSpec
+import com.gchess.infrastructure.DatabaseE2ETest
+import com.gchess.infrastructure.testModule
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.ktor.client.request.*
@@ -9,7 +9,6 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.*
-import org.koin.core.context.stopKoin
 
 /**
  * End-to-end integration test for the game API.
@@ -18,18 +17,15 @@ import org.koin.core.context.stopKoin
  * This test validates the Anti-Corruption Layer (ACL) by ensuring that:
  * - Users must exist before creating a game
  * - Only the correct player can make moves on their turn
+ *
+ * Uses Testcontainers PostgreSQL for database integration testing.
  */
-class GameE2ETest : StringSpec({
-
-    // Clean up Koin after each test to avoid conflicts
-    afterTest {
-        stopKoin()
-    }
+class GameE2ETest : DatabaseE2ETest({
 
     "complete game flow: register users, create game, make valid moves, and reject invalid turn" {
         testApplication {
             application {
-                module()
+                testModule()
             }
 
             val client = createClient {

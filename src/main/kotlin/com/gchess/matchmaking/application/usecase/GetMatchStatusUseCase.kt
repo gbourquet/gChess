@@ -74,8 +74,11 @@ class GetMatchStatusUseCase(
      *
      * For now, this returns the player's position sequentially (1, 2, 3, etc.)
      * which is good enough for the MVP to show users they're waiting.
+     *
+     * @param _playerId Player ID (unused in MVP, reserved for future implementation)
      */
-    private suspend fun calculateQueuePosition(playerId: PlayerId): Int {
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun calculateQueuePosition(_playerId: PlayerId): Int {
         // MVP implementation: position based on entry order
         // This would need to be improved with actual queue ordering
         // For the tests to pass, we need to access queue internals

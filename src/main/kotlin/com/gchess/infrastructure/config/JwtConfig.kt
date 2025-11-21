@@ -8,20 +8,31 @@ import java.util.*
 /**
  * Configuration for JWT token generation and validation.
  *
- * In a production environment:
- * - SECRET should be stored in environment variables
- * - Use a stronger secret (at least 256 bits)
- * - Consider using RS256 with public/private keys
+ * Configuration is loaded from environment variables with sensible defaults for development.
+ *
+ * **IMPORTANT for production:**
+ * - JWT_SECRET MUST be set to a secure value (minimum 256 bits)
+ * - Use a strong random secret (e.g., output of `openssl rand -base64 32`)
+ * - Consider using RS256 with public/private keys for microservices
+ *
+ * Environment variables:
+ * - JWT_SECRET: Secret key for signing tokens (REQUIRED in production)
+ * - JWT_VALIDITY_MS: Token validity in milliseconds (default: 24 hours)
  */
 object JwtConfig {
-    // TODO: Move to environment variables in production
-    private const val SECRET = "gchess-jwt-secret-key-change-in-production"
+    // Load from environment variable, fallback to default for development
+    private val SECRET = System.getenv("JWT_SECRET")
+        ?: "gchess-jwt-secret-key-change-in-production".also {
+            println("⚠️  WARNING: Using default JWT secret. Set JWT_SECRET environment variable in production!")
+        }
+
     private const val ISSUER = "gchess"
     private const val AUDIENCE = "gchess-users"
     const val REALM = "gChess API"
 
-    // Token validity: 24 hours
-    private const val VALIDITY_MS = 24 * 60 * 60 * 1000L // 24 hours
+    // Token validity: default 24 hours, configurable via env var
+    private val VALIDITY_MS = System.getenv("JWT_VALIDITY_MS")?.toLongOrNull()
+        ?: (24 * 60 * 60 * 1000L) // 24 hours
 
     private val algorithm = Algorithm.HMAC256(SECRET)
 

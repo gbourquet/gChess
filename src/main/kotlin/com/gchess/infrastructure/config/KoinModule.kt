@@ -7,7 +7,7 @@ import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.port.PlayerExistenceChecker
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.domain.service.StandardChessRules
-import com.gchess.chess.infrastructure.adapter.driven.InMemoryGameRepository
+import com.gchess.chess.infrastructure.adapter.driven.PostgresGameRepository
 import com.gchess.chess.infrastructure.adapter.driven.UserContextPlayerChecker
 import com.gchess.user.application.usecase.GetUserUseCase
 import com.gchess.user.application.usecase.LoginUseCase
@@ -15,7 +15,7 @@ import com.gchess.user.application.usecase.RegisterUserUseCase
 import com.gchess.user.domain.port.PasswordHasher
 import com.gchess.user.domain.port.UserRepository
 import com.gchess.user.infrastructure.adapter.driven.BcryptPasswordHasher
-import com.gchess.user.infrastructure.adapter.driven.InMemoryUserRepository
+import com.gchess.user.infrastructure.adapter.driven.PostgresUserRepository
 import com.gchess.matchmaking.application.usecase.CleanupExpiredMatchesUseCase
 import com.gchess.matchmaking.application.usecase.CreateGameFromMatchUseCase
 import com.gchess.matchmaking.application.usecase.GetMatchStatusUseCase
@@ -25,15 +25,30 @@ import com.gchess.matchmaking.domain.port.GameCreator
 import com.gchess.matchmaking.domain.port.MatchRepository
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.infrastructure.adapter.driven.ChessContextGameCreator
-import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchRepository
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
+import com.gchess.matchmaking.infrastructure.adapter.driven.PostgresMatchRepository
+import org.jooq.DSLContext
 import org.koin.dsl.module
+import javax.sql.DataSource
 
 val appModule = module {
+    // ========== Infrastructure: Database ==========
+
+    // DataSource (HikariCP connection pool)
+    single<DataSource> { DatabaseConfig.createDataSource() }
+
+    // DSLContext (jOOQ) - migrations are run before creating the context
+    single<DSLContext> {
+        val dataSource = get<DataSource>()
+        // Run migrations on first access (ensures schema is up to date)
+        DatabaseConfig.runMigrations(dataSource)
+        DatabaseConfig.createDslContext(dataSource)
+    }
+
     // ========== Chess Context ==========
 
     // Repositories (Output Adapters)
-    single<GameRepository> { InMemoryGameRepository() }
+    single<GameRepository> { PostgresGameRepository(get()) }
 
     // Domain Services
     single<ChessRules> { StandardChessRules() }
@@ -50,7 +65,7 @@ val appModule = module {
     // ========== User Context ==========
 
     // Repositories (Output Adapters)
-    single<UserRepository> { InMemoryUserRepository() }
+    single<UserRepository> { PostgresUserRepository(get()) }
 
     // Domain Services
     single<PasswordHasher> { BcryptPasswordHasher() }
@@ -63,8 +78,9 @@ val appModule = module {
     // ========== Matchmaking Context ==========
 
     // Repositories (Output Adapters)
+    // Note: MatchmakingQueue stays in-memory for performance (FIFO queue with race condition protection)
     single<MatchmakingQueue> { InMemoryMatchmakingQueue() }
-    single<MatchRepository> { InMemoryMatchRepository() }
+    single<MatchRepository> { PostgresMatchRepository(get()) }
 
     // Anti-Corruption Layer (ACL)
     // Connects Matchmaking context to Chess context for game creation

@@ -1,7 +1,7 @@
 package com.gchess.matchmaking.integration
 
-import com.gchess.module
-import io.kotest.core.spec.style.StringSpec
+import com.gchess.infrastructure.DatabaseE2ETest
+import com.gchess.infrastructure.testModule
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -10,7 +10,6 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.*
-import org.koin.core.context.stopKoin
 
 /**
  * End-to-end integration test for the matchmaking API.
@@ -23,17 +22,14 @@ import org.koin.core.context.stopKoin
  * - Leave matchmaking queue
  * - Error cases (already in queue, player doesn't exist, unauthorized)
  * - ACL integration with User and Chess contexts
+ *
+ * Uses Testcontainers PostgreSQL for database integration testing.
  */
-class MatchmakingE2ETest : StringSpec({
-
-    // Clean up Koin after each test to avoid conflicts
-    afterTest {
-        stopKoin()
-    }
+class MatchmakingE2ETest : DatabaseE2ETest({
 
     "complete matchmaking flow: join queue, match creation, status checks, and error handling" {
         testApplication {
-            application { module() }
+            application { testModule() }
             val client = createClient { }
 
             // === Test 1: Single player joins queue - gets WAITING status ===

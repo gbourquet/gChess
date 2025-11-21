@@ -25,11 +25,11 @@ A high-performance chess application built with Kotlin, featuring bitboard-based
 ### API & Architecture
 - 🌐 **RESTful API** for game and user operations
 - 🏗️ **Hexagonal architecture** (ports and adapters)
-- 🎯 **Domain-Driven Design** with bounded contexts (Chess + User)
+- 🎯 **Domain-Driven Design** with bounded contexts (Chess + User + Matchmaking)
 - 🔄 **Anti-Corruption Layer** for context communication
 - 🧪 **Comprehensive test coverage** (108+ unit tests, architecture tests, integration tests)
 - 💉 **Dependency injection** with Koin
-- 📦 **In-memory storage** for games and users
+- 🗄️ **PostgreSQL persistence** with jOOQ and Liquibase migrations
 
 ## Quick Start
 
@@ -37,6 +37,56 @@ A high-performance chess application built with Kotlin, featuring bitboard-based
 
 - Java 21 or higher
 - Gradle (wrapper included)
+- Docker (required for Testcontainers during build and tests)
+- PostgreSQL 16+ (for production deployment)
+
+### Database Setup
+
+The application uses PostgreSQL for data persistence. You have two options:
+
+#### Option 1: Development with Default Configuration (Recommended)
+
+The application will attempt to connect to PostgreSQL using default development credentials:
+```
+URL: jdbc:postgresql://localhost:5432/gchess_dev
+Username: gchess
+Password: gchess
+```
+
+**Quick PostgreSQL setup with Docker:**
+```bash
+docker run -d \
+  --name gchess-postgres \
+  -e POSTGRES_DB=gchess_dev \
+  -e POSTGRES_USER=gchess \
+  -e POSTGRES_PASSWORD=gchess \
+  -p 5432:5432 \
+  postgres:16-alpine
+```
+
+Database migrations will run automatically on application startup via Liquibase.
+
+#### Option 2: Custom Configuration with Environment Variables
+
+Override default values with environment variables:
+
+```bash
+export DATABASE_URL="jdbc:postgresql://your-host:5432/your-database"
+export DATABASE_USER="your-username"
+export DATABASE_PASSWORD="your-password"
+export DATABASE_POOL_SIZE=20  # Optional: connection pool size (default: 10)
+
+# JWT secret (REQUIRED in production)
+export JWT_SECRET="your-secure-random-secret-min-256-bits"
+export JWT_VALIDITY_MS=86400000  # Optional: token validity in ms (default: 24h)
+
+./gradlew run
+```
+
+**Generate a secure JWT secret:**
+```bash
+openssl rand -base64 32
+```
 
 ### Running the Application
 
@@ -45,6 +95,11 @@ A high-performance chess application built with Kotlin, featuring bitboard-based
 ```
 
 The server will start on `http://localhost:8080`
+
+On first startup, you'll see:
+- Database connection established
+- Liquibase migrations applied (creates tables: users, games, game_moves, matches)
+- Server ready to accept requests
 
 ### Building
 
@@ -148,7 +203,7 @@ curl -X POST http://localhost:8080/api/games \
   "id": "01HQZN3A4B5C6D7E8F9G0H1J2K",
   "whitePlayer": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
   "blackPlayer": "01HQZN2K3M4P5Q6R7S8T9V0W2Y",
-  "board": {...},
+  "board": {},
   "currentSide": "WHITE",
   "currentPlayer": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
   "status": "IN_PROGRESS",
@@ -244,14 +299,20 @@ The project follows **Domain-Driven Design** with **bounded contexts**, implemen
 **Chess Context** (`com.gchess.chess`):
 - **Domain**: Game, ChessPosition, ChessRules, PlayerSide
 - **Application**: CreateGameUseCase, MakeMoveUseCase, GetGameUseCase
-- **Infrastructure**: GameRoutes, InMemoryGameRepository, UserContextPlayerChecker (ACL)
+- **Infrastructure**: GameRoutes, PostgresGameRepository (jOOQ), UserContextPlayerChecker (ACL)
 - **Purpose**: Manages chess games, rules, and gameplay
 
 **User Context** (`com.gchess.user`):
 - **Domain**: User, Credentials, PasswordHasher port
 - **Application**: RegisterUserUseCase, LoginUseCase, GetUserUseCase
-- **Infrastructure**: AuthRoutes, UserRoutes, InMemoryUserRepository, BcryptPasswordHasher
+- **Infrastructure**: AuthRoutes, UserRoutes, PostgresUserRepository (jOOQ), BcryptPasswordHasher
 - **Purpose**: Manages user accounts, authentication, and security
+
+**Matchmaking Context** (`com.gchess.matchmaking`):
+- **Domain**: QueueEntry, Match, MatchmakingStatus
+- **Application**: JoinMatchmakingUseCase, GetMatchStatusUseCase, LeaveMatchmakingUseCase
+- **Infrastructure**: MatchmakingRoutes, PostgresMatchRepository (jOOQ), InMemoryMatchmakingQueue
+- **Purpose**: Manages player matchmaking, automatic game creation, and color assignment
 
 **Shared Kernel** (`com.gchess.shared`):
 - **Value Objects**: PlayerId, GameId (ULID-based)
@@ -259,12 +320,21 @@ The project follows **Domain-Driven Design** with **bounded contexts**, implemen
 
 ### Anti-Corruption Layer (ACL)
 
-The **UserContextPlayerChecker** acts as an ACL, allowing the Chess context to verify player existence without directly depending on the User context:
+The application uses multiple ACL adapters to maintain bounded context isolation:
 
+**UserContextPlayerChecker** (Chess → User):
 - Chess domain defines `PlayerExistenceChecker` port (interface)
 - Infrastructure implements it by calling `GetUserUseCase` from User context
+- Validates player existence before creating games or making moves
 - Fail-fast strategy: errors propagate immediately
-- Maintains bounded context isolation
+
+**ChessContextGameCreator** (Matchmaking → Chess):
+- Matchmaking domain defines `GameCreator` port (interface)
+- Infrastructure implements it by calling `CreateGameUseCase` from Chess context
+- Creates games automatically when two players match
+- Isolates matchmaking logic from chess game creation details
+
+These ACLs maintain bounded context isolation while enabling cross-context communication.
 
 See [CONTEXT_MAP.md](CONTEXT_MAP.md) for detailed context relationships.
 
@@ -282,12 +352,15 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
 - **Language**: Kotlin 1.9.22
 - **Web Framework**: Ktor 2.3.7 (Netty engine)
+- **Database**: PostgreSQL 16+ with HikariCP connection pooling
+- **Database Access**: jOOQ 3.19.15 (type-safe SQL with Kotlin support)
+- **Database Migrations**: Liquibase 4.29.2
 - **Authentication**: JWT with auth0-jwt
 - **Password Hashing**: BCrypt (jbcrypt 0.4)
 - **Unique Identifiers**: ULID (Universally Unique Lexicographically Sortable Identifier)
 - **Dependency Injection**: Koin 3.5.3
 - **Build Tool**: Gradle with Kotlin DSL
-- **Testing**: Kotest (unit/integration), ArchUnit (architecture)
+- **Testing**: Kotest (unit/integration), ArchUnit (architecture), Testcontainers (integration tests)
 - **JVM**: Java 21
 
 ## Development
@@ -307,7 +380,7 @@ src/
 │   │   └── infrastructure/
 │   │       └── adapter/
 │   │           ├── driver/        # GameRoutes, DTOs
-│   │           └── driven/        # InMemoryGameRepository, UserContextPlayerChecker (ACL)
+│   │           └── driven/        # PostgresGameRepository (jOOQ), UserContextPlayerChecker (ACL)
 │   ├── user/                      # User Bounded Context
 │   │   ├── domain/
 │   │   │   ├── model/             # User, Credentials
@@ -316,8 +389,22 @@ src/
 │   │   └── infrastructure/
 │   │       └── adapter/
 │   │           ├── driver/        # AuthRoutes, UserRoutes, DTOs
-│   │           └── driven/        # InMemoryUserRepository, BcryptPasswordHasher
-│   └── infrastructure/config/     # Shared infrastructure (KoinModule, JwtConfig)
+│   │           └── driven/        # PostgresUserRepository (jOOQ), BcryptPasswordHasher
+│   ├── matchmaking/               # Matchmaking Bounded Context
+│   │   ├── domain/
+│   │   │   ├── model/             # QueueEntry, Match
+│   │   │   └── port/              # MatchRepository, MatchmakingQueue, GameCreator
+│   │   ├── application/usecase/   # JoinMatchmaking, GetMatchStatus, LeaveMatchmaking
+│   │   └── infrastructure/
+│   │       └── adapter/
+│   │           ├── driver/        # MatchmakingRoutes, DTOs
+│   │           └── driven/        # PostgresMatchRepository, InMemoryMatchmakingQueue, ChessContextGameCreator (ACL)
+│   └── infrastructure/
+│       ├── config/                # Shared infrastructure (KoinModule, JwtConfig, DatabaseConfig)
+│       └── persistence/jooq/      # Generated jOOQ code (Tables, Records)
+├── main/resources/
+│   ├── application.conf           # Application configuration
+│   └── db/changelog/              # Liquibase database migrations
 ├── unitTest/kotlin/               # Unit tests
 │   └── com/gchess/chess/
 │       ├── domain/                # Chess domain tests
@@ -368,11 +455,15 @@ Tests are organized into three separate source sets for clarity and focused exec
 
 **Integration Tests** (`src/integrationTest/kotlin/`):
 - End-to-end API testing with Ktor test host
+- **Testcontainers PostgreSQL**: Real database for integration tests (not H2/in-memory)
 - Full authentication flow: Register → Login → JWT → Create Game → Make Moves
+- Matchmaking flow: Join queue → Match → Automatic game creation
 - Validates JWT authentication and authorization
 - Game flow testing with turn validation
+- Database persistence and retrieval testing
 - Ensures DTOs properly serialize/deserialize domain models
-- Verifies Anti-Corruption Layer works correctly
+- Verifies Anti-Corruption Layer works correctly across contexts
+- Automatic database cleanup between tests (TRUNCATE)
 
 Run all tests with `./gradlew check` or run each category independently.
 
@@ -399,25 +490,59 @@ These tests run automatically with `./gradlew check` and fail the build if archi
 ./gradlew check jacocoTestReport
 ```
 
+## Environment Variables
+
+The application supports the following environment variables for configuration:
+
+### Database Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `DATABASE_URL` | PostgreSQL JDBC URL | `jdbc:postgresql://localhost:5432/gchess_dev` | No |
+| `DATABASE_USER` | Database username | `gchess` | No |
+| `DATABASE_PASSWORD` | Database password | `gchess` | No |
+| `DATABASE_POOL_SIZE` | HikariCP connection pool size | `10` | No |
+
+### JWT Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `JWT_SECRET` | Secret key for JWT signing (min 256 bits) | Development default | **YES** (production) |
+| `JWT_VALIDITY_MS` | Token validity in milliseconds | `86400000` (24h) | No |
+
+### Server Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `PORT` | HTTP server port | `8080` | No |
+
+**⚠️ Production Security Notes:**
+- `JWT_SECRET` **MUST** be set to a secure random value in production
+- Use `openssl rand -base64 32` to generate a strong secret
+- Never commit secrets to version control
+- Consider using a secrets management system (e.g., HashiCorp Vault, AWS Secrets Manager)
+
 ## Current Limitations
 
-- In-memory storage only (games and users lost on restart)
-- JWT secret stored in code (should be in environment variables for production)
-- No token refresh mechanism
-- No WebSocket support for real-time updates
+- No token refresh mechanism (JWT expires after 24 hours by default)
+- No WebSocket support for real-time updates (matchmaking requires polling)
+- Matchmaking uses FIFO only (no ELO/skill-based matching)
 - No game history or replay functionality
 - Draw by mutual agreement not yet implemented (requires player interaction/API endpoint)
+- No rate limiting on API endpoints
 
 ## Future Enhancements
 
-- [ ] Add persistent storage (database)
+- [x] ~~Add persistent storage (database)~~ ✅ Completed (PostgreSQL + jOOQ + Liquibase)
 - [ ] Add move history with algebraic notation (e.g., "Nf3", "O-O")
 - [ ] Implement draw by mutual agreement
 - [ ] WebSocket support for real-time games
 - [ ] Chess clock/timer functionality
 - [ ] Game replay and analysis features
+- [ ] ELO rating system for matchmaking
 - [ ] Opening book and endgame tablebase integration
 - [ ] Move suggestion and hints functionality
+- [ ] API rate limiting and throttling
 
 ## Contributing
 

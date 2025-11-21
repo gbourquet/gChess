@@ -48,6 +48,9 @@ sourceSets {
 
 // Configure dependencies for test source sets
 configurations {
+    // Configuration pour la génération de code jOOQ
+    create("jooqGenerator")
+
     getByName("unitTestImplementation") {
         extendsFrom(configurations.implementation.get())
     }
@@ -107,6 +110,19 @@ dependencies {
     // Logging
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
+    // Database - PostgreSQL
+    implementation("org.postgresql:postgresql:42.7.3")
+
+    // Database - jOOQ (type-safe SQL)
+    implementation("org.jooq:jooq:3.19.6")
+    implementation("org.jooq:jooq-kotlin:3.19.6")
+
+    // Database - Connection Pooling
+    implementation("com.zaxxer:HikariCP:5.1.0")
+
+    // Database - Migrations
+    implementation("org.liquibase:liquibase-core:4.26.0")
+
     // Unit Testing
     "unitTestImplementation"("io.ktor:ktor-server-test-host:2.3.7")
     "unitTestImplementation"("io.kotest:kotest-runner-junit5:5.8.0")
@@ -125,6 +141,17 @@ dependencies {
     "integrationTestImplementation"("io.kotest:kotest-assertions-core:5.8.0")
     "integrationTestImplementation"("io.insert-koin:koin-test:3.5.3")
     "integrationTestImplementation"("io.insert-koin:koin-test-junit5:3.5.3")
+
+    // Testcontainers for integration tests
+    "integrationTestImplementation"("org.testcontainers:testcontainers:1.19.7")
+    "integrationTestImplementation"("org.testcontainers:postgresql:1.19.7")
+
+    // jOOQ code generation dependencies (uses Testcontainers)
+    "jooqGenerator"("org.jooq:jooq-codegen:3.19.6")
+    "jooqGenerator"("org.jooq:jooq-meta:3.19.6")
+    "jooqGenerator"("org.testcontainers:postgresql:1.19.7")
+    "jooqGenerator"("org.postgresql:postgresql:42.7.3")
+    "jooqGenerator"("org.liquibase:liquibase-core:4.26.0")
 
     // Documentation Generation
     "docGenImplementation"("io.ktor:ktor-server-test-host:2.3.7")
@@ -184,6 +211,56 @@ tasks.named("test") {
 kotlin {
     jvmToolchain(21)
 }
+
+// ============================================
+// jOOQ Code Generation with Testcontainers
+// ============================================
+
+// Créer la tâche de setup de la base de données pour jOOQ
+val setupJooqDatabase by tasks.registering(JooqTestcontainersTask::class)
+
+// Tâche personnalisée pour générer le code jOOQ
+val generateJooq by tasks.registering(JavaExec::class) {
+    group = "jooq"
+    description = "Génère le code jOOQ depuis PostgreSQL (via Testcontainers)"
+
+    dependsOn(setupJooqDatabase)
+
+    // Classpath pour jOOQ codegen
+    classpath = configurations["jooqGenerator"]
+
+    mainClass.set("org.jooq.codegen.GenerationTool")
+
+    // Le fichier de configuration sera créé par setupJooqDatabase
+    args = listOf(
+        project.provider {
+            if (project.extensions.extraProperties.has("jooqConfigFile")) {
+                project.extensions.extraProperties["jooqConfigFile"] as String
+            } else {
+                project.layout.buildDirectory.dir("jooq-config/jooq-config.xml").get().asFile.absolutePath
+            }
+        }.get()
+    )
+
+    // S'assurer que le répertoire de sortie existe
+    doFirst {
+        project.layout.buildDirectory.dir("generated-src/jooq/main").get().asFile.mkdirs()
+    }
+}
+
+// Ajouter les sources générées au sourceSet principal
+sourceSets.main {
+    java.srcDir(layout.buildDirectory.dir("generated-src/jooq/main"))
+}
+
+// Faire en sorte que compileKotlin dépende de la génération jOOQ
+tasks.named("compileKotlin") {
+    dependsOn(generateJooq)
+}
+
+// ============================================
+// Documentation Tasks
+// ============================================
 
 // Task to generate OpenApiConfig.kt with synced version
 val generateOpenApiConfig = tasks.register("generateOpenApiConfig") {
