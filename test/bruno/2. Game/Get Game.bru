@@ -1,0 +1,26 @@
+meta {
+  name: Get Game
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/games/{{gameId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("Game ID matches", function() {
+    expect(res.body.id).to.equal(bru.getEnvVar("gameId"));
+  });
+
+  test("Game has correct players", function() {
+    expect(res.body.whitePlayer).to.equal(bru.getEnvVar("whitePlayerId"));
+    expect(res.body.blackPlayer).to.equal(bru.getEnvVar("blackPlayerId"));
+  });
+}

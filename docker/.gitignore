@@ -1,0 +1,5 @@
+# Ignore PostgreSQL data directory
+data/
+
+# Keep the directory structure
+!data/.gitkeep

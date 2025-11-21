@@ -1,0 +1,5 @@
+# Bruno - Ignore environment secrets if any
+bruno/environments/*.secret.bru
+
+# Ignore Bruno logs/cache if created
+.bruno/

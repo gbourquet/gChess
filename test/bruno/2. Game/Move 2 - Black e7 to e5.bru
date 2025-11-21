@@ -1,0 +1,37 @@
+meta {
+  name: Move 2 - Black e7 to e5
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/games/{{gameId}}/moves
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{blackToken}}
+}
+
+body:json {
+  {
+    "from": "e7",
+    "to": "e5"
+  }
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("Current side switched to WHITE", function() {
+    expect(res.body.currentSide).to.equal("WHITE");
+  });
+
+  test("Move history has 2 moves", function() {
+    expect(res.body.moveHistory).to.be.an('array');
+    expect(res.body.moveHistory.length).to.equal(2);
+  });
+}

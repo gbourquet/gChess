@@ -546,8 +546,42 @@ The application supports the following environment variables for configuration:
 
 ## Contributing
 
-This is a private project. For questions or suggestions, please contact the maintainer.
+Contributions are welcome! This project is open source and follows Domain-Driven Design principles.
+
+### How to contribute
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes following the existing architecture patterns
+4. Ensure all tests pass (`./gradlew check`)
+5. Commit your changes with descriptive messages
+6. Push to your branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+### Architecture Guidelines
+
+- Follow hexagonal architecture (ports and adapters)
+- Respect bounded context isolation
+- Domain layer must remain framework-agnostic
+- Add tests for new features (unit + integration)
+- Run architecture tests to validate compliance
+
+See [CLAUDE.md](CLAUDE.md) and [CONTEXT_MAP.md](CONTEXT_MAP.md) for detailed architecture documentation.
 
 ## License
 
-Private project - All rights reserved
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+### What this means
+
+✅ **You are free to:**
+- Use this software for any purpose (personal, commercial, educational)
+- Modify and adapt the code
+- Distribute copies
+- Sublicense and sell copies
+
+⚠️ **Conditions:**
+- Include the original copyright notice and license in any copies
+- The software is provided "as is" without warranty
+
+**TL;DR**: Do whatever you want with this code, just keep the license notice. 🎉

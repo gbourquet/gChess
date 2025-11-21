@@ -1,0 +1,26 @@
+meta {
+  name: Join Queue - Already in Queue (should fail)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/matchmaking/queue
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{whiteToken}}
+}
+
+tests {
+  test("Status is 409 (Conflict)", function() {
+    expect(res.status).to.equal(409);
+  });
+
+  test("Error message mentions already", function() {
+    const bodyStr = res.getBody().toLowerCase();
+    expect(bodyStr).to.include("already");
+  });
+}

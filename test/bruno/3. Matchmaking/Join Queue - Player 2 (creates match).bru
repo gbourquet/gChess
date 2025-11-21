@@ -1,0 +1,34 @@
+meta {
+  name: Join Queue - Player 2 (creates match)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/matchmaking/queue
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{blackToken}}
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("Status is MATCHED", function() {
+    expect(res.body.status).to.equal("MATCHED");
+  });
+
+  test("Game ID is present", function() {
+    expect(res.body.gameId).to.be.a('string');
+  });
+
+  test("Color is assigned (WHITE or BLACK)", function() {
+    const color = res.body.yourColor;
+    expect(color === "WHITE" || color === "BLACK").to.be.true;
+  });
+}

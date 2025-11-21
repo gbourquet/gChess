@@ -1,0 +1,37 @@
+meta {
+  name: Move 1 - White e2 to e4
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/games/{{gameId}}/moves
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{whiteToken}}
+}
+
+body:json {
+  {
+    "from": "e2",
+    "to": "e4"
+  }
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("Current side switched to BLACK", function() {
+    expect(res.body.currentSide).to.equal("BLACK");
+  });
+
+  test("Move history has 1 move", function() {
+    expect(res.body.moveHistory).to.be.an('array');
+    expect(res.body.moveHistory.length).to.equal(1);
+  });
+}
