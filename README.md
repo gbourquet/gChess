@@ -266,32 +266,42 @@ curl -X POST http://localhost:8080/api/games/{gameId}/moves \
 The project follows **Domain-Driven Design** with **bounded contexts**, implementing **hexagonal architecture** (ports and adapters) within each context:
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                        Shared Kernel                               │
-│                  (PlayerId, GameId - Value Objects)                │
-└────────────────────────────────────────────────────────────────────┘
-         ↑                                              ↑
-         │                                              │
-┌────────┴──────────────────┐              ┌──────────┴──────────────┐
-│    Chess Context          │              │    User Context         │
-│  ┌─────────────────────┐  │              │  ┌───────────────────┐  │
-│  │  Infrastructure     │  │              │  │  Infrastructure   │  │
-│  │  • GameRoutes (JWT) │←─┼──────ACL─────┼─→│  • AuthRoutes     │  │
-│  │  • GameRepository   │  │              │  │  • UserRepository │  │
-│  │  • ACL Adapter ─────┼──┼──────────────┼─→│  • JwtConfig      │  │
-│  └─────────────────────┘  │              │  └───────────────────┘  │
-│  ┌─────────────────────┐  │              │  ┌───────────────────┐  │
-│  │  Application        │  │              │  │  Application      │  │
-│  │  • CreateGame       │  │              │  │  • RegisterUser   │  │
-│  │  • MakeMove         │  │              │  │  • LoginUser      │  │
-│  └─────────────────────┘  │              │  └───────────────────┘  │
-│  ┌─────────────────────┐  │              │  ┌───────────────────┐  │
-│  │  Domain             │  │              │  │  Domain           │  │
-│  │  • Game             │  │              │  │  • User           │  │
-│  │  • ChessRules       │  │              │  │  • Credentials    │  │
-│  │  • ChessPosition    │  │              │  │  • Ports          │  │
-│  └─────────────────────┘  │              │  └───────────────────┘  │
-└───────────────────────────┘              └─────────────────────────┘
+                    ┌──────────────────────────────────────────┐
+                    │         Shared Kernel                    │
+                    │   (PlayerId, GameId - Value Objects)     │
+                    └──────────────────────────────────────────┘
+                              ↑        ↑        ↑
+                              │        │        │
+        ┌─────────────────────┘        │        └─────────────────────┐
+        │                              │                              │
+┌───────┴────────────┐    ┌───────────┴──────────┐    ┌─────────────┴──────┐
+│  Chess Context     │    │  Matchmaking Context │    │   User Context     │
+│ ┌────────────────┐ │    │ ┌──────────────────┐ │    │ ┌────────────────┐ │
+│ │Infrastructure  │ │    │ │ Infrastructure   │ │    │ │Infrastructure  │ │
+│ │• GameRoutes    │←┼────┼─│• MatchRoutes     │ │    │ │• AuthRoutes    │ │
+│ │• PostgresGame  │ │    │ │• PostgresMatch   │ │    │ │• PostgresUser  │ │
+│ │  Repository    │ │    │ │  Repository      │ │    │ │  Repository    │ │
+│ │                │ │    │ │• GameCreator ACL─┼─┼───→│ │                │ │
+│ │• PlayerChecker │ │    │ │• PlayerChecker ──┼─┼────┼→│• JwtConfig     │ │
+│ │  ACL ──────────┼─┼────┼─┼→ (reused port)   │ │    │ │                │ │
+│ └────────────────┘ │    │ └──────────────────┘ │    │ └────────────────┘ │
+│ ┌────────────────┐ │    │ ┌──────────────────┐ │    │ ┌────────────────┐ │
+│ │Application     │ │    │ │ Application      │ │    │ │Application     │ │
+│ │• CreateGame    │ │    │ │• JoinMatchmaking │ │    │ │• RegisterUser  │ │
+│ │• MakeMove      │ │    │ │• GetStatus       │ │    │ │• Login         │ │
+│ │• GetGame       │ │    │ │• LeaveQueue      │ │    │ │• GetUser       │ │
+│ └────────────────┘ │    │ └──────────────────┘ │    │ └────────────────┘ │
+│ ┌────────────────┐ │    │ ┌──────────────────┐ │    │ ┌────────────────┐ │
+│ │Domain          │ │    │ │ Domain           │ │    │ │Domain          │ │
+│ │• Game          │ │    │ │• Match           │ │    │ │• User          │ │
+│ │• ChessRules    │ │    │ │• QueueEntry      │ │    │ │• Credentials   │ │
+│ │• ChessPosition │ │    │ │• Ports           │ │    │ │• Ports         │ │
+│ └────────────────┘ │    │ └──────────────────┘ │    │ └────────────────┘ │
+└────────────────────┘    └──────────────────────┘    └────────────────────┘
+
+         ACL 1: Chess → User (Player validation)
+         ACL 2: Matchmaking → Chess (Game creation)
+         ACL 3: Matchmaking → User (Player validation, port reuse)
 ```
 
 ### Bounded Contexts

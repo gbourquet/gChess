@@ -9,16 +9,35 @@ gChess is a chess application built with Kotlin following Domain-Driven Design w
 ## Technology Stack
 
 - **Language**: Kotlin 1.9.22
-- **Web Framework**: Ktor 2.3.7
+- **Web Framework**: Ktor 2.3.7 (Netty engine)
+- **Database**: PostgreSQL 16+ with HikariCP connection pooling
+- **Database Access**: jOOQ 3.19.6 (type-safe SQL with Kotlin support)
+- **Database Migrations**: Liquibase 4.26.0 (automated schema management)
 - **Authentication**: JWT (JSON Web Tokens) with auth0-jwt
 - **Password Hashing**: BCrypt (jbcrypt 0.4)
 - **Unique Identifiers**: ULID (Universally Unique Lexicographically Sortable Identifier)
 - **Dependency Injection**: Koin 3.5.3
 - **Build Tool**: Gradle (Kotlin DSL)
-- **Testing**: Kotest (unit/integration), ArchUnit (architecture)
+- **Testing**: Kotest (unit/integration), ArchUnit (architecture), Testcontainers (database integration tests)
 - **JVM**: Java 21
 
 ## Build and Development Commands
+
+### Database Setup (Required)
+
+The application requires PostgreSQL. Use Docker Compose for local development:
+
+```bash
+cd docker
+docker-compose up -d
+```
+
+This starts PostgreSQL on `localhost:5432` with default credentials. Data persists in `docker/data/`.
+
+Alternatively, set environment variables to connect to your own PostgreSQL instance:
+- `DATABASE_URL` (default: `jdbc:postgresql://localhost:5432/gchess_dev`)
+- `DATABASE_USER` (default: `gchess`)
+- `DATABASE_PASSWORD` (default: `gchess`)
 
 ### Build the project
 ```bash
@@ -29,6 +48,8 @@ gChess is a chess application built with Kotlin following Domain-Driven Design w
 ```bash
 ./gradlew run
 ```
+
+Note: Database migrations run automatically on startup via Liquibase.
 
 ### Run unit tests
 ```bash
@@ -59,6 +80,19 @@ gChess is a chess application built with Kotlin following Domain-Driven Design w
 ```bash
 ./gradlew clean
 ```
+
+### Regenerate jOOQ classes from database schema
+```bash
+./gradlew generateJooq
+```
+
+This task:
+- Starts a Testcontainers PostgreSQL instance
+- Runs Liquibase migrations to create schema
+- Generates type-safe jOOQ classes in `build/generated-sources/jooq/`
+- Classes are automatically included in compilation
+
+Note: jOOQ generation is automatic during build, but you can run this manually after schema changes.
 
 ## Architecture
 
@@ -109,7 +143,10 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
       - `GET /api/games/{id}` - Get game state
   - `dto/`: Data Transfer Objects for JSON serialization (GameDTO, ChessPositionDTO, MoveDTO)
 - `adapter/driven/`: External integrations
-  - `InMemoryGameRepository`: In-memory implementation of GameRepository
+  - `PostgresGameRepository`: PostgreSQL implementation using jOOQ for type-safe SQL
+    - Persists games and move history with transactions
+    - Uses FEN notation for board state serialization
+    - Wraps jOOQ calls in `withContext(Dispatchers.IO)` for coroutines
   - `UserContextPlayerChecker`: **Anti-Corruption Layer** adapter
     - Implements `PlayerExistenceChecker` port
     - Calls `GetUserUseCase` from User context
@@ -152,9 +189,10 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
     - `GET /api/users/{id}` - Get user profile
   - `dto/`: DTOs (UserDTO, LoginRequest, RegisterRequest, LoginResponse with JWT token)
 - `adapter/driven/`: External integrations
-  - `InMemoryUserRepository`: In-memory user storage
-    - Indexes for fast lookups (username, email)
-    - Thread-safe with ConcurrentHashMap
+  - `PostgresUserRepository`: PostgreSQL user storage using jOOQ
+    - Type-safe SQL queries via jOOQ DSL
+    - Indexed lookups by username, email, and ID
+    - Connection pooling via HikariCP
   - `BcryptPasswordHasher`: BCrypt implementation of PasswordHasher
     - Configurable work factor (default: 12)
 
@@ -210,10 +248,14 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
       - Clients should poll every 2-3 seconds for match updates
   - `dto/`: DTOs (MatchmakingStatusDTO with status, queuePosition, gameId, yourColor)
 - `adapter/driven/`: External integrations and ACL
-  - `InMemoryMatchmakingQueue`: Thread-safe FIFO queue
+  - `InMemoryMatchmakingQueue`: Thread-safe FIFO queue (remains in-memory for performance)
     - Uses `ConcurrentLinkedQueue` for queue + `ConcurrentHashMap` for index
     - `ReentrantLock` for race condition protection
-  - `InMemoryMatchRepository`: Match storage with expiration
+    - In-memory design optimal for volatile, short-lived queue data
+  - `PostgresMatchRepository`: PostgreSQL match storage using jOOQ
+    - Type-safe SQL queries via jOOQ DSL
+    - Indexed lookups by player ID
+    - TTL enforcement with automatic expiration
   - `ChessContextGameCreator`: **Anti-Corruption Layer** adapter
     - Implements `GameCreator` port
     - Calls `CreateGameUseCase` from Chess context
@@ -235,18 +277,24 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 
 #### Infrastructure Configuration (`com.gchess.infrastructure.config`)
 
-- `KoinModule.kt`: Dependency injection wiring for all contexts (19 definitions total)
-  - **Chess Context** dependencies (repositories, services, use cases)
-  - **User Context** dependencies (repositories, services, use cases)
-  - **Matchmaking Context** dependencies (queues, repositories, use cases)
+- `DatabaseConfig.kt`: PostgreSQL database configuration
+  - HikariCP connection pooling (configurable pool size)
+  - Liquibase migrations on startup
+  - jOOQ DSLContext for type-safe queries
+  - Configuration via environment variables (DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD)
+- `KoinModule.kt`: Dependency injection wiring for all contexts
+  - **Database Layer**: DataSource, DSLContext (shared across contexts)
+  - **Chess Context** dependencies (PostgreSQL repositories, services, use cases)
+  - **User Context** dependencies (PostgreSQL repositories, services, use cases)
+  - **Matchmaking Context** dependencies (in-memory queue, PostgreSQL repositories, use cases)
   - **Anti-Corruption Layer** wiring:
     - `PlayerExistenceChecker` → `UserContextPlayerChecker` (Chess → User)
     - `GameCreator` → `ChessContextGameCreator` (Matchmaking → Chess)
 - `JwtConfig.kt`: JWT token generation and validation
   - HMAC256 algorithm
-  - 24-hour token validity
+  - 24-hour token validity (configurable)
   - Embeds `playerId` claim in token
-  - **TODO Production**: Move secret to environment variables
+  - Configuration via environment variables (JWT_SECRET, JWT_VALIDITY_MS)
 
 ### Key Design Patterns
 
@@ -516,9 +564,8 @@ The ACL pattern protects the Chess context from changes in the User context:
 
 ## Current Limitations
 
-- In-memory storage only - games, users, and matchmaking state lost on server restart
-- JWT secret stored in code (should be in environment variables for production)
-- No token refresh mechanism
+- Matchmaking queue is in-memory only - queue state lost on server restart (games/users/matches persist)
+- No token refresh mechanism (JWT tokens expire after configured validity period)
 - No WebSocket support for real-time updates (matchmaking requires polling)
   - Clients must poll `GET /api/matchmaking/status` every 2-3 seconds
   - Ideal: WebSocket push notifications when match is found
@@ -589,7 +636,12 @@ The project includes **end-to-end integration tests** that verify the full appli
 ### Test Organization
 - **Location**: `src/integrationTest/kotlin/`
 - **Framework**: Ktor Test Host with Kotest assertions
-- **Scope**: Full API testing including authentication, authorization, and domain logic
+- **Database**: Testcontainers with real PostgreSQL 16 (alpine image)
+  - Singleton container shared across all tests
+  - Automatic Liquibase migrations on startup
+  - Database cleanup between tests (TRUNCATE CASCADE)
+  - Full jOOQ type-safe queries tested end-to-end
+- **Scope**: Full API testing including authentication, authorization, persistence, and domain logic
 
 ### What Integration Tests Cover
 - ✅ Complete authentication flow: Register → Login → JWT token
@@ -639,9 +691,13 @@ Run integration tests:
 - Bitboard-based chess engine for efficient move generation and position evaluation
 - All domain logic is in pure Kotlin with no framework dependencies
 - Bounded contexts maintain strict isolation (validated by ArchUnit tests)
+- **Database**: PostgreSQL with jOOQ for type-safe queries and Liquibase for migrations
+  - Development: Use Docker Compose (`docker/docker-compose.yml`) for local PostgreSQL
+  - Testing: Testcontainers provides isolated PostgreSQL instances
+  - Production: Configure via environment variables (DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD)
 - Koin is used for dependency injection - see `KoinModule.kt` for wiring
 - The application entry point is `com.gchess.Application.kt`
 - Ktor runs on Netty engine listening on port 8080
-- JWT secret should be moved to environment variables for production
+- JWT and database configuration via environment variables (see `application.conf`)
 - ChessRules domain service follows Domain-Driven Design principles (domain service pattern)
 - See [CONTEXT_MAP.md](CONTEXT_MAP.md) for detailed context relationship documentation
