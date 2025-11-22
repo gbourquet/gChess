@@ -525,6 +525,15 @@
                     "id": {
                         "type": "string"
                     },
+                    "isCheck": {
+                        "oneOf": [
+                            {
+                            },
+                            {
+                                "type": "boolean"
+                            }
+                        ]
+                    },
                     "moveHistory": {
                         "items": {
                             "$ref": "#/components/schemas/MoveDTO"
@@ -584,6 +593,15 @@
                 "properties": {
                     "blackPlayerId": {
                         "type": "string"
+                    },
+                    "initialPosition": {
+                        "oneOf": [
+                            {
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
                     },
                     "whitePlayerId": {
                         "type": "string"

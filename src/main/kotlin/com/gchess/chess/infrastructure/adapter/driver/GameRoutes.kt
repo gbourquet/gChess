@@ -25,6 +25,7 @@ import com.gchess.chess.application.usecase.CreateGameUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.domain.model.Move
+import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.infrastructure.adapter.driver.dto.toDTO
 import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.shared.domain.model.GameId
@@ -45,7 +46,11 @@ import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 
 @Serializable
-data class CreateGameRequest(val whitePlayerId: String, val blackPlayerId: String)
+data class CreateGameRequest(
+    val whitePlayerId: String,
+    val blackPlayerId: String,
+    val initialPosition: String? = null // Optional FEN string for custom starting positions
+)
 
 @Serializable
 data class MoveRequest(
@@ -55,10 +60,11 @@ data class MoveRequest(
     // Phase 5: playerId now comes from JWT token, not request body
 )
 
-fun Application.configureGameRoutes() {
+fun Application.configureGameRoutes(enableOpenApiDocs: Boolean = true) {
     val createGameUseCase by inject<CreateGameUseCase>()
     val getGameUseCase by inject<GetGameUseCase>()
     val makeMoveUseCase by inject<MakeMoveUseCase>()
+    val chessRules by inject<ChessRules>()
 
     routing {
         route("/api/games") {
@@ -115,10 +121,10 @@ fun Application.configureGameRoutes() {
                             )
                         }
 
-                        val result = createGameUseCase.execute(whitePlayerId, blackPlayerId)
+                        val result = createGameUseCase.execute(whitePlayerId, blackPlayerId, request.initialPosition)
                         result.fold(
                             onSuccess = { game ->
-                                call.respond(HttpStatusCode.Created, game.toDTO())
+                                call.respond(HttpStatusCode.Created, game.toDTO(chessRules))
                             },
                             onFailure = { error ->
                                 call.respond(
@@ -189,7 +195,7 @@ fun Application.configureGameRoutes() {
 
                         val result = makeMoveUseCase.execute(gameId, playerId, move)
                         result.fold(
-                            onSuccess = { game -> call.respond(game.toDTO()) },
+                            onSuccess = { game -> call.respond(game.toDTO(chessRules)) },
                             onFailure = { error ->
                                 call.respond(
                                     HttpStatusCode.BadRequest,
@@ -244,7 +250,7 @@ fun Application.configureGameRoutes() {
                     if (game == null) {
                         call.respond(HttpStatusCode.NotFound, "Game not found")
                     } else {
-                        call.respond(game.toDTO())
+                        call.respond(game.toDTO(chessRules))
                     }
                 }
             }

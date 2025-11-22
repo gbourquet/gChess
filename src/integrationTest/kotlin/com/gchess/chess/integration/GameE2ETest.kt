@@ -1,7 +1,6 @@
 package com.gchess.chess.integration
 
 import com.gchess.infrastructure.DatabaseE2ETest
-import com.gchess.infrastructure.testModule
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.ktor.client.request.*
@@ -24,9 +23,8 @@ class GameE2ETest : DatabaseE2ETest({
 
     "complete game flow: register users, create game, make valid moves, and reject invalid turn" {
         testApplication {
-            application {
-                testModule()
-            }
+            // module() is automatically called from application.conf
+            // (see ktor.application.modules in application.conf)
 
             val client = createClient {
                 // No additional configuration needed, JSON is handled by ContentNegotiation

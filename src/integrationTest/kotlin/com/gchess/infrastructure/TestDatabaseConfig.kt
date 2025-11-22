@@ -1,28 +1,21 @@
 package com.gchess.infrastructure
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
-import liquibase.Contexts
-import liquibase.Liquibase
-import liquibase.database.DatabaseFactory
-import liquibase.database.jvm.JdbcConnection
-import liquibase.resource.ClassLoaderResourceAccessor
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import com.typesafe.config.ConfigValueFactory
 import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
+import org.koin.core.context.GlobalContext
 import org.testcontainers.containers.PostgreSQLContainer
-import javax.sql.DataSource
 
 /**
  * Test database configuration using Testcontainers.
  *
- * Provides:
- * - Singleton PostgreSQL container (shared across all tests for performance)
- * - Test DataSource and DSLContext
- * - Database cleanup between tests (TRUNCATE all tables)
+ * This configuration:
+ * - Starts a singleton PostgreSQL container (shared across all tests)
+ * - Configures Typesafe Config with Testcontainers connection parameters
+ * - Allows production DatabaseConfig to create DataSource/DSLContext from the test config
  *
  * The container is started once and reused across all integration tests.
- * This approach is much faster than starting a new container per test.
  */
 object TestDatabaseConfig {
 
@@ -42,80 +35,27 @@ object TestDatabaseConfig {
     }
 
     /**
-     * Creates a test DataSource connected to the Testcontainers PostgreSQL instance.
+     * Creates a Typesafe Config with Testcontainers database parameters.
      *
-     * Configuration:
-     * - HikariCP connection pool
-     * - Small pool size (5 connections) for tests
-     * - Fast timeouts for quick failure detection
+     * This config overrides the database.* properties with Testcontainers values.
+     * The production DatabaseConfig.createDataSource() can then use this config.
      *
-     * @return DataSource connected to test database
+     * @return Config with Testcontainers database parameters
      */
-    fun createTestDataSource(): DataSource {
-        val config = HikariConfig().apply {
-            jdbcUrl = postgresContainer.jdbcUrl
-            username = postgresContainer.username
-            password = postgresContainer.password
-            driverClassName = "org.postgresql.Driver"
+    fun createTestConfig(): Config {
+        // Ensure container is started
+        postgresContainer
 
-            // Small pool for tests
-            maximumPoolSize = 5
+        // Load base config from application-test.conf
+        val baseConfig = ConfigFactory.load("application-test")
 
-            // Fast timeouts for tests
-            connectionTimeout = 10_000 // 10 seconds
-            idleTimeout = 60_000 // 1 minute
-            maxLifetime = 300_000 // 5 minutes
-
-            // Test query
-            connectionTestQuery = "SELECT 1"
-
-            // Auto-commit enabled by default
-            isAutoCommit = true
-
-            // Transaction isolation
-            transactionIsolation = "TRANSACTION_READ_COMMITTED"
-        }
-
-        return HikariDataSource(config)
-    }
-
-    /**
-     * Creates a test DSLContext (jOOQ) and runs Liquibase migrations.
-     *
-     * This function:
-     * 1. Runs Liquibase migrations on the test database (if not already applied)
-     * 2. Creates and returns a jOOQ DSLContext
-     *
-     * @param dataSource Test DataSource
-     * @return DSLContext configured for test database
-     */
-    fun createTestDslContext(dataSource: DataSource): DSLContext {
-        // Run migrations
-        runMigrations(dataSource)
-
-        // Create and return DSLContext
-        return DSL.using(dataSource, SQLDialect.POSTGRES)
-    }
-
-    /**
-     * Runs Liquibase migrations on the test database.
-     *
-     * @param dataSource Test DataSource
-     */
-    private fun runMigrations(dataSource: DataSource) {
-        dataSource.connection.use { connection ->
-            val database = DatabaseFactory.getInstance()
-                .findCorrectDatabaseImplementation(JdbcConnection(connection))
-
-            val liquibase = Liquibase(
-                "db/changelog/db.changelog-master.xml",
-                ClassLoaderResourceAccessor(),
-                database
-            )
-
-            liquibase.update(Contexts())
-            println("✅ Test database migrations applied successfully")
-        }
+        // Override database parameters with Testcontainers values
+        return ConfigFactory.empty()
+            .withValue("database.url", ConfigValueFactory.fromAnyRef(postgresContainer.jdbcUrl))
+            .withValue("database.user", ConfigValueFactory.fromAnyRef(postgresContainer.username))
+            .withValue("database.password", ConfigValueFactory.fromAnyRef(postgresContainer.password))
+            .withValue("database.poolSize", ConfigValueFactory.fromAnyRef(5))
+            .withFallback(baseConfig)
     }
 
     /**

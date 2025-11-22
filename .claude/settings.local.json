@@ -7,7 +7,8 @@
       "Bash(./gradlew run:*)",
       "Bash(./gradlew integrationTest:*)",
       "Bash(./gradlew clean integrationTest)",
-      "Bash(./gradlew architectureTest:*)"
+      "Bash(./gradlew architectureTest:*)",
+      "Bash(tree:*)"
     ]
   },
   "outputStyle": "default"

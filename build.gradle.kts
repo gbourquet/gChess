@@ -110,6 +110,9 @@ dependencies {
     // Logging
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
+    // Configuration
+    implementation("com.typesafe:config:1.4.3")
+
     // Database - PostgreSQL
     implementation("org.postgresql:postgresql:42.7.3")
 
@@ -183,6 +186,11 @@ val architectureTest = tasks.register<Test>("architectureTest") {
     useJUnitPlatform()
 
     shouldRunAfter(unitTest)
+}
+
+// Configure processIntegrationTestResources to handle duplicate resources
+tasks.named<ProcessResources>("processIntegrationTestResources") {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 // Integration test task

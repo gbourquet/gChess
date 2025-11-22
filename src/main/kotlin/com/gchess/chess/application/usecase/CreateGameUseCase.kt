@@ -21,7 +21,9 @@
  */
 package com.gchess.chess.application.usecase
 
+import com.gchess.chess.domain.model.ChessPosition
 import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.toChessPosition
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.port.PlayerExistenceChecker
 import com.gchess.shared.domain.model.GameId
@@ -40,9 +42,10 @@ open class CreateGameUseCase(
      *
      * @param whitePlayerId The ID of the white player
      * @param blackPlayerId The ID of the black player
+     * @param initialPosition Optional FEN string to set a custom starting position (defaults to standard chess position)
      * @return Result.success(Game) if game is created, Result.failure if validation fails
      */
-    open suspend fun execute(whitePlayerId: PlayerId, blackPlayerId: PlayerId): Result<Game> {
+    open suspend fun execute(whitePlayerId: PlayerId, blackPlayerId: PlayerId, initialPosition: String? = null): Result<Game> {
         // Validate that players are different
         if (whitePlayerId == blackPlayerId) {
             return Result.failure(Exception("White and black players must be different"))
@@ -70,11 +73,24 @@ open class CreateGameUseCase(
             return Result.failure(Exception("Black player ${blackPlayerId.value} does not exist"))
         }
 
+        // Parse initial position if provided
+        val board = if (initialPosition != null) {
+            try {
+                initialPosition.toChessPosition()
+            } catch (e: Exception) {
+                return Result.failure(Exception("Invalid FEN notation: ${e.message}", e))
+            }
+        } else {
+            ChessPosition.initial()
+        }
+
         // Create and save the game
         val game = Game(
             id = GameId.generate(),
             whitePlayer = whitePlayerId,
-            blackPlayer = blackPlayerId
+            blackPlayer = blackPlayerId,
+            board = board,
+            currentSide = board.sideToMove
         )
 
         return Result.success(gameRepository.save(game))

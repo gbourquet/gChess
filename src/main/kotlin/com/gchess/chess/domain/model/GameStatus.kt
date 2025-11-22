@@ -21,9 +21,14 @@
  */
 package com.gchess.chess.domain.model
 
+/**
+ * Represents the state of a chess game.
+ *
+ * Note: IN_PROGRESS includes positions where a king is in check.
+ * Check is a positional property, not a game-ending condition.
+ */
 enum class GameStatus {
     IN_PROGRESS,
-    CHECK,
     CHECKMATE,
     STALEMATE,
     DRAW

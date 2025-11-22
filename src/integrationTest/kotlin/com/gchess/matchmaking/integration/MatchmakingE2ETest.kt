@@ -1,7 +1,6 @@
 package com.gchess.matchmaking.integration
 
 import com.gchess.infrastructure.DatabaseE2ETest
-import com.gchess.infrastructure.testModule
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -29,7 +28,8 @@ class MatchmakingE2ETest : DatabaseE2ETest({
 
     "complete matchmaking flow: join queue, match creation, status checks, and error handling" {
         testApplication {
-            application { testModule() }
+            // module() is automatically called from application.conf
+            // (see ktor.application.modules in application.conf)
             val client = createClient { }
 
             // === Test 1: Single player joins queue - gets WAITING status ===

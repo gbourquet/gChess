@@ -22,6 +22,7 @@
 package com.gchess.chess.infrastructure.adapter.driver.dto
 
 import com.gchess.chess.domain.model.*
+import com.gchess.chess.domain.service.ChessRules
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -33,7 +34,8 @@ data class GameDTO(
     val currentPlayer: String,
     val currentSide: String,
     val status: String,
-    val moveHistory: List<MoveDTO>
+    val moveHistory: List<MoveDTO>,
+    val isCheck: Boolean? = null
 )
 
 @Serializable
@@ -48,7 +50,7 @@ data class MoveDTO(
 )
 
 // Extension functions to convert between domain models and DTOs
-fun Game.toDTO(): GameDTO = GameDTO(
+fun Game.toDTO(chessRules: ChessRules): GameDTO = GameDTO(
     id = id.value,
     whitePlayer = whitePlayer.value,
     blackPlayer = blackPlayer.value,
@@ -56,7 +58,8 @@ fun Game.toDTO(): GameDTO = GameDTO(
     currentPlayer = currentPlayer.value,
     currentSide = currentSide.name,
     status = status.name,
-    moveHistory = moveHistory.map { it.toDTO() }
+    moveHistory = moveHistory.map { it.toDTO() },
+    isCheck = if (status == GameStatus.IN_PROGRESS) chessRules.isInCheck(board, currentSide) else null
 )
 
 fun ChessPosition.toDTO(): ChessPositionDTO = ChessPositionDTO(

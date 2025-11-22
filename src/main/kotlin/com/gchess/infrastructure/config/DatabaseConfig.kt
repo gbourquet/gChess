@@ -21,6 +21,8 @@
  */
 package com.gchess.infrastructure.config
 
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import liquibase.Contexts
@@ -40,25 +42,39 @@ import javax.sql.DataSource
  * - La configuration du pool de connexions HikariCP
  * - La création du contexte jOOQ (DSLContext)
  * - L'exécution des migrations Liquibase
+ *
+ * La configuration est chargée depuis application.conf via Typesafe Config.
+ * Les valeurs peuvent être surchargées par des variables d'environnement.
  */
 object DatabaseConfig {
 
     /**
+     * Charge la configuration depuis application.conf (ou application-test.conf pour les tests).
+     * Typesafe Config gère automatiquement la fusion avec les variables d'environnement.
+     */
+    private val config: Config = ConfigFactory.load()
+
+    /**
      * Crée et configure un DataSource HikariCP pour PostgreSQL.
      *
-     * @param jdbcUrl URL JDBC de la base de données (par défaut depuis env var DATABASE_URL)
-     * @param username Nom d'utilisateur (par défaut depuis env var DATABASE_USER)
-     * @param password Mot de passe (par défaut depuis env var DATABASE_PASSWORD)
-     * @param maximumPoolSize Taille maximale du pool de connexions (par défaut 10)
+     * La configuration est lue depuis application.conf :
+     * - database.url (surchargeable par DATABASE_URL)
+     * - database.user (surchargeable par DATABASE_USER)
+     * - database.password (surchargeable par DATABASE_PASSWORD)
+     * - database.poolSize (surchargeable par DATABASE_POOL_SIZE)
+     *
+     * @param customConfig Configuration optionnelle pour surcharger (utilisé par les tests)
      * @return DataSource configuré avec HikariCP
      */
-    fun createDataSource(
-        jdbcUrl: String = System.getenv("DATABASE_URL") ?: "jdbc:postgresql://localhost:5432/gchess_dev",
-        username: String = System.getenv("DATABASE_USER") ?: "gchess",
-        password: String = System.getenv("DATABASE_PASSWORD") ?: "gchess",
-        maximumPoolSize: Int = System.getenv("DATABASE_POOL_SIZE")?.toIntOrNull() ?: 10
-    ): DataSource {
-        val config = HikariConfig().apply {
+    fun createDataSource(customConfig: Config? = null): DataSource {
+        val cfg = customConfig ?: config
+
+        val jdbcUrl = cfg.getString("database.url")
+        val username = cfg.getString("database.user")
+        val password = cfg.getString("database.password")
+        val maximumPoolSize = cfg.getInt("database.poolSize")
+
+        val hikariConfig = HikariConfig().apply {
             this.jdbcUrl = jdbcUrl
             this.username = username
             this.password = password
@@ -80,7 +96,7 @@ object DatabaseConfig {
             this.poolName = "gChess-HikariCP"
         }
 
-        return HikariDataSource(config)
+        return HikariDataSource(hikariConfig)
     }
 
     /**

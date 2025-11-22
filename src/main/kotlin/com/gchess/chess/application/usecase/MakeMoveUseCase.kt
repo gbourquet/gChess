@@ -22,6 +22,7 @@
 package com.gchess.chess.application.usecase
 
 import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.GameStatus
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.port.PlayerExistenceChecker
@@ -80,9 +81,38 @@ class MakeMoveUseCase(
         }
 
         // Execute the move
-        val updatedGame = game.makeMove(move)
+        val gameAfterMove = game.makeMove(move)
+
+        // Evaluate game status after the move
+        val updatedGame = updateGameStatus(gameAfterMove)
         gameRepository.save(updatedGame)
 
         return Result.success(updatedGame)
+    }
+
+    /**
+     * Updates the game status based on the current position.
+     *
+     * Checks for game-ending conditions in order:
+     * 1. Checkmate - opponent king in check with no legal moves
+     * 2. Stalemate - opponent not in check but has no legal moves
+     * 3. Fifty-move rule - 50 moves without capture or pawn move
+     * 4. Insufficient material - impossible to checkmate
+     * 5. Otherwise - game continues (IN_PROGRESS)
+     *
+     * Note: Threefold repetition is not yet implemented (requires position history tracking)
+     */
+    private fun updateGameStatus(game: Game): Game {
+        val position = game.board
+
+        val newStatus = when {
+            chessRules.isCheckmate(position) -> GameStatus.CHECKMATE
+            chessRules.isStalemate(position) -> GameStatus.STALEMATE
+            chessRules.isFiftyMoveRule(position) -> GameStatus.DRAW
+            chessRules.isInsufficientMaterial(position) -> GameStatus.DRAW
+            else -> GameStatus.IN_PROGRESS
+        }
+
+        return game.copy(status = newStatus)
     }
 }
