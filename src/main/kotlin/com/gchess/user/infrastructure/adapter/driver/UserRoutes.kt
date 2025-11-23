@@ -21,7 +21,7 @@
  */
 package com.gchess.user.infrastructure.adapter.driver
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import com.gchess.user.application.usecase.GetUserUseCase
 import com.gchess.user.infrastructure.adapter.driver.dto.toDTO
 import io.bkbn.kompendium.core.metadata.GetInfo
@@ -83,7 +83,7 @@ fun Application.configureUserRoutes() {
                     )
 
                     val playerId = try {
-                        PlayerId.fromString(id)
+                        UserId.fromString(id)
                     } catch (e: Exception) {
                         return@get call.respond(
                             HttpStatusCode.BadRequest,

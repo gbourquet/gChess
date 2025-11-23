@@ -15,72 +15,6 @@
         }
     ],
     "paths": {
-        "/api/games": {
-            "post": {
-                "tags": [
-                    "Games"
-                ],
-                "summary": "Create a new chess game",
-                "description": "Create a new game between two players. Both players must exist in the system.",
-                "parameters": [
-                ],
-                "requestBody": {
-                    "description": "Player IDs for white and black",
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CreateGameRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "201": {
-                        "description": "Game successfully created",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/GameDTO"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid player IDs or players don't exist",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Map-String-String"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Missing or invalid JWT token",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Map-String-String"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "JWT": [
-                        ]
-                    },
-                    {
-                        "jwt-auth": [
-                        ]
-                    }
-                ]
-            },
-            "parameters": [
-            ]
-        },
         "/api/games/{id}/moves": {
             "post": {
                 "tags": [
@@ -511,13 +445,13 @@
                 "type": "object",
                 "properties": {
                     "blackPlayer": {
-                        "type": "string"
+                        "$ref": "#/components/schemas/PlayerDTO"
                     },
                     "board": {
                         "$ref": "#/components/schemas/ChessPositionDTO"
                     },
                     "currentPlayer": {
-                        "type": "string"
+                        "$ref": "#/components/schemas/PlayerDTO"
                     },
                     "currentSide": {
                         "type": "string"
@@ -543,7 +477,7 @@
                         "type": "string"
                     },
                     "whitePlayer": {
-                        "type": "string"
+                        "$ref": "#/components/schemas/PlayerDTO"
                     }
                 },
                 "required": [
@@ -555,6 +489,25 @@
                     "moveHistory",
                     "status",
                     "whitePlayer"
+                ]
+            },
+            "PlayerDTO": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "userId": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "side",
+                    "userId"
                 ]
             },
             "ChessPositionDTO": {
@@ -587,30 +540,6 @@
                 "additionalProperties": {
                     "type": "string"
                 }
-            },
-            "CreateGameRequest": {
-                "type": "object",
-                "properties": {
-                    "blackPlayerId": {
-                        "type": "string"
-                    },
-                    "initialPosition": {
-                        "oneOf": [
-                            {
-                            },
-                            {
-                                "type": "string"
-                            }
-                        ]
-                    },
-                    "whitePlayerId": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "blackPlayerId",
-                    "whitePlayerId"
-                ]
             },
             "MoveRequest": {
                 "type": "object",

@@ -1,5 +1,6 @@
 package com.gchess.chess.domain.model
 
+import com.gchess.shared.domain.model.PlayerSide
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldBeNull

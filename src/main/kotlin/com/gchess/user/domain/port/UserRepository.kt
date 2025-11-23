@@ -21,7 +21,7 @@
  */
 package com.gchess.user.domain.port
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import com.gchess.user.domain.model.User
 
 /**
@@ -39,7 +39,7 @@ interface UserRepository {
      * Finds a user by their unique ID.
      * Returns null if no user is found.
      */
-    suspend fun findById(id: PlayerId): User?
+    suspend fun findById(id: UserId): User?
 
     /**
      * Finds a user by their username.
@@ -66,7 +66,7 @@ interface UserRepository {
     /**
      * Deletes a user by their ID.
      */
-    suspend fun delete(id: PlayerId)
+    suspend fun delete(id: UserId)
 
     /**
      * Returns all users in the system.

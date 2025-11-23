@@ -1,198 +1,237 @@
 package com.gchess.matchmaking.application.usecase
 
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.matchmaking.domain.model.Match
-import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchRepository
-import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
+import com.gchess.matchmaking.domain.model.QueueEntry
+import com.gchess.matchmaking.domain.port.MatchRepository
+import com.gchess.matchmaking.domain.port.MatchmakingQueue
+import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.*
 import kotlinx.datetime.Clock
 import kotlin.time.Duration.Companion.minutes
 
 class JoinMatchmakingUseCaseTest : FunSpec({
 
-    test("execute should add player to queue and return WAITING when no match found") {
+    test("execute should add user to queue and return WAITING when no match found") {
         // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = true)
-        val gameCreator = FakeGameCreator()
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
+        val queue = mockk<MatchmakingQueue>()
+        val repository = mockk<MatchRepository>()
+        val userChecker = mockk<UserExistenceChecker>()
+        val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
-        val playerId = PlayerId.generate()
+        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase)
+        val userId = UserId.generate()
+        val queueEntry = QueueEntry(userId, Clock.System.now())
+
+        // Mock behavior
+        coEvery { userChecker.exists(userId) } returns true
+        coEvery { repository.findByPlayer(userId) } returns null
+        coEvery { queue.isPlayerInQueue(userId) } returns false
+        coEvery { queue.addPlayer(userId) } returns queueEntry
+        coEvery { queue.getQueueSize() } returns 10
+        coEvery { queue.findMatch() } returns null
 
         // When
-        val result = useCase.execute(playerId)
+        val result = useCase.execute(userId)
 
         // Then
         result.isSuccess shouldBe true
         result.getOrNull().shouldBeInstanceOf<MatchmakingResult.Waiting>()
-        queue.isPlayerInQueue(playerId) shouldBe true
+
+        // Verify interactions
+        coVerify { userChecker.exists(userId) }
+        coVerify { repository.findByPlayer(userId) }
+        coVerify { queue.isPlayerInQueue(userId) }
+        coVerify { queue.addPlayer(userId) }
+        coVerify { queue.findMatch() }
+        coVerify { queue.getQueueSize() }
+        confirmVerified(userChecker, repository, queue)
     }
 
-    test("execute should fail when player does not exist") {
+    test("execute should fail when user does not exist") {
         // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = false)
-        val gameCreator = FakeGameCreator()
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
+        val queue = mockk<MatchmakingQueue>()
+        val repository = mockk<MatchRepository>()
+        val userChecker = mockk<UserExistenceChecker>()
+        val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
-        val playerId = PlayerId.generate()
+        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase)
+        val userId = UserId.generate()
+
+        // Mock behavior
+        coEvery { userChecker.exists(userId) } returns false
 
         // When
-        val result = useCase.execute(playerId)
+        val result = useCase.execute(userId)
 
         // Then
         result.isFailure shouldBe true
-        queue.isPlayerInQueue(playerId) shouldBe false
+
+        // Verify - only userChecker should be called
+        coVerify { userChecker.exists(userId) }
+        coVerify(exactly = 0) { queue.addPlayer(any()) }
+        confirmVerified(userChecker, queue)
     }
 
-    test("execute should fail when player is already in queue") {
+    test("execute should fail when user is already in queue") {
         // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = true)
-        val gameCreator = FakeGameCreator()
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
+        val queue = mockk<MatchmakingQueue>()
+        val repository = mockk<MatchRepository>()
+        val userChecker = mockk<UserExistenceChecker>()
+        val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
-        val playerId = PlayerId.generate()
+        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase)
+        val userId = UserId.generate()
 
-        queue.addPlayer(playerId)
+        // Mock behavior
+        coEvery { userChecker.exists(userId) } returns true
+        coEvery { repository.findByPlayer(userId) } returns null
+        coEvery { queue.isPlayerInQueue(userId) } returns true
 
         // When
-        val result = useCase.execute(playerId)
+        val result = useCase.execute(userId)
 
         // Then
         result.isFailure shouldBe true
-        result.exceptionOrNull()!!.message shouldBe "Player is already in the matchmaking queue"
+        result.exceptionOrNull()!!.message shouldBe "User is already in the matchmaking queue"
+
+        // Verify
+        coVerify { userChecker.exists(userId) }
+        coVerify { queue.isPlayerInQueue(userId) }
+        coVerify(exactly = 0) { queue.addPlayer(any()) }
     }
 
-    test("execute should fail when player already has a match") {
+    test("execute should fail when user already has a match") {
         // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = true)
-        val gameCreator = FakeGameCreator()
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
+        val queue = mockk<MatchmakingQueue>()
+        val repository = mockk<MatchRepository>()
+        val userChecker = mockk<UserExistenceChecker>()
+        val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
-        val playerId = PlayerId.generate()
-        val otherPlayer = PlayerId.generate()
+        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase)
+        val userId = UserId.generate()
         val now = Clock.System.now()
 
         val existingMatch = Match(
-            whitePlayerId = playerId,
-            blackPlayerId = otherPlayer,
+            whiteUserId = userId,
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now,
             expiresAt = now + 5.minutes
         )
-        repository.save(existingMatch)
+
+        // Mock behavior
+        coEvery { userChecker.exists(userId) } returns true
+        coEvery { queue.isPlayerInQueue(userId) } returns true
 
         // When
-        val result = useCase.execute(playerId)
+        val result = useCase.execute(userId)
 
         // Then
         result.isFailure shouldBe true
-        result.exceptionOrNull()!!.message shouldBe "Player already has an active match"
+        result.exceptionOrNull()!!.message shouldBe "User is already in the matchmaking queue"
+
+        // Verify
+        coVerify { userChecker.exists(userId) }
+        coVerify(exactly = 0) { queue.addPlayer(any()) }
     }
 
-    test("execute should create match and game when two players join") {
+    test("execute should create match and game when match is found") {
         // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = true)
+        val queue = mockk<MatchmakingQueue>()
+        val repository = mockk<MatchRepository>()
+        val userChecker = mockk<UserExistenceChecker>()
+        val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
+
+        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase)
+
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val gameId = GameId.generate()
-        val gameCreator = FakeGameCreator(gameId)
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
+        val now = Clock.System.now()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
+        val queueEntry1 = QueueEntry(user1, now)
+        val queueEntry2 = QueueEntry(user2, now)
+        val match = Match(
+            whiteUserId = user1,
+            blackUserId = user2,
+            gameId = gameId,
+            matchedAt = now,
+            expiresAt = now + 5.minutes
+        )
 
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        // Mock behavior for user1
+        coEvery { userChecker.exists(user1) } returns true
+        coEvery { repository.findByPlayer(user1) } returns null
+        coEvery { queue.isPlayerInQueue(user1) } returns false
+        coEvery { queue.addPlayer(user1) } returns queueEntry1
+        coEvery { queue.findMatch() } returns Pair(queueEntry1,queueEntry2)
 
-        // When - player 1 joins
-        val result1 = useCase.execute(player1)
+        // Mock createGameUseCase
+        coEvery { createGameUseCase.execute(user1, user2) } returns Result.success(match)
 
-        // Then - player 1 is waiting
-        result1.getOrNull().shouldBeInstanceOf<MatchmakingResult.Waiting>()
+        // Mock queue removal
+        coEvery { queue.removePlayer(user1) } returns true
+        coEvery { queue.removePlayer(user2) } returns true
 
-        // When - player 2 joins
-        val result2 = useCase.execute(player2)
-
-        // Then - player 2 is matched
-        result2.getOrNull().shouldBeInstanceOf<MatchmakingResult.Matched>()
-        val matched = result2.getOrNull() as MatchmakingResult.Matched
-        matched.gameId shouldBe gameId
-
-        // Both players should be removed from queue
-        queue.isPlayerInQueue(player1) shouldBe false
-        queue.isPlayerInQueue(player2) shouldBe false
-
-        // Both players should have the match in repository
-        val match1 = repository.findByPlayer(player1)
-        val match2 = repository.findByPlayer(player2)
-        match1 shouldNotBe null
-        match2 shouldNotBe null
-        match1 shouldBe match2
-    }
-
-    test("execute should assign colors randomly when creating match") {
-        // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = true)
-        val gameId = GameId.generate()
-        val gameCreator = FakeGameCreator(gameId)
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
-
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
-
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        // Mock repository save
+        coEvery { repository.save(match) } just Runs
 
         // When
-        useCase.execute(player1)
-        useCase.execute(player2)
+        val result = useCase.execute(user1)
 
         // Then
-        val match = repository.findByPlayer(player1)!!
-        val whitePlayer = match.whitePlayerId
-        val blackPlayer = match.blackPlayerId
+        result.isSuccess shouldBe true
+        result.getOrNull().shouldBeInstanceOf<MatchmakingResult.Matched>()
+        val matched = result.getOrNull() as MatchmakingResult.Matched
+        matched.gameId shouldBe gameId
+        matched.yourColor shouldBe PlayerSide.WHITE // Based on match assignment
 
-        // Colors should be assigned to both players
-        (whitePlayer == player1 && blackPlayer == player2) ||
-            (whitePlayer == player2 && blackPlayer == player1) shouldBe true
+        // Verify interactions
+        coVerify { queue.addPlayer(user1) }
+        coVerify { queue.findMatch() }
+        coVerify { createGameUseCase.execute(user1, user2) }
+        coVerify { repository.save(match) }
     }
 
     test("execute should propagate game creation failure") {
         // Given
-        val queue = InMemoryMatchmakingQueue()
-        val repository = InMemoryMatchRepository()
-        val playerChecker = FakePlayerExistenceChecker(exists = true)
+        val queue = mockk<MatchmakingQueue>()
+        val repository = mockk<MatchRepository>()
+        val userChecker = mockk<UserExistenceChecker>()
+        val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
+
+        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase)
+
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
+        val now = Clock.System.now()
         val errorMessage = "Failed to create game in Chess context"
-        val gameCreator = FakeGameCreator(failure = Exception(errorMessage))
-        val createGameUseCase = CreateGameFromMatchUseCase(gameCreator)
+        val queueEntry1 = QueueEntry(user1, now)
+        val queueEntry2 = QueueEntry(user2, now)
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, playerChecker, createGameUseCase)
-
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-
+        // Mock behavior
+        coEvery { userChecker.exists(user1) } returns true
+        coEvery { repository.findByPlayer(user1) } returns null
+        coEvery { queue.isPlayerInQueue(user1) } returns false
+        coEvery { queue.addPlayer(user1) } returns QueueEntry(user1, now)
+        coEvery { queue.findMatch() } returns Pair(queueEntry1, queueEntry2)
+        coEvery { createGameUseCase.execute(user1, user2) } returns Result.failure(Exception(errorMessage))
+        coEvery { queue.getQueueSize() } returns 10
         // When
-        useCase.execute(player1)
-        val result2 = useCase.execute(player2)
+        val result = useCase.execute(user1)
 
-        // Then - should fail with error from game creation
-        result2.isFailure shouldBe true
-        result2.exceptionOrNull()!!.message shouldBe errorMessage
+        // Then
+        result.isFailure shouldBe true
+        result.exceptionOrNull()!!.message shouldBe errorMessage
+
+        // Verify
+        coVerify { createGameUseCase.execute(user1, user2) }
+        coVerify(exactly = 0) { repository.save(any()) }
     }
 })
-

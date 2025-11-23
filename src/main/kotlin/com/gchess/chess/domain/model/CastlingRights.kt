@@ -21,6 +21,8 @@
  */
 package com.gchess.chess.domain.model
 
+import com.gchess.shared.domain.model.PlayerSide
+
 /**
  * Value Object representing castling rights for both players.
  *

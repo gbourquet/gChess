@@ -19,18 +19,45 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.domain.model
+package com.gchess.shared.domain.model
+
+import de.huxhorn.sulky.ulid.ULID
 
 /**
- * Represents a side on the chess board (white or black pieces).
- * This is distinct from player identity - it refers to which pieces a player controls.
+ * Value object representing a unique user identifier.
+ * Uses ULID (Universally Unique Lexicographically Sortable Identifier) format.
+ *
+ * A UserId represents the permanent identity of a user across all games.
+ * This is distinct from PlayerId, which identifies a player's participation in a specific game.
+ *
+ * ULIDs are:
+ * - 26 character string representation
+ * - Lexicographically sortable
+ * - Case insensitive
+ * - URL safe
+ * - Time-ordered (first 48 bits are timestamp)
  */
-enum class PlayerSide {
-    WHITE,
-    BLACK;
-
-    fun opposite(): PlayerSide = when (this) {
-        WHITE -> BLACK
-        BLACK -> WHITE
+@JvmInline
+value class UserId(val value: String) {
+    init {
+        require(value.isNotBlank()) { "UserId cannot be blank" }
     }
+
+    companion object {
+        private val ulidGenerator = ULID()
+
+        /**
+         * Generates a new random UserId using ULID.
+         */
+        fun generate(): UserId {
+            return UserId(ulidGenerator.nextULID())
+        }
+
+        /**
+         * Creates a UserId from a string value.
+         */
+        fun fromString(value: String): UserId = UserId(value)
+    }
+
+    override fun toString(): String = value
 }

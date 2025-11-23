@@ -180,22 +180,6 @@ class BoundedContextTest {
     }
 
     @Test
-    @DisplayName("Chess infrastructure can depend on User application (ACL pattern)")
-    fun `chess infrastructure can communicate with user application via acl`() {
-        // This test verifies that the ACL pattern is correctly implemented
-        // Chess infrastructure → User application is allowed (this is the ACL)
-        val rule = classes()
-            .that().resideInAPackage("..chess.infrastructure..")
-            .and().haveSimpleNameContaining("UserContext")
-            .should().dependOnClassesThat().resideInAnyPackage(
-                "..user.application.."
-            )
-            .because("ACL in Chess infrastructure can call User application use cases")
-
-        rule.check(classes)
-    }
-
-    @Test
     @DisplayName("Matchmaking infrastructure can depend on Chess application (ACL pattern)")
     fun `matchmaking infrastructure can communicate with chess application via acl`() {
         // Matchmaking infrastructure → Chess application is allowed (this is the ACL)

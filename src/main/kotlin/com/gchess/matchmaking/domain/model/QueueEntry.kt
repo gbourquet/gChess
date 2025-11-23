@@ -21,16 +21,16 @@
  */
 package com.gchess.matchmaking.domain.model
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import kotlinx.datetime.Instant
 
 /**
- * Value object representing a player waiting in the matchmaking queue.
+ * Value object representing a user waiting in the matchmaking queue.
  *
- * @property playerId The unique identifier of the player
- * @property joinedAt The timestamp when the player joined the queue
+ * @property userId The unique identifier of the user
+ * @property joinedAt The timestamp when the user joined the queue
  */
 data class QueueEntry(
-    val playerId: PlayerId,
+    val userId: UserId,
     val joinedAt: Instant
 )

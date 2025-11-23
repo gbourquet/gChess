@@ -96,8 +96,8 @@ fun Application.module() {
             realm = JwtConfig.REALM
             verifier(JwtConfig.makeVerifier())
             validate { credential ->
-                // Validate that the token has a playerId claim
-                if (credential.payload.getClaim("playerId").asString() != null) {
+                // Validate that the token has a userId claim
+                if (credential.payload.getClaim("userId").asString() != null) {
                     JWTPrincipal(credential.payload)
                 } else {
                     null

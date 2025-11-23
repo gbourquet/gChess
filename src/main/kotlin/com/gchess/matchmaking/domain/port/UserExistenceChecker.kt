@@ -19,34 +19,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.infrastructure.adapter.driven
+package com.gchess.matchmaking.domain.port
 
-import com.gchess.chess.domain.port.PlayerExistenceChecker
-import com.gchess.shared.domain.model.PlayerId
-import com.gchess.user.application.usecase.GetUserUseCase
+import com.gchess.shared.domain.model.UserId
 
 /**
- * Anti-Corruption Layer adapter that allows the Chess context to verify
- * player existence by communicating with the User context.
+ * Port for checking if a user exists in the system.
  *
- * This implementation uses a fail-fast strategy:
- * - If the User context fails, the exception is propagated immediately
- * - No fallback or pessimistic behavior
+ * This is part of the Anti-Corruption Layer (ACL) that allows the Matchmaking context
+ * to validate users without directly depending on the User context.
  *
- * This ensures consistency - if we can't verify player existence,
- * we don't allow game creation/moves.
+ * The Matchmaking context uses this to validate that both users exist before creating
+ * a game match.
  */
-class UserContextPlayerChecker(
-    private val getUserUseCase: GetUserUseCase
-) : PlayerExistenceChecker {
-
-    override suspend fun exists(playerId: PlayerId): Boolean {
-        return try {
-            val user = getUserUseCase.execute(playerId)
-            user != null
-        } catch (e: Exception) {
-            // Fail-fast: propagate errors from User context
-            throw Exception("Failed to check player existence for ${playerId.value}: ${e.message}", e)
-        }
-    }
+interface UserExistenceChecker {
+    /**
+     * Checks if a user with the given ID exists in the system.
+     *
+     * @param userId The ID of the user to check
+     * @return true if the user exists, false otherwise
+     * @throws Exception if the user existence check fails (e.g., user service unavailable)
+     */
+    suspend fun exists(userId: UserId): Boolean
 }

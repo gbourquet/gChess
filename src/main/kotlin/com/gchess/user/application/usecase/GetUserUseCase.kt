@@ -21,15 +21,15 @@
  */
 package com.gchess.user.application.usecase
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import com.gchess.user.domain.model.User
 import com.gchess.user.domain.port.UserRepository
 
 /**
  * Use case for retrieving a user by their ID.
  *
- * This will be used by the Anti-Corruption Layer in Phase 4
- * to validate player existence when creating games.
+ * This will be used by the Anti-Corruption Layer
+ * to validate user existence when creating games.
  */
 class GetUserUseCase(
     private val userRepository: UserRepository
@@ -40,7 +40,7 @@ class GetUserUseCase(
      * @param userId The user's unique identifier
      * @return The User if found, null otherwise
      */
-    suspend fun execute(userId: PlayerId): User? {
+    suspend fun execute(userId: UserId): User? {
         return userRepository.findById(userId)
     }
 
@@ -50,7 +50,7 @@ class GetUserUseCase(
      * @param userId The user's unique identifier
      * @return true if the user exists, false otherwise
      */
-    suspend fun exists(userId: PlayerId): Boolean {
+    suspend fun exists(userId: UserId): Boolean {
         return userRepository.findById(userId) != null
     }
 }

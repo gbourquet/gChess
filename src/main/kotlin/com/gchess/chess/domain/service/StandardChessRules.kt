@@ -22,6 +22,7 @@
 package com.gchess.chess.domain.service
 
 import com.gchess.chess.domain.model.*
+import com.gchess.shared.domain.model.PlayerSide
 
 /**
  * Standard implementation of chess rules following FIDE (International Chess Federation) rules.

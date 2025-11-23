@@ -22,9 +22,9 @@
 package com.gchess.matchmaking.infrastructure.adapter.driven
 
 import com.gchess.chess.application.usecase.CreateGameUseCase
+import com.gchess.shared.domain.model.Player
 import com.gchess.matchmaking.domain.port.GameCreator
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
 
 /**
  * Anti-Corruption Layer adapter that allows the Matchmaking context
@@ -32,17 +32,25 @@ import com.gchess.shared.domain.model.PlayerId
  *
  * This adapter:
  * - Implements the GameCreator port (defined in Matchmaking domain)
- * - Calls CreateGameUseCase from the Chess context
+ * - Receives Player objects (created by Matchmaking) with assigned colors
+ * - Calls CreateGameUseCase from the Chess context with these Players
  * - Transforms Result<Game> to Result<GameId>
- * - Maintains bounded context isolation (Matchmaking doesn't depend on Chess domain models)
+ * - Maintains bounded context isolation
+ *
+ * **IMPORTANT**: The Matchmaking context creates the Player objects (including
+ * PlayerId generation and color assignment) before calling this adapter.
  */
 class ChessContextGameCreator(
     private val createGameUseCase: CreateGameUseCase
 ) : GameCreator {
 
-    override suspend fun createGame(whitePlayerId: PlayerId, blackPlayerId: PlayerId): Result<GameId> {
-        // Call Chess context use case
-        val gameResult = createGameUseCase.execute(whitePlayerId, blackPlayerId)
+    override suspend fun createGame(whitePlayer: Player, blackPlayer: Player): Result<GameId> {
+        // Call Chess context use case with Player objects
+        // The Matchmaking context has already created these Players with:
+        // - Generated PlayerIds
+        // - Assigned UserId (from matched users)
+        // - Assigned PlayerSide (WHITE/BLACK with random 50/50 distribution)
+        val gameResult = createGameUseCase.execute(whitePlayer, blackPlayer)
 
         // Transform Result<Game> to Result<GameId>
         return gameResult.map { game ->

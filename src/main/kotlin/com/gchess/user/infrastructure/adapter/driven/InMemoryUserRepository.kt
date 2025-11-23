@@ -21,7 +21,7 @@
  */
 package com.gchess.user.infrastructure.adapter.driven
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import com.gchess.user.domain.model.User
 import com.gchess.user.domain.port.UserRepository
 import java.util.concurrent.ConcurrentHashMap
@@ -46,7 +46,7 @@ class InMemoryUserRepository : UserRepository {
         return user
     }
 
-    override suspend fun findById(id: PlayerId): User? {
+    override suspend fun findById(id: UserId): User? {
         return users[id.value]
     }
 
@@ -68,7 +68,7 @@ class InMemoryUserRepository : UserRepository {
         return emailIndex.containsKey(email.lowercase())
     }
 
-    override suspend fun delete(id: PlayerId) {
+    override suspend fun delete(id: UserId) {
         val user = users.remove(id.value)
         if (user != null) {
             usernameIndex.remove(user.username.lowercase())

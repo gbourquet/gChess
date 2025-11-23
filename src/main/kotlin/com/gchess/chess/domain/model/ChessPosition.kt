@@ -23,6 +23,7 @@ package com.gchess.chess.domain.model
 
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.domain.service.StandardChessRules
+import com.gchess.shared.domain.model.PlayerSide
 
 /**
  * Bitboard representation of a chess board.

@@ -22,44 +22,44 @@
 package com.gchess.matchmaking.domain.port
 
 import com.gchess.matchmaking.domain.model.Match
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 
 /**
  * Port (interface) for managing created matches.
  *
- * This repository stores matches after they are created, allowing players
+ * This repository stores matches after they are created, allowing users
  * to retrieve their match information (game ID and color assignment).
  *
- * Each match should be indexed by both player IDs to allow either player
+ * Each match should be indexed by both user IDs to allow either user
  * to retrieve the match information.
  */
 interface MatchRepository {
     /**
      * Saves a match to the repository.
      *
-     * The match should be indexed by both whitePlayerId and blackPlayerId
-     * so either player can retrieve it.
+     * The match should be indexed by both whiteUserId and blackUserId
+     * so either user can retrieve it.
      *
      * @param match The match to save
      */
     suspend fun save(match: Match)
 
     /**
-     * Finds a match for a specific player.
+     * Finds a match for a specific user.
      *
-     * @param playerId The unique identifier of the player
+     * @param userId The unique identifier of the user
      * @return The Match if found, null otherwise
      */
-    suspend fun findByPlayer(playerId: PlayerId): Match?
+    suspend fun findByPlayer(userId: UserId): Match?
 
     /**
-     * Deletes a match associated with a specific player.
+     * Deletes a match associated with a specific user.
      *
-     * This should remove the match for both players (white and black).
+     * This should remove the match for both users (white and black).
      *
-     * @param playerId The unique identifier of either player in the match
+     * @param userId The unique identifier of either user in the match
      */
-    suspend fun delete(playerId: PlayerId)
+    suspend fun delete(userId: UserId)
 
     /**
      * Deletes all expired matches from the repository.

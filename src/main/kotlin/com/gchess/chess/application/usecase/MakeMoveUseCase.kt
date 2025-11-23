@@ -24,50 +24,52 @@ package com.gchess.chess.application.usecase
 import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.model.GameStatus
 import com.gchess.chess.domain.model.Move
+import com.gchess.shared.domain.model.Player
 import com.gchess.chess.domain.port.GameRepository
-import com.gchess.chess.domain.port.PlayerExistenceChecker
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
 
+/**
+ * Use case for executing a move in a chess game.
+ *
+ * This use case takes a Player object (not a UserId) to maintain isolation of the Chess context.
+ * The conversion from UserId (from JWT) to Player is done in the infrastructure layer (GameRoutes).
+ *
+ * Responsibilities:
+ * - Validates it's the player's turn
+ * - Validates the game is not finished
+ * - Validates the move is legal
+ * - Executes the move
+ * - Updates game status (checkmate, stalemate, etc.)
+ *
+ * Note: Player validation is NOT done here - it's assumed the Player object is valid.
+ * This keeps the Chess context focused on chess game logic, not user management.
+ */
 class MakeMoveUseCase(
     private val gameRepository: GameRepository,
-    private val chessRules: ChessRules,
-    private val playerExistenceChecker: PlayerExistenceChecker
+    private val chessRules: ChessRules
 ) {
     /**
      * Executes a move in a game.
      *
      * Validates:
-     * - The player exists (via ACL)
      * - It's the player's turn
      * - The game is not finished
      * - The move is legal
      *
      * @param gameId The ID of the game
-     * @param playerId The ID of the player making the move
+     * @param player The player making the move
      * @param move The move to execute
      * @return Result.success(Game) if move is valid, Result.failure otherwise
      */
-    suspend fun execute(gameId: GameId, playerId: PlayerId, move: Move): Result<Game> {
-        // Verify player exists
-        val playerExists = try {
-            playerExistenceChecker.exists(playerId)
-        } catch (e: Exception) {
-            return Result.failure(Exception("Failed to validate player: ${e.message}", e))
-        }
-
-        if (!playerExists) {
-            return Result.failure(Exception("Player ${playerId.value} does not exist"))
-        }
-
+    suspend fun execute(gameId: GameId, player: Player, move: Move): Result<Game> {
         // Find the game
         val game = gameRepository.findById(gameId)
             ?: return Result.failure(Exception("Game not found"))
 
         // Verify it's the player's turn
-        if (!game.isPlayerTurn(playerId)) {
-            return Result.failure(Exception("It's not player ${playerId.value}'s turn"))
+        if (!game.isPlayerTurn(player)) {
+            return Result.failure(Exception("It's not your turn"))
         }
 
         // Check if game is finished

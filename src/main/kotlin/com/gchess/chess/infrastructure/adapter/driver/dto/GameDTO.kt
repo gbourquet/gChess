@@ -23,15 +23,23 @@ package com.gchess.chess.infrastructure.adapter.driver.dto
 
 import com.gchess.chess.domain.model.*
 import com.gchess.chess.domain.service.ChessRules
+import com.gchess.shared.domain.model.Player
 import kotlinx.serialization.Serializable
+
+@Serializable
+data class PlayerDTO(
+    val id: String,        // PlayerId (ephemeral, generated on-the-fly)
+    val userId: String,    // UserId (permanent user identifier)
+    val side: String       // "WHITE" or "BLACK"
+)
 
 @Serializable
 data class GameDTO(
     val id: String,
-    val whitePlayer: String,
-    val blackPlayer: String,
+    val whitePlayer: PlayerDTO,
+    val blackPlayer: PlayerDTO,
     val board: ChessPositionDTO,
-    val currentPlayer: String,
+    val currentPlayer: PlayerDTO,
     val currentSide: String,
     val status: String,
     val moveHistory: List<MoveDTO>,
@@ -50,12 +58,18 @@ data class MoveDTO(
 )
 
 // Extension functions to convert between domain models and DTOs
+fun Player.toDTO(): PlayerDTO = PlayerDTO(
+    id = id.value,
+    userId = userId.value,
+    side = side.name
+)
+
 fun Game.toDTO(chessRules: ChessRules): GameDTO = GameDTO(
     id = id.value,
-    whitePlayer = whitePlayer.value,
-    blackPlayer = blackPlayer.value,
+    whitePlayer = whitePlayer.toDTO(),
+    blackPlayer = blackPlayer.toDTO(),
     board = board.toDTO(),
-    currentPlayer = currentPlayer.value,
+    currentPlayer = currentPlayer.toDTO(),
     currentSide = currentSide.name,
     status = status.name,
     moveHistory = moveHistory.map { it.toDTO() },

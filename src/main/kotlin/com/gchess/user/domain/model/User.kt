@@ -21,7 +21,7 @@
  */
 package com.gchess.user.domain.model
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 
 /**
  * Domain model representing a user in the system.
@@ -32,7 +32,7 @@ import com.gchess.shared.domain.model.PlayerId
  * - Password is stored hashed, never in plain text
  */
 data class User(
-    val id: PlayerId,
+    val id: UserId,
     val username: String,
     val email: String,
     val passwordHash: String

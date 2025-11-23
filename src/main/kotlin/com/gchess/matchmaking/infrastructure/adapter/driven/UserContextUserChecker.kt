@@ -19,31 +19,35 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.matchmaking.application.usecase
+package com.gchess.matchmaking.infrastructure.adapter.driven
 
-import com.gchess.matchmaking.domain.port.MatchmakingQueue
+import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.shared.domain.model.UserId
+import com.gchess.user.application.usecase.GetUserUseCase
 
 /**
- * Use case for leaving the matchmaking queue.
+ * Anti-Corruption Layer adapter that allows the Matchmaking context
+ * to validate user existence by communicating with the User context.
  *
- * This use case allows a player to exit the queue before being matched.
- * Once a player is matched, they cannot leave via this use case (the match already exists).
+ * This adapter:
+ * - Implements the UserExistenceChecker port (defined in Matchmaking domain)
+ * - Calls GetUserUseCase from the User context
+ * - Translates the result to a boolean (exists/doesn't exist)
+ * - Maintains bounded context isolation (Matchmaking doesn't depend on User domain models)
  *
- * @property matchmakingQueue Queue for managing waiting players
+ * Error handling strategy: Fail-fast
+ * - If GetUserUseCase throws an exception, we propagate it
+ * - The caller (Matchmaking use case) can decide how to handle the error
  */
-class LeaveMatchmakingUseCase(
-    private val matchmakingQueue: MatchmakingQueue
-) {
-    /**
-     * Removes a player from the matchmaking queue.
-     *
-     * @param userId The ID of the player leaving the queue
-     * @return Result.success(true) if player was removed,
-     *         Result.success(false) if player was not in queue
-     */
-    suspend fun execute(userId: UserId): Result<Boolean> {
-        val removed = matchmakingQueue.removePlayer(userId)
-        return Result.success(removed)
+class UserContextUserChecker(
+    private val getUserUseCase: GetUserUseCase
+) : UserExistenceChecker {
+
+    override suspend fun exists(userId: UserId): Boolean {
+        // Call User context use case
+        val user = getUserUseCase.execute(userId)
+
+        // User exists if GetUserUseCase returns a non-null user
+        return user != null
     }
 }

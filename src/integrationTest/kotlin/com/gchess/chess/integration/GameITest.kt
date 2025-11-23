@@ -1,6 +1,6 @@
 package com.gchess.chess.integration
 
-import com.gchess.infrastructure.DatabaseE2ETest
+import com.gchess.infrastructure.DatabaseITest
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.ktor.client.request.*
@@ -19,7 +19,7 @@ import kotlinx.serialization.json.*
  *
  * Uses Testcontainers PostgreSQL for database integration testing.
  */
-class GameE2ETest : DatabaseE2ETest({
+class GameITest : DatabaseITest({
 
     "complete game flow: register users, create game, make valid moves, and reject invalid turn" {
         testApplication {
@@ -74,26 +74,42 @@ class GameE2ETest : DatabaseE2ETest({
             val blackToken = blackLoginJson["token"]?.jsonPrimitive?.content
                 ?: error("Black player token not found in login response")
 
-            // Step 3: Create a new game with the two players (authenticated as white player)
-            val createGameResponse = client.post("/api/games") {
-                contentType(ContentType.Application.Json)
+            // Step 3: Create a game via matchmaking
+            // Player 1 joins matchmaking queue
+            val join1Response = client.post("/api/matchmaking/queue") {
                 header("Authorization", "Bearer $whiteToken")
-                setBody("""{"whitePlayerId": "$whitePlayerId", "blackPlayerId": "$blackPlayerId"}""")
             }
-            createGameResponse.status shouldBe HttpStatusCode.Created
+            join1Response.status shouldBe HttpStatusCode.OK
+            val join1Json = Json.parseToJsonElement(join1Response.bodyAsText()).jsonObject
+            join1Json["status"]?.jsonPrimitive?.content shouldBe "WAITING"
 
-            val gameJson = Json.parseToJsonElement(createGameResponse.bodyAsText()).jsonObject
-            val gameId = gameJson["id"]?.jsonPrimitive?.content
-                ?: error("Game ID not found in response")
+            // Player 2 joins matchmaking queue - match should be created automatically
+            val join2Response = client.post("/api/matchmaking/queue") {
+                header("Authorization", "Bearer $blackToken")
+            }
+            join2Response.status shouldBe HttpStatusCode.OK
+            val join2Json = Json.parseToJsonElement(join2Response.bodyAsText()).jsonObject
+            join2Json["status"]?.jsonPrimitive?.content shouldBe "MATCHED"
 
-            // Verify that the game has the correct players
-            gameJson["whitePlayer"]?.jsonPrimitive?.content shouldBe whitePlayerId
-            gameJson["blackPlayer"]?.jsonPrimitive?.content shouldBe blackPlayerId
+            val gameId = join2Json["gameId"]?.jsonPrimitive?.content
+                ?: error("Game ID not found in matchmaking response")
+
+            // Determine which token corresponds to which color
+            val player2Color = join2Json["yourColor"]?.jsonPrimitive?.content!!
+            val (actualWhiteToken, actualBlackToken) = if (player2Color == "WHITE") {
+                Pair(blackToken, whiteToken)
+            } else {
+                Pair(whiteToken, blackToken)
+            }
+
+            // Verify game was created
+            val gameResponse = client.get("/api/games/$gameId")
+            gameResponse.status shouldBe HttpStatusCode.OK
 
             // Step 4: Make first move e2→e4 (white's turn, authenticated with white token)
             val move1Response = client.post("/api/games/$gameId/moves") {
                 contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer $whiteToken")
+                header("Authorization", "Bearer $actualWhiteToken")
                 setBody("""{"from": "e2", "to": "e4"}""")
             }
             move1Response.status shouldBe HttpStatusCode.OK
@@ -104,7 +120,7 @@ class GameE2ETest : DatabaseE2ETest({
             // Step 5: Make second move e7→e5 (black's turn, authenticated with black token)
             val move2Response = client.post("/api/games/$gameId/moves") {
                 contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer $blackToken")
+                header("Authorization", "Bearer $actualBlackToken")
                 setBody("""{"from": "e7", "to": "e5"}""")
             }
             move2Response.status shouldBe HttpStatusCode.OK
@@ -115,7 +131,7 @@ class GameE2ETest : DatabaseE2ETest({
             // Step 6: Try to make move with wrong player (black player's token on white's turn)
             val move3Response = client.post("/api/games/$gameId/moves") {
                 contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer $blackToken")
+                header("Authorization", "Bearer $actualBlackToken")
                 setBody("""{"from": "g8", "to": "f6"}""")
             }
             move3Response.status shouldBe HttpStatusCode.BadRequest

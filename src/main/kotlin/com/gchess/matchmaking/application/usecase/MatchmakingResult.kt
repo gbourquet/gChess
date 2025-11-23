@@ -21,6 +21,7 @@
  */
 package com.gchess.matchmaking.application.usecase
 
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.shared.domain.model.GameId
 
 /**
@@ -54,12 +55,4 @@ sealed class MatchmakingResult {
         val gameId: GameId,
         val yourColor: PlayerSide
     ) : MatchmakingResult()
-
-    /**
-     * Represents the player's side in the game.
-     */
-    enum class PlayerSide {
-        WHITE,
-        BLACK
-    }
 }

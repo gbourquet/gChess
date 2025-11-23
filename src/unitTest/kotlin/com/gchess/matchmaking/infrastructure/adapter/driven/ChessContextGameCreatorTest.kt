@@ -1,54 +1,71 @@
 package com.gchess.matchmaking.infrastructure.adapter.driven
 
+import com.gchess.chess.application.usecase.CreateGameUseCase
+import com.gchess.chess.domain.model.ChessPosition
 import com.gchess.chess.domain.model.Game
+import com.gchess.shared.domain.model.Player
+import com.gchess.shared.domain.model.PlayerSide
+import com.gchess.chess.domain.model.Position
+import com.gchess.matchmaking.application.usecase.MatchmakingResult
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.mockk
 
 class ChessContextGameCreatorTest : FunSpec({
 
     test("createGame should return GameId on success") {
         // Given
-        val whitePlayerId = PlayerId.generate()
-        val blackPlayerId = PlayerId.generate()
-        val expectedGameId = GameId.generate()
-
-        // Fake CreateGameUseCase that always succeeds
-        val fakeCreateGameUseCase = FakeCreateGameUseCase(
-            result = Result.success(Game(
-                id = expectedGameId,
-                whitePlayer = whitePlayerId,
-                blackPlayer = blackPlayerId
-            ))
+        val whitePlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.WHITE
         )
+        val blackPlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.BLACK
+        )
+        val expectedGame = Game(
+            id=GameId.generate(),
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer)
+        val createGameUseCase = mockk<CreateGameUseCase>()
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer) } returns Result.success(expectedGame)
 
-        val gameCreator = ChessContextGameCreator(fakeCreateGameUseCase)
+        val gameCreator = ChessContextGameCreator(createGameUseCase)
 
         // When
-        val result = gameCreator.createGame(whitePlayerId, blackPlayerId)
+        val result = gameCreator.createGame(whitePlayer, blackPlayer)
 
         // Then
         result.isSuccess shouldBe true
-        result.getOrNull() shouldBe expectedGameId
+        result.getOrNull() shouldBe expectedGame.id
     }
 
     test("createGame should return failure when CreateGameUseCase fails") {
         // Given
-        val whitePlayerId = PlayerId.generate()
-        val blackPlayerId = PlayerId.generate()
-        val errorMessage = "Player does not exist"
-
-        // Fake CreateGameUseCase that always fails
-        val fakeCreateGameUseCase = FakeCreateGameUseCase(
-            result = Result.failure(Exception(errorMessage))
+        val whitePlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.WHITE
         )
-
-        val gameCreator = ChessContextGameCreator(fakeCreateGameUseCase)
+        val blackPlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.BLACK
+        )
+        val errorMessage = "Player does not exist"
+        val createGameUseCase = mockk<CreateGameUseCase>()
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer) } returns Result.failure(Exception(errorMessage))
+        val gameCreator = ChessContextGameCreator(createGameUseCase)
 
         // When
-        val result = gameCreator.createGame(whitePlayerId, blackPlayerId)
+        val result = gameCreator.createGame(whitePlayer, blackPlayer)
 
         // Then
         result.isFailure shouldBe true
@@ -58,53 +75,68 @@ class ChessContextGameCreatorTest : FunSpec({
 
     test("createGame should extract GameId from created Game") {
         // Given
-        val whitePlayerId = PlayerId.generate()
-        val blackPlayerId = PlayerId.generate()
-        val gameId1 = GameId.generate()
-        val gameId2 = GameId.generate()
-
-        // Fake CreateGameUseCase with stateful behavior
-        val fakeCreateGameUseCase = FakeCreateGameUseCase()
-        val gameCreator = ChessContextGameCreator(fakeCreateGameUseCase)
+        val whitePlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.WHITE
+        )
+        val blackPlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.BLACK
+        )
+        val game1 = Game(
+            id = GameId.generate(),
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            board = ChessPosition(),
+            currentSide = PlayerSide.WHITE
+        )
+        val game2 = Game(
+            id = GameId.generate(),
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            board = ChessPosition(),
+            currentSide = PlayerSide.BLACK
+        )
+        val createGameUseCase = mockk<CreateGameUseCase>()
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer) } returns Result.success(game1) andThen Result.success(game2)
+        val gameCreator = ChessContextGameCreator(createGameUseCase)
 
         // When - first call with gameId1
-        fakeCreateGameUseCase.result = Result.success(Game(
-            id = gameId1,
-            whitePlayer = whitePlayerId,
-            blackPlayer = blackPlayerId
-        ))
-        val result1 = gameCreator.createGame(whitePlayerId, blackPlayerId)
+        val result1 = gameCreator.createGame(whitePlayer, blackPlayer)
 
         // Then - should return first GameId
-        result1.getOrNull() shouldBe gameId1
+        result1.getOrNull() shouldBe game1.id
 
         // When - second call with gameId2
-        fakeCreateGameUseCase.result = Result.success(Game(
-            id = gameId2,
-            whitePlayer = blackPlayerId,
-            blackPlayer = whitePlayerId
-        ))
-        val result2 = gameCreator.createGame(blackPlayerId, whitePlayerId)
+        val result2 = gameCreator.createGame(whitePlayer, blackPlayer)
 
         // Then - should return second GameId
-        result2.getOrNull() shouldBe gameId2
+        result2.getOrNull() shouldBe game2.id
     }
 
     test("createGame should propagate exception message from CreateGameUseCase") {
         // Given
-        val whitePlayerId = PlayerId.generate()
-        val blackPlayerId = PlayerId.generate()
+        val whitePlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.WHITE
+        )
+        val blackPlayer = Player(
+            id = PlayerId.generate(),
+            userId = UserId.generate(),
+            side = PlayerSide.BLACK
+        )
         val specificError = "White player abc123 does not exist"
 
-        // Fake CreateGameUseCase with specific error
-        val fakeCreateGameUseCase = FakeCreateGameUseCase(
-            result = Result.failure(Exception(specificError))
-        )
+        val createGameUseCase = mockk<CreateGameUseCase>()
+        coEvery { createGameUseCase.execute(whitePlayer,blackPlayer) } returns Result.failure(Exception(specificError))
 
-        val gameCreator = ChessContextGameCreator(fakeCreateGameUseCase)
+        val gameCreator = ChessContextGameCreator(createGameUseCase)
 
         // When
-        val result = gameCreator.createGame(whitePlayerId, blackPlayerId)
+        val result = gameCreator.createGame(whitePlayer, blackPlayer)
 
         // Then - error message should be preserved
         result.isFailure shouldBe true

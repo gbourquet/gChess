@@ -23,54 +23,51 @@ package com.gchess.chess.application.usecase
 
 import com.gchess.chess.domain.model.ChessPosition
 import com.gchess.chess.domain.model.Game
+import com.gchess.shared.domain.model.Player
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.chess.domain.model.toChessPosition
 import com.gchess.chess.domain.port.GameRepository
-import com.gchess.chess.domain.port.PlayerExistenceChecker
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
 
+/**
+ * Use case for creating a new chess game.
+ *
+ * This use case takes two Players (already created and validated by the caller,
+ * typically the Matchmaking context) and creates a Game.
+ *
+ * Responsibilities:
+ * - Validates that white player has WHITE side and black player has BLACK side
+ * - Creates the game with the given players
+ * - Saves the game to the repository
+ *
+ * Note: User existence validation and Player creation are done BEFORE calling this use case.
+ * This keeps the Chess context isolated and focused on chess game logic.
+ */
 open class CreateGameUseCase(
-    private val gameRepository: GameRepository,
-    private val playerExistenceChecker: PlayerExistenceChecker
+    private val gameRepository: GameRepository
 ) {
     /**
      * Creates a new game with two players.
      *
-     * Validates that both players exist in the system before creating the game.
-     * Uses the Anti-Corruption Layer (PlayerExistenceChecker) to verify player existence
-     * without directly depending on the User context.
-     *
-     * @param whitePlayerId The ID of the white player
-     * @param blackPlayerId The ID of the black player
+     * @param whitePlayer The white player (must have PlayerSide.WHITE)
+     * @param blackPlayer The black player (must have PlayerSide.BLACK)
      * @param initialPosition Optional FEN string to set a custom starting position (defaults to standard chess position)
      * @return Result.success(Game) if game is created, Result.failure if validation fails
      */
-    open suspend fun execute(whitePlayerId: PlayerId, blackPlayerId: PlayerId, initialPosition: String? = null): Result<Game> {
-        // Validate that players are different
-        if (whitePlayerId == blackPlayerId) {
-            return Result.failure(Exception("White and black players must be different"))
+    open suspend fun execute(whitePlayer: Player, blackPlayer: Player, initialPosition: String? = null): Result<Game> {
+        // Validate that white player has WHITE side
+        if (whitePlayer.side != PlayerSide.WHITE) {
+            return Result.failure(Exception("White player must have WHITE side, got ${whitePlayer.side}"))
         }
 
-        // Validate that white player exists
-        val whitePlayerExists = try {
-            playerExistenceChecker.exists(whitePlayerId)
-        } catch (e: Exception) {
-            return Result.failure(Exception("Failed to validate white player: ${e.message}", e))
+        // Validate that black player has BLACK side
+        if (blackPlayer.side != PlayerSide.BLACK) {
+            return Result.failure(Exception("Black player must have BLACK side, got ${blackPlayer.side}"))
         }
 
-        if (!whitePlayerExists) {
-            return Result.failure(Exception("White player ${whitePlayerId.value} does not exist"))
-        }
-
-        // Validate that black player exists
-        val blackPlayerExists = try {
-            playerExistenceChecker.exists(blackPlayerId)
-        } catch (e: Exception) {
-            return Result.failure(Exception("Failed to validate black player: ${e.message}", e))
-        }
-
-        if (!blackPlayerExists) {
-            return Result.failure(Exception("Black player ${blackPlayerId.value} does not exist"))
+        // Validate that players are different users
+        if (whitePlayer.userId == blackPlayer.userId) {
+            return Result.failure(Exception("White and black players must be different users"))
         }
 
         // Parse initial position if provided
@@ -87,8 +84,8 @@ open class CreateGameUseCase(
         // Create and save the game
         val game = Game(
             id = GameId.generate(),
-            whitePlayer = whitePlayerId,
-            blackPlayer = blackPlayerId,
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
             board = board,
             currentSide = board.sideToMove
         )

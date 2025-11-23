@@ -8,7 +8,7 @@
     <!-- ============================================ -->
     <!-- Table: users                                 -->
     <!-- ============================================ -->
-    <changeSet id="001-create-users-table" author="gchess">
+    <changeSet id="20251120215200-001-create-users-table" author="gchess">
         <createTable tableName="users">
             <column name="id" type="VARCHAR(26)">
                 <constraints primaryKey="true" nullable="false"/>
@@ -44,7 +44,7 @@
     <!-- ============================================ -->
     <!-- Table: games                                 -->
     <!-- ============================================ -->
-    <changeSet id="002-create-games-table" author="gchess">
+    <changeSet id="20251120215200-002-create-games-table" author="gchess">
         <createTable tableName="games">
             <column name="id" type="VARCHAR(26)">
                 <constraints primaryKey="true" nullable="false"/>
@@ -104,7 +104,7 @@
     <!-- ============================================ -->
     <!-- Table: game_moves                            -->
     <!-- ============================================ -->
-    <changeSet id="003-create-game-moves-table" author="gchess">
+    <changeSet id="20251120215200-003-create-game-moves-table" author="gchess">
         <createTable tableName="game_moves">
             <column name="id" type="BIGSERIAL">
                 <constraints primaryKey="true" nullable="false"/>
@@ -151,7 +151,7 @@
     <!-- ============================================ -->
     <!-- Table: matches                               -->
     <!-- ============================================ -->
-    <changeSet id="004-create-matches-table" author="gchess">
+    <changeSet id="20251120215200-004-create-matches-table" author="gchess">
         <createTable tableName="matches">
             <column name="game_id" type="VARCHAR(26)">
                 <constraints primaryKey="true" nullable="false"/>

@@ -1,15 +1,15 @@
 package com.gchess.matchmaking.domain.model
 
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.datetime.Instant
 import kotlin.time.Duration.Companion.minutes
 
 class MatchTest : FunSpec({
-    val player1 = PlayerId.generate()
-    val player2 = PlayerId.generate()
+    val user1 = UserId.generate()
+    val user2 = UserId.generate()
     val gameId = GameId.generate()
 
     test("isExpired should return false when match is within TTL") {
@@ -19,8 +19,8 @@ class MatchTest : FunSpec({
         val expiresAt = matchedAt + 5.minutes
 
         val match = Match(
-            whitePlayerId = player1,
-            blackPlayerId = player2,
+            whiteUserId = user1,
+            blackUserId = user2,
             gameId = gameId,
             matchedAt = matchedAt,
             expiresAt = expiresAt
@@ -40,8 +40,8 @@ class MatchTest : FunSpec({
         val expiresAt = matchedAt + 5.minutes
 
         val match = Match(
-            whitePlayerId = player1,
-            blackPlayerId = player2,
+            whiteUserId = user1,
+            blackUserId = user2,
             gameId = gameId,
             matchedAt = matchedAt,
             expiresAt = expiresAt
@@ -61,8 +61,8 @@ class MatchTest : FunSpec({
         val expiresAt = now
 
         val match = Match(
-            whitePlayerId = player1,
-            blackPlayerId = player2,
+            whiteUserId = user1,
+            blackUserId = user2,
             gameId = gameId,
             matchedAt = matchedAt,
             expiresAt = expiresAt
@@ -82,8 +82,8 @@ class MatchTest : FunSpec({
         val matchedAt = expiresAt - 5.minutes
 
         val match = Match(
-            whitePlayerId = player1,
-            blackPlayerId = player2,
+            whiteUserId = user1,
+            blackUserId = user2,
             gameId = gameId,
             matchedAt = matchedAt,
             expiresAt = expiresAt
@@ -103,8 +103,8 @@ class MatchTest : FunSpec({
 
         // When: Creating a match with factory method
         val match = Match.create(
-            whitePlayerId = player1,
-            blackPlayerId = player2,
+            whiteUserId = user1,
+            blackUserId = user2,
             gameId = gameId,
             ttlMinutes = ttlMinutes,
             now = now
@@ -121,8 +121,8 @@ class MatchTest : FunSpec({
 
         // When: Creating a match without specifying TTL
         val match = Match.create(
-            whitePlayerId = player1,
-            blackPlayerId = player2,
+            whiteUserId = user1,
+            blackUserId = user2,
             gameId = gameId,
             now = now
         )

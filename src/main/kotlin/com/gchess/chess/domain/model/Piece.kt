@@ -21,6 +21,8 @@
  */
 package com.gchess.chess.domain.model
 
+import com.gchess.shared.domain.model.PlayerSide
+
 data class Piece(
     val type: PieceType,
     val side: PlayerSide,

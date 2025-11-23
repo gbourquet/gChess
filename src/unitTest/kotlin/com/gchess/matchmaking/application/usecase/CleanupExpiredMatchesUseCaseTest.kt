@@ -3,7 +3,7 @@ package com.gchess.matchmaking.application.usecase
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchRepository
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.datetime.Clock
@@ -19,8 +19,8 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
 
         // Add expired match
         val expiredMatch = Match(
-            whitePlayerId = PlayerId.generate(),
-            blackPlayerId = PlayerId.generate(),
+            whiteUserId = UserId.generate(),
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now - 10.minutes,
             expiresAt = now - 5.minutes
@@ -32,8 +32,8 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
         useCase.execute()
 
         // Then - expired match should be removed
-        repository.findByPlayer(expiredMatch.whitePlayerId) shouldBe null
-        repository.findByPlayer(expiredMatch.blackPlayerId) shouldBe null
+        repository.findByPlayer(expiredMatch.whiteUserId) shouldBe null
+        repository.findByPlayer(expiredMatch.blackUserId) shouldBe null
     }
 
     test("execute should keep valid matches") {
@@ -44,8 +44,8 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
 
         // Add valid match
         val validMatch = Match(
-            whitePlayerId = PlayerId.generate(),
-            blackPlayerId = PlayerId.generate(),
+            whiteUserId = UserId.generate(),
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now - 2.minutes,
             expiresAt = now + 3.minutes
@@ -57,8 +57,8 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
         useCase.execute()
 
         // Then - valid match should remain
-        repository.findByPlayer(validMatch.whitePlayerId) shouldBe validMatch
-        repository.findByPlayer(validMatch.blackPlayerId) shouldBe validMatch
+        repository.findByPlayer(validMatch.whiteUserId) shouldBe validMatch
+        repository.findByPlayer(validMatch.blackUserId) shouldBe validMatch
     }
 
     test("execute should handle mix of expired and valid matches") {
@@ -69,16 +69,16 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
 
         // Add 2 expired matches
         val expired1 = Match(
-            whitePlayerId = PlayerId.generate(),
-            blackPlayerId = PlayerId.generate(),
+            whiteUserId = UserId.generate(),
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now - 10.minutes,
             expiresAt = now - 5.minutes
         )
 
         val expired2 = Match(
-            whitePlayerId = PlayerId.generate(),
-            blackPlayerId = PlayerId.generate(),
+            whiteUserId = UserId.generate(),
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now - 8.minutes,
             expiresAt = now - 3.minutes
@@ -86,16 +86,16 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
 
         // Add 2 valid matches
         val valid1 = Match(
-            whitePlayerId = PlayerId.generate(),
-            blackPlayerId = PlayerId.generate(),
+            whiteUserId = UserId.generate(),
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now - 1.minutes,
             expiresAt = now + 4.minutes
         )
 
         val valid2 = Match(
-            whitePlayerId = PlayerId.generate(),
-            blackPlayerId = PlayerId.generate(),
+            whiteUserId = UserId.generate(),
+            blackUserId = UserId.generate(),
             gameId = GameId.generate(),
             matchedAt = now,
             expiresAt = now + 5.minutes
@@ -110,10 +110,10 @@ class CleanupExpiredMatchesUseCaseTest : FunSpec({
         useCase.execute()
 
         // Then - expired matches removed, valid matches kept
-        repository.findByPlayer(expired1.whitePlayerId) shouldBe null
-        repository.findByPlayer(expired2.whitePlayerId) shouldBe null
-        repository.findByPlayer(valid1.whitePlayerId) shouldBe valid1
-        repository.findByPlayer(valid2.whitePlayerId) shouldBe valid2
+        repository.findByPlayer(expired1.whiteUserId) shouldBe null
+        repository.findByPlayer(expired2.whiteUserId) shouldBe null
+        repository.findByPlayer(valid1.whiteUserId) shouldBe valid1
+        repository.findByPlayer(valid2.whiteUserId) shouldBe valid2
     }
 
     test("execute should do nothing when repository is empty") {

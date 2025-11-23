@@ -21,15 +21,16 @@
  */
 package com.gchess.chess.infrastructure.adapter.driver
 
-import com.gchess.chess.application.usecase.CreateGameUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
+import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.model.Move
+import com.gchess.shared.domain.model.Player
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.infrastructure.adapter.driver.dto.toDTO
 import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.bkbn.kompendium.core.metadata.GetInfo
 import io.bkbn.kompendium.core.metadata.PostInfo
 import io.bkbn.kompendium.core.plugin.NotarizedRoute
@@ -46,22 +47,30 @@ import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 
 @Serializable
-data class CreateGameRequest(
-    val whitePlayerId: String,
-    val blackPlayerId: String,
-    val initialPosition: String? = null // Optional FEN string for custom starting positions
-)
-
-@Serializable
 data class MoveRequest(
     val from: String,
     val to: String,
     val promotion: String? = null
-    // Phase 5: playerId now comes from JWT token, not request body
 )
 
-fun Application.configureGameRoutes(enableOpenApiDocs: Boolean = true) {
-    val createGameUseCase by inject<CreateGameUseCase>()
+/**
+ * Helper function to convert UserId (from JWT) to Player (from Game).
+ * This conversion is done in the infrastructure layer (GameRoutes) to maintain
+ * Chess context isolation - Chess use cases never manipulate UserId directly.
+ *
+ * @param game The game containing the players
+ * @param userId The user ID extracted from JWT token
+ * @return The Player matching the userId, or null if user is not a participant
+ */
+private fun findPlayerByUserId(game: Game, userId: UserId): Player? {
+    return when {
+        game.whitePlayer.userId == userId -> game.whitePlayer
+        game.blackPlayer.userId == userId -> game.blackPlayer
+        else -> null
+    }
+}
+
+fun Application.configureGameRoutes() {
     val getGameUseCase by inject<GetGameUseCase>()
     val makeMoveUseCase by inject<MakeMoveUseCase>()
     val chessRules by inject<ChessRules>()
@@ -70,73 +79,10 @@ fun Application.configureGameRoutes(enableOpenApiDocs: Boolean = true) {
         route("/api/games") {
             // Protected routes - require JWT authentication
             authenticate("jwt-auth") {
-                // Create a new game
-                route("") {
-                    install(NotarizedRoute()) {
-                        tags = setOf("Games")
-                        post = PostInfo.builder {
-                            summary("Create a new chess game")
-                            description("Create a new game between two players. Both players must exist in the system.")
-                            security = mapOf("JWT" to listOf())
-                            request {
-                                requestType<CreateGameRequest>()
-                                description("Player IDs for white and black")
-                            }
-                            response {
-                                responseCode(HttpStatusCode.Created)
-                                responseType<com.gchess.chess.infrastructure.adapter.driver.dto.GameDTO>()
-                                description("Game successfully created")
-                            }
-                            canRespond {
-                                responseCode(HttpStatusCode.BadRequest)
-                                responseType<Map<String, String>>()
-                                description("Invalid player IDs or players don't exist")
-                            }
-                            canRespond {
-                                responseCode(HttpStatusCode.Unauthorized)
-                                responseType<Map<String, String>>()
-                                description("Missing or invalid JWT token")
-                            }
-                        }
-                    }
+                // Note: Game creation has been removed - games are now created ONLY via matchmaking
+                // See /api/matchmaking/queue endpoint for automatic game creation
 
-                    post {
-                        val request = call.receive<CreateGameRequest>()
-
-                        val whitePlayerId = try {
-                            PlayerId.fromString(request.whitePlayerId)
-                        } catch (e: Exception) {
-                            return@post call.respond(
-                                HttpStatusCode.BadRequest,
-                                mapOf("error" to "Invalid white player ID format")
-                            )
-                        }
-
-                        val blackPlayerId = try {
-                            PlayerId.fromString(request.blackPlayerId)
-                        } catch (e: Exception) {
-                            return@post call.respond(
-                                HttpStatusCode.BadRequest,
-                                mapOf("error" to "Invalid black player ID format")
-                            )
-                        }
-
-                        val result = createGameUseCase.execute(whitePlayerId, blackPlayerId, request.initialPosition)
-                        result.fold(
-                            onSuccess = { game ->
-                                call.respond(HttpStatusCode.Created, game.toDTO(chessRules))
-                            },
-                            onFailure = { error ->
-                                call.respond(
-                                    HttpStatusCode.BadRequest,
-                                    mapOf("error" to (error.message ?: "Failed to create game"))
-                                )
-                            }
-                        )
-                    }
-                }
-
-                // Make a move (playerId extracted from JWT)
+                // Make a move (userId extracted from JWT and converted to Player)
                 route("/{id}/moves") {
                     install(NotarizedRoute()) {
                         tags = setOf("Games")
@@ -175,27 +121,44 @@ fun Application.configureGameRoutes(enableOpenApiDocs: Boolean = true) {
                     }
 
                     post {
-                        // Extract player ID from JWT token
+                        // 1. Extract userId from JWT token
                         val principal = call.principal<JWTPrincipal>()
                             ?: return@post call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("error" to "Invalid or missing token")
                             )
 
-                        val playerId = JwtConfig.extractPlayerId(principal.payload)
+                        val userId = JwtConfig.extractUserId(principal.payload)
 
+                        // 2. Get the game
                         val id = call.parameters["id"] ?: return@post call.respond(
                             HttpStatusCode.BadRequest,
                             "Missing game id"
                         )
                         val gameId = GameId.fromString(id)
-                        val moveRequest = call.receive<MoveRequest>()
 
+                        val game = getGameUseCase.execute(gameId)
+                            ?: return@post call.respond(
+                                HttpStatusCode.NotFound,
+                                mapOf("error" to "Game not found")
+                            )
+
+                        // 3. CRITICAL: Convert UserId → Player (infrastructure layer responsibility)
+                        // This maintains Chess context isolation - use cases never see UserId
+                        val player = findPlayerByUserId(game, userId)
+                            ?: return@post call.respond(
+                                HttpStatusCode.Forbidden,
+                                mapOf("error" to "You are not a participant in this game")
+                            )
+
+                        // 4. Parse move request
+                        val moveRequest = call.receive<MoveRequest>()
                         val move = Move.fromAlgebraic("${moveRequest.from}${moveRequest.to}")
 
-                        val result = makeMoveUseCase.execute(gameId, playerId, move)
+                        // 5. Execute move with Player (not UserId) - Chess use case stays isolated
+                        val result = makeMoveUseCase.execute(gameId, player, move)
                         result.fold(
-                            onSuccess = { game -> call.respond(game.toDTO(chessRules)) },
+                            onSuccess = { updatedGame -> call.respond(updatedGame.toDTO(chessRules)) },
                             onFailure = { error ->
                                 call.respond(
                                     HttpStatusCode.BadRequest,

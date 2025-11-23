@@ -1,6 +1,6 @@
 package com.gchess.matchmaking.infrastructure.adapter.driven
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -14,13 +14,13 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("addPlayer should add player to queue successfully") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         // When
         val entry = queue.addPlayer(playerId)
 
         // Then
-        entry.playerId shouldBe playerId
+        entry.userId shouldBe playerId
         queue.isPlayerInQueue(playerId) shouldBe true
         queue.getQueueSize() shouldBe 1
     }
@@ -28,7 +28,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("addPlayer should throw exception when player is already in queue") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
         queue.addPlayer(playerId)
 
         // When/Then
@@ -40,7 +40,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("removePlayer should remove player from queue") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
         queue.addPlayer(playerId)
 
         // When
@@ -55,7 +55,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("removePlayer should return false when player is not in queue") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         // When
         val removed = queue.removePlayer(playerId)
@@ -67,7 +67,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("isPlayerInQueue should return false for player not in queue") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         // When/Then
         queue.isPlayerInQueue(playerId) shouldBe false
@@ -76,9 +76,9 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("getQueueSize should return correct size") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-        val player3 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
+        val player3 = UserId.generate()
 
         // When/Then
         queue.getQueueSize() shouldBe 0
@@ -95,7 +95,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("findMatch should return null when queue has less than 2 players") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val player1 = PlayerId.generate()
+        val player1 = UserId.generate()
 
         // When/Then - empty queue
         queue.findMatch() shouldBe null
@@ -108,9 +108,9 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("findMatch should match two oldest players (FIFO)") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-        val player3 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
+        val player3 = UserId.generate()
 
         // Add players in order
         val entry1 = queue.addPlayer(player1)
@@ -124,8 +124,8 @@ class InMemoryMatchmakingQueueTest : FunSpec({
 
         // Then
         match shouldNotBe null
-        match!!.first.playerId shouldBe player1
-        match.second.playerId shouldBe player2
+        match!!.first.userId shouldBe player1
+        match.second.userId shouldBe player2
         match.first.joinedAt shouldBe entry1.joinedAt
         match.second.joinedAt shouldBe entry2.joinedAt
 
@@ -139,8 +139,8 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("findMatch should remove both players atomically from queue") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
 
         queue.addPlayer(player1)
         queue.addPlayer(player2)
@@ -156,10 +156,10 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("multiple findMatch calls should pair players correctly") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-        val player3 = PlayerId.generate()
-        val player4 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
+        val player3 = UserId.generate()
+        val player4 = UserId.generate()
 
         queue.addPlayer(player1)
         delay(10)
@@ -174,16 +174,16 @@ class InMemoryMatchmakingQueueTest : FunSpec({
 
         // Then - should match player1 and player2
         match1 shouldNotBe null
-        match1!!.first.playerId shouldBe player1
-        match1.second.playerId shouldBe player2
+        match1!!.first.userId shouldBe player1
+        match1.second.userId shouldBe player2
 
         // When - second match
         val match2 = queue.findMatch()
 
         // Then - should match player3 and player4
         match2 shouldNotBe null
-        match2!!.first.playerId shouldBe player3
-        match2.second.playerId shouldBe player4
+        match2!!.first.userId shouldBe player3
+        match2.second.userId shouldBe player4
 
         // Queue should be empty
         queue.getQueueSize() shouldBe 0
@@ -192,7 +192,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("concurrent addPlayer calls should be thread-safe") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerIds = (1..100).map { PlayerId.generate() }
+        val playerIds = (1..100).map { UserId.generate() }
 
         // When - add 100 players concurrently
         val jobs = playerIds.map { playerId ->
@@ -212,7 +212,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("concurrent findMatch calls should not create race conditions") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val playerIds = (1..20).map { PlayerId.generate() }
+        val playerIds = (1..20).map { UserId.generate() }
 
         // Add 20 players
         playerIds.forEach { playerId ->
@@ -238,7 +238,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
 
         // Verify no player was matched twice
         val matchedPlayerIds = matches.flatMap { match ->
-            listOf(match!!.first.playerId, match.second.playerId)
+            listOf(match!!.first.userId, match.second.userId)
         }
         matchedPlayerIds.size shouldBe 20
         matchedPlayerIds.distinct().size shouldBe 20 // No duplicates
@@ -247,9 +247,9 @@ class InMemoryMatchmakingQueueTest : FunSpec({
     test("concurrent add and remove should be thread-safe") {
         // Given
         val queue = InMemoryMatchmakingQueue()
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-        val player3 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
+        val player3 = UserId.generate()
 
         queue.addPlayer(player1)
         queue.addPlayer(player2)
@@ -271,7 +271,7 @@ class InMemoryMatchmakingQueueTest : FunSpec({
 
         // Then - match should not include player2 (was removed)
         match shouldNotBe null
-        match!!.first.playerId shouldNotBe player2
-        match.second.playerId shouldNotBe player2
+        match!!.first.userId shouldNotBe player2
+        match.second.userId shouldNotBe player2
     }
 })

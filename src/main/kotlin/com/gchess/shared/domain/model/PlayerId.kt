@@ -24,8 +24,14 @@ package com.gchess.shared.domain.model
 import de.huxhorn.sulky.ulid.ULID
 
 /**
- * Value object representing a unique player identifier.
+ * Value object representing a unique player identifier within a specific game.
  * Uses ULID (Universally Unique Lexicographically Sortable Identifier) format.
+ *
+ * A PlayerId identifies a player's participation in a specific game.
+ * This is distinct from UserId, which represents the permanent identity of a user across all games.
+ *
+ * PlayerId is typically ephemeral - generated when a Player is created for a game,
+ * and may not be persisted long-term in the database.
  *
  * ULIDs are:
  * - 26 character string representation

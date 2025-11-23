@@ -23,7 +23,7 @@ package com.gchess.infrastructure.config
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import java.util.*
 
 /**
@@ -58,16 +58,16 @@ object JwtConfig {
     private val algorithm = Algorithm.HMAC256(SECRET)
 
     /**
-     * Generates a JWT token for a given player.
+     * Generates a JWT token for a given user.
      *
-     * @param playerId The ID of the player to generate a token for
+     * @param userId The ID of the user to generate a token for
      * @return The generated JWT token as a string
      */
-    fun generateToken(playerId: PlayerId): String {
+    fun generateToken(userId: UserId): String {
         return JWT.create()
             .withAudience(AUDIENCE)
             .withIssuer(ISSUER)
-            .withClaim("playerId", playerId.value)
+            .withClaim("userId", userId.value)
             .withExpiresAt(Date(System.currentTimeMillis() + VALIDITY_MS))
             .sign(algorithm)
     }
@@ -83,13 +83,13 @@ object JwtConfig {
         .build()
 
     /**
-     * Extracts the player ID from a validated JWT token.
+     * Extracts the user ID from a validated JWT token.
      *
      * @param payload The JWT payload (from JWTPrincipal)
-     * @return The PlayerId embedded in the token
+     * @return The UserId embedded in the token
      */
-    fun extractPlayerId(payload: com.auth0.jwt.interfaces.Payload): PlayerId {
-        val playerIdValue = payload.getClaim("playerId").asString()
-        return PlayerId.fromString(playerIdValue)
+    fun extractUserId(payload: com.auth0.jwt.interfaces.Payload): UserId {
+        val userIdValue = payload.getClaim("userId").asString()
+        return UserId.fromString(userIdValue)
     }
 }

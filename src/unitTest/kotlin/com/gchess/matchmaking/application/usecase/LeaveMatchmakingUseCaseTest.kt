@@ -1,7 +1,7 @@
 package com.gchess.matchmaking.application.usecase
 
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 
@@ -11,7 +11,7 @@ class LeaveMatchmakingUseCaseTest : FunSpec({
         // Given
         val queue = InMemoryMatchmakingQueue()
         val useCase = LeaveMatchmakingUseCase(queue)
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         // Add player to queue
         queue.addPlayer(playerId)
@@ -29,7 +29,7 @@ class LeaveMatchmakingUseCaseTest : FunSpec({
         // Given
         val queue = InMemoryMatchmakingQueue()
         val useCase = LeaveMatchmakingUseCase(queue)
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         // When
         val result = useCase.execute(playerId)
@@ -43,9 +43,9 @@ class LeaveMatchmakingUseCaseTest : FunSpec({
         // Given
         val queue = InMemoryMatchmakingQueue()
         val useCase = LeaveMatchmakingUseCase(queue)
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-        val player3 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
+        val player3 = UserId.generate()
 
         queue.addPlayer(player1)
         queue.addPlayer(player2)
@@ -65,7 +65,7 @@ class LeaveMatchmakingUseCaseTest : FunSpec({
         // Given
         val queue = InMemoryMatchmakingQueue()
         val useCase = LeaveMatchmakingUseCase(queue)
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         queue.addPlayer(playerId)
         useCase.execute(playerId)
@@ -82,8 +82,8 @@ class LeaveMatchmakingUseCaseTest : FunSpec({
         // Given
         val queue = InMemoryMatchmakingQueue()
         val useCase = LeaveMatchmakingUseCase(queue)
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
 
         // When - join, leave, join, leave
         queue.addPlayer(player1)

@@ -25,11 +25,9 @@ import com.gchess.chess.application.usecase.CreateGameUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.domain.port.GameRepository
-import com.gchess.chess.domain.port.PlayerExistenceChecker
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.domain.service.StandardChessRules
 import com.gchess.chess.infrastructure.adapter.driven.PostgresGameRepository
-import com.gchess.chess.infrastructure.adapter.driven.UserContextPlayerChecker
 import com.gchess.user.application.usecase.GetUserUseCase
 import com.gchess.user.application.usecase.LoginUseCase
 import com.gchess.user.application.usecase.RegisterUserUseCase
@@ -45,9 +43,11 @@ import com.gchess.matchmaking.application.usecase.LeaveMatchmakingUseCase
 import com.gchess.matchmaking.domain.port.GameCreator
 import com.gchess.matchmaking.domain.port.MatchRepository
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
+import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.matchmaking.infrastructure.adapter.driven.ChessContextGameCreator
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
 import com.gchess.matchmaking.infrastructure.adapter.driven.PostgresMatchRepository
+import com.gchess.matchmaking.infrastructure.adapter.driven.UserContextUserChecker
 import org.jooq.DSLContext
 import org.koin.dsl.module
 import javax.sql.DataSource
@@ -74,14 +74,11 @@ val appModule = module {
     // Domain Services
     single<ChessRules> { StandardChessRules() }
 
-    // Anti-Corruption Layer (ACL)
-    // Connects Chess context to User context without direct coupling
-    single<PlayerExistenceChecker> { UserContextPlayerChecker(get()) }
-
     // Use Cases (Application Layer)
-    single { CreateGameUseCase(get(), get()) }
+    // Note: CreateGameUseCase is only called from Matchmaking context (via ACL)
+    single { CreateGameUseCase(get()) }
     single { GetGameUseCase(get()) }
-    single { MakeMoveUseCase(get(), get(), get()) }
+    single { MakeMoveUseCase(get(), get()) }
 
     // ========== User Context ==========
 
@@ -104,11 +101,13 @@ val appModule = module {
     single<MatchRepository> { PostgresMatchRepository(get()) }
 
     // Anti-Corruption Layer (ACL)
-    // Connects Matchmaking context to Chess context for game creation
+    // Connects Matchmaking → Chess for game creation
     single<GameCreator> { ChessContextGameCreator(get()) }
+    // Connects Matchmaking → User for user validation
+    single<UserExistenceChecker> { UserContextUserChecker(get()) }
 
     // Use Cases (Application Layer)
-    single { CreateGameFromMatchUseCase(get()) }
+    single { CreateGameFromMatchUseCase(get(), get()) }  // gameCreator, userExistenceChecker
     single { CleanupExpiredMatchesUseCase(get()) }
     single { LeaveMatchmakingUseCase(get()) }
     single { GetMatchStatusUseCase(get(), get(), get()) }

@@ -23,7 +23,7 @@ package com.gchess.matchmaking.infrastructure.adapter.driven
 
 import com.gchess.matchmaking.domain.model.QueueEntry
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -37,7 +37,7 @@ import kotlin.concurrent.withLock
  *
  * This implementation uses:
  * - ConcurrentLinkedQueue for FIFO ordering (thread-safe)
- * - ConcurrentHashMap for fast player lookups by ID
+ * - ConcurrentHashMap for fast user lookups by ID
  * - ReentrantLock to ensure atomicity of addPlayer + findMatch operations
  *
  * Thread-safety strategy:
@@ -49,32 +49,32 @@ class InMemoryMatchmakingQueue : MatchmakingQueue {
 
     private val lock = ReentrantLock()
     private val queue = ConcurrentLinkedQueue<QueueEntry>()
-    private val indexByPlayer = ConcurrentHashMap<PlayerId, QueueEntry>()
+    private val indexByUser = ConcurrentHashMap<UserId, QueueEntry>()
 
-    override suspend fun addPlayer(playerId: PlayerId): QueueEntry = withContext(Dispatchers.IO) {
+    override suspend fun addPlayer(userId: UserId): QueueEntry = withContext(Dispatchers.IO) {
         lock.withLock {
-            // Check if player already in queue
-            if (indexByPlayer.containsKey(playerId)) {
-                throw IllegalStateException("Player $playerId is already in the queue")
+            // Check if user already in queue
+            if (indexByUser.containsKey(userId)) {
+                throw IllegalStateException("User $userId is already in the queue")
             }
 
             // Create queue entry
             val entry = QueueEntry(
-                playerId = playerId,
+                userId = userId,
                 joinedAt = Clock.System.now()
             )
 
             // Add to both queue and index
             queue.add(entry)
-            indexByPlayer[playerId] = entry
+            indexByUser[userId] = entry
 
             entry
         }
     }
 
-    override suspend fun removePlayer(playerId: PlayerId): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun removePlayer(userId: UserId): Boolean = withContext(Dispatchers.IO) {
         lock.withLock {
-            val entry = indexByPlayer.remove(playerId)
+            val entry = indexByUser.remove(userId)
             if (entry != null) {
                 queue.remove(entry)
                 true
@@ -86,30 +86,30 @@ class InMemoryMatchmakingQueue : MatchmakingQueue {
 
     override suspend fun findMatch(): Pair<QueueEntry, QueueEntry>? = withContext(Dispatchers.IO) {
         lock.withLock {
-            // Need at least 2 players
+            // Need at least 2 users
             if (queue.size < 2) {
                 return@withContext null
             }
 
             // Poll the two oldest entries (FIFO)
-            val player1Entry = queue.poll() ?: return@withContext null
-            val player2Entry = queue.poll() ?: run {
-                // If second poll fails, put first player back
-                queue.add(player1Entry)
+            val user1Entry = queue.poll() ?: return@withContext null
+            val user2Entry = queue.poll() ?: run {
+                // If second poll fails, put first user back
+                queue.add(user1Entry)
                 return@withContext null
             }
 
             // Remove from index
-            indexByPlayer.remove(player1Entry.playerId)
-            indexByPlayer.remove(player2Entry.playerId)
+            indexByUser.remove(user1Entry.userId)
+            indexByUser.remove(user2Entry.userId)
 
             // Return the match
-            Pair(player1Entry, player2Entry)
+            Pair(user1Entry, user2Entry)
         }
     }
 
-    override suspend fun isPlayerInQueue(playerId: PlayerId): Boolean = withContext(Dispatchers.IO) {
-        indexByPlayer.containsKey(playerId)
+    override suspend fun isPlayerInQueue(userId: UserId): Boolean = withContext(Dispatchers.IO) {
+        indexByUser.containsKey(userId)
     }
 
     override suspend fun getQueueSize(): Int = withContext(Dispatchers.IO) {

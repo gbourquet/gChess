@@ -1,7 +1,7 @@
 package com.gchess.matchmaking.application.usecase
 
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -12,15 +12,16 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
 
     test("execute should create game with random color assignment") {
         // Given
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val gameId = GameId.generate()
         val gameCreator = FakeGameCreator(gameId)
+        val userChecker = FakeUserExistenceChecker(exists = true)
 
-        val useCase = CreateGameFromMatchUseCase(gameCreator)
+        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
         // When
-        val result = useCase.execute(player1, player2)
+        val result = useCase.execute(user1, user2)
 
         // Then
         result.isSuccess shouldBe true
@@ -28,53 +29,55 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         match.gameId shouldBe gameId
 
         // One player should be white, the other black
-        val whitePlayer = match.whitePlayerId
-        val blackPlayer = match.blackPlayerId
-        (whitePlayer == player1 && blackPlayer == player2) ||
-            (whitePlayer == player2 && blackPlayer == player1) shouldBe true
+        val whitePlayer = match.whiteUserId
+        val blackPlayer = match.blackUserId
+        (whitePlayer == user1 && blackPlayer == user2) ||
+            (whitePlayer == user2 && blackPlayer == user1) shouldBe true
     }
 
     test("execute should assign colors with 50/50 distribution") {
         // Given
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val gameId = GameId.generate()
         val gameCreator = FakeGameCreator(gameId)
+        val userChecker = FakeUserExistenceChecker(exists = true)
 
         // Use fixed seed for reproducible random
         val random = Random(42)
-        val useCase = CreateGameFromMatchUseCase(gameCreator, random)
+        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker, random)
 
         // When - create 100 matches
         val matches = (1..100).map {
-            useCase.execute(player1, player2).getOrNull()!!
+            useCase.execute(user1, user2).getOrNull()!!
         }
 
         // Then - should have reasonable distribution (not all same color)
-        val player1WhiteCount = matches.count { it.whitePlayerId == player1 }
-        val player1BlackCount = matches.count { it.blackPlayerId == player1 }
+        val user1WhiteCount = matches.count { it.whiteUserId == user1 }
+        val user1BlackCount = matches.count { it.blackUserId == user1 }
 
         // With seed 42, we should have a mix (not 100 or 0)
-        player1WhiteCount shouldNotBe 0
-        player1WhiteCount shouldNotBe 100
-        player1BlackCount shouldNotBe 0
-        player1BlackCount shouldNotBe 100
+        user1WhiteCount shouldNotBe 0
+        user1WhiteCount shouldNotBe 100
+        user1BlackCount shouldNotBe 0
+        user1BlackCount shouldNotBe 100
 
         // Should sum to 100
-        (player1WhiteCount + player1BlackCount) shouldBe 100
+        (user1WhiteCount + user1BlackCount) shouldBe 100
     }
 
     test("execute should return failure when GameCreator fails") {
         // Given
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val errorMessage = "Failed to create game"
         val gameCreator = FakeGameCreator(failure = Exception(errorMessage))
+        val userChecker = FakeUserExistenceChecker(exists = true)
 
-        val useCase = CreateGameFromMatchUseCase(gameCreator)
+        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
         // When
-        val result = useCase.execute(player1, player2)
+        val result = useCase.execute(user1, user2)
 
         // Then
         result.isFailure shouldBe true
@@ -84,15 +87,16 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
 
     test("execute should propagate GameCreator error") {
         // Given
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val specificError = "Player validation failed in Chess context"
         val gameCreator = FakeGameCreator(failure = Exception(specificError))
+        val userChecker = FakeUserExistenceChecker(exists = true)
 
-        val useCase = CreateGameFromMatchUseCase(gameCreator)
+        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
         // When
-        val result = useCase.execute(player1, player2)
+        val result = useCase.execute(user1, user2)
 
         // Then
         result.exceptionOrNull()!!.message shouldBe specificError
@@ -100,32 +104,34 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
 
     test("execute should assign different colors to each player") {
         // Given
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val gameId = GameId.generate()
         val gameCreator = FakeGameCreator(gameId)
+        val userChecker = FakeUserExistenceChecker(exists = true)
 
-        val useCase = CreateGameFromMatchUseCase(gameCreator)
+        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
         // When
-        val result = useCase.execute(player1, player2)
+        val result = useCase.execute(user1, user2)
 
         // Then
         val match = result.getOrNull()!!
-        match.whitePlayerId shouldNotBe match.blackPlayerId
+        match.whiteUserId shouldNotBe match.blackUserId
     }
 
     test("execute should set matchedAt and expiresAt timestamps") {
         // Given
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
+        val user1 = UserId.generate()
+        val user2 = UserId.generate()
         val gameId = GameId.generate()
         val gameCreator = FakeGameCreator(gameId)
+        val userChecker = FakeUserExistenceChecker(exists = true)
 
-        val useCase = CreateGameFromMatchUseCase(gameCreator)
+        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
         // When
-        val result = useCase.execute(player1, player2)
+        val result = useCase.execute(user1, user2)
 
         // Then
         val match = result.getOrNull()!!

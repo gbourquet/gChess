@@ -132,6 +132,7 @@ dependencies {
     "unitTestImplementation"("io.kotest:kotest-assertions-core:5.8.0")
     "unitTestImplementation"("io.insert-koin:koin-test:3.5.3")
     "unitTestImplementation"("io.insert-koin:koin-test-junit5:3.5.3")
+    "unitTestImplementation"("io.mockk:mockk:1.13.9")
 
     // Architecture Testing
     "architectureTestImplementation"("com.tngtech.archunit:archunit-junit5:1.2.1")

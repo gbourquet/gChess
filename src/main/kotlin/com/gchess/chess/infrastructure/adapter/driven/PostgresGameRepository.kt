@@ -26,6 +26,10 @@ import com.gchess.chess.domain.port.GameRepository
 import com.gchess.infrastructure.persistence.jooq.tables.references.GAMES
 import com.gchess.infrastructure.persistence.jooq.tables.references.GAME_MOVES
 import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.domain.model.Player
+import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.PlayerSide
+import com.gchess.shared.domain.model.UserId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jooq.DSLContext
@@ -53,10 +57,13 @@ class PostgresGameRepository(
             val now = LocalDateTime.now()
 
             // Upsert game record
+            // Note: We now persist both PlayerId and UserId for each player
             ctx.insertInto(GAMES)
                 .set(GAMES.ID, game.id.value)
-                .set(GAMES.WHITE_PLAYER_ID, game.whitePlayer.value)
-                .set(GAMES.BLACK_PLAYER_ID, game.blackPlayer.value)
+                .set(GAMES.WHITE_PLAYER_ID, game.whitePlayer.id.value)
+                .set(GAMES.WHITE_USER_ID, game.whitePlayer.userId.value)
+                .set(GAMES.BLACK_PLAYER_ID, game.blackPlayer.id.value)
+                .set(GAMES.BLACK_USER_ID, game.blackPlayer.userId.value)
                 .set(GAMES.BOARD_FEN, game.board.toFen())
                 .set(GAMES.CURRENT_SIDE, game.currentSide.name)
                 .set(GAMES.STATUS, game.status.name)
@@ -96,7 +103,9 @@ class PostgresGameRepository(
         val gameRecord = dsl.select(
                 GAMES.ID,
                 GAMES.WHITE_PLAYER_ID,
+                GAMES.WHITE_USER_ID,
                 GAMES.BLACK_PLAYER_ID,
+                GAMES.BLACK_USER_ID,
                 GAMES.BOARD_FEN,
                 GAMES.CURRENT_SIDE,
                 GAMES.STATUS
@@ -120,13 +129,22 @@ class PostgresGameRepository(
             }
 
         // Reconstruct Game domain model
+        // Note: Both PlayerIds and UserIds are now persisted and loaded
+        val whitePlayerId = PlayerId.fromString(gameRecord.value2()!!)
+        val whiteUserId = UserId.fromString(gameRecord.value3()!!)
+        val blackPlayerId = PlayerId.fromString(gameRecord.value4()!!)
+        val blackUserId = UserId.fromString(gameRecord.value5()!!)
+
+        val whitePlayer = Player(whitePlayerId, whiteUserId, PlayerSide.WHITE)
+        val blackPlayer = Player(blackPlayerId, blackUserId, PlayerSide.BLACK)
+
         Game(
             id = GameId(gameRecord.value1()!!),
-            whitePlayer = com.gchess.shared.domain.model.PlayerId(gameRecord.value2()!!),
-            blackPlayer = com.gchess.shared.domain.model.PlayerId(gameRecord.value3()!!),
-            board = gameRecord.value4()!!.toChessPosition(),
-            currentSide = PlayerSide.valueOf(gameRecord.value5()!!),
-            status = GameStatus.valueOf(gameRecord.value6()!!),
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            board = gameRecord.value6()!!.toChessPosition(),
+            currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
+            status = GameStatus.valueOf(gameRecord.value8()!!),
             moveHistory = moves
         )
     }
@@ -143,7 +161,9 @@ class PostgresGameRepository(
         val gameRecords = dsl.select(
                 GAMES.ID,
                 GAMES.WHITE_PLAYER_ID,
+                GAMES.WHITE_USER_ID,
                 GAMES.BLACK_PLAYER_ID,
+                GAMES.BLACK_USER_ID,
                 GAMES.BOARD_FEN,
                 GAMES.CURRENT_SIDE,
                 GAMES.STATUS
@@ -168,13 +188,22 @@ class PostgresGameRepository(
                     Move(from, to, promotion)
                 }
 
+            // Reconstruct Player objects with persisted PlayerIds
+            val whitePlayerId = PlayerId.fromString(gameRecord.value2()!!)
+            val whiteUserId = UserId.fromString(gameRecord.value3()!!)
+            val blackPlayerId = PlayerId.fromString(gameRecord.value4()!!)
+            val blackUserId = UserId.fromString(gameRecord.value5()!!)
+
+            val whitePlayer = Player(whitePlayerId, whiteUserId, PlayerSide.WHITE)
+            val blackPlayer = Player(blackPlayerId, blackUserId, PlayerSide.BLACK)
+
             Game(
                 id = GameId(gameId),
-                whitePlayer = com.gchess.shared.domain.model.PlayerId(gameRecord.value2()!!),
-                blackPlayer = com.gchess.shared.domain.model.PlayerId(gameRecord.value3()!!),
-                board = gameRecord.value4()!!.toChessPosition(),
-                currentSide = PlayerSide.valueOf(gameRecord.value5()!!),
-                status = GameStatus.valueOf(gameRecord.value6()!!),
+                whitePlayer = whitePlayer,
+                blackPlayer = blackPlayer,
+                board = gameRecord.value6()!!.toChessPosition(),
+                currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
+                status = GameStatus.valueOf(gameRecord.value8()!!),
                 moveHistory = moves
             )
         }

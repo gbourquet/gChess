@@ -21,7 +21,7 @@
  */
 package com.gchess.user.application.usecase
 
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import com.gchess.user.domain.model.User
 import com.gchess.user.domain.port.PasswordHasher
 import com.gchess.user.domain.port.UserRepository
@@ -67,7 +67,7 @@ class RegisterUserUseCase(
 
         // Create the user
         val user = User(
-            id = PlayerId.generate(),
+            id = UserId.generate(),
             username = username,
             email = email,
             passwordHash = passwordHash

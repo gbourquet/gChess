@@ -110,25 +110,31 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
       - `blackPlayer` always controls `PlayerSide.BLACK`
       - `currentPlayer` is derived from `currentSide` (calculated property - no duplication)
       - Players cannot change sides during a game
+  - `Player`: Value object representing a player in a game
+    - `id: PlayerId` - Unique player identifier (ephemeral, ULID)
+    - `userId: UserId` - Reference to permanent user identity
+    - `side: PlayerSide` - WHITE or BLACK
+    - Factory method: `Player.create(userId, side)` generates PlayerId automatically
   - `ChessPosition`: Bitboard-based position representation
   - `Move`, `Position`, `Piece`, `PlayerSide`, `PieceType`, `GameStatus`, `CastlingRights`
 - `port/`: Interfaces defining contracts
   - `GameRepository`: Game persistence
-  - `PlayerExistenceChecker`: **ACL port** for player validation (Anti-Corruption Layer)
 - `service/`: Domain services
   - `ChessRules`: Interface defining chess rules
   - `StandardChessRules`: FIDE-compliant implementation using bitboard techniques
 - No dependencies on external frameworks or User context - pure business logic
+- **IMPORTANT**: Chess context NEVER manipulates UserId in use cases - only Player objects
 
 **Application Layer** (`com.gchess.chess.application`):
 - `usecase/`: Application use cases orchestrating domain logic
   - `CreateGameUseCase`: Creates a new chess game
-    - Validates both players exist via `PlayerExistenceChecker` (ACL)
-    - Validates players are different
+    - Receives two `Player` objects (created by caller, typically Matchmaking)
+    - Validates players are different (by PlayerId)
     - Returns `Result<Game>` for error handling
+    - **NO user validation** - trusts caller (Matchmaking validates users)
   - `GetGameUseCase`: Retrieves a game by ID
   - `MakeMoveUseCase`: Validates player turn and executes a move
-    - Validates player exists via `PlayerExistenceChecker`
+    - Receives a `Player` object (created by GameRoutes from JWT userId)
     - Validates it's the player's turn using `Game.isPlayerTurn()`
     - Validates move is legal via `ChessRules`
 - Depends only on Chess domain layer and Shared Kernel
@@ -137,8 +143,15 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 - `adapter/driver/`: Entry points (REST API routes)
   - `GameRoutes.kt`: HTTP endpoints for game operations
     - **Protected routes** (require JWT authentication):
-      - `POST /api/games` - Create new game
-      - `POST /api/games/{id}/moves` - Make a move (playerId extracted from JWT)
+      - `POST /api/games` - Create new game (accepts whiteUserId, blackUserId)
+        - Extracts userId from JWT
+        - Creates Player objects with `Player.create(userId, side)`
+        - Calls `CreateGameUseCase` with Player objects
+      - `POST /api/games/{id}/moves` - Make a move
+        - Extracts userId from JWT
+        - Finds player in game by userId
+        - Creates Player object for validation
+        - Calls `MakeMoveUseCase` with Player object
     - **Public routes**:
       - `GET /api/games/{id}` - Get game state
   - `dto/`: Data Transfer Objects for JSON serialization (GameDTO, ChessPositionDTO, MoveDTO)
@@ -147,23 +160,23 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
     - Persists games and move history with transactions
     - Uses FEN notation for board state serialization
     - Wraps jOOQ calls in `withContext(Dispatchers.IO)` for coroutines
-  - `UserContextPlayerChecker`: **Anti-Corruption Layer** adapter
-    - Implements `PlayerExistenceChecker` port
-    - Calls `GetUserUseCase` from User context
-    - Fail-fast strategy: propagates errors immediately
-    - Maintains bounded context isolation
+    - Stores both PlayerId (ephemeral) and UserId (permanent) for each player
 
 #### User Bounded Context (`com.gchess.user`)
 
 **Domain Layer** (`com.gchess.user.domain`):
 - `model/`: User entities and value objects
-  - `User`: User aggregate with id, username, email, passwordHash
+  - `User`: User aggregate representing permanent user identity
+    - `id: UserId` - Unique user identifier (ULID, permanent across all games)
+    - `username: String` - Unique username (min 3 chars)
+    - `email: String` - Unique email
+    - `passwordHash: String` - BCrypt hashed password
     - Business rule validations (username length, email format)
     - `withMaskedPassword()` method for safe display
   - `Credentials`: Value object for authentication
     - Overrides `toString()` to mask password
 - `port/`: Interfaces defining contracts
-  - `UserRepository`: User persistence with query methods (by username, email, ID)
+  - `UserRepository`: User persistence with query methods (by username, email, UserId)
   - `PasswordHasher`: Password hashing abstraction (decouples domain from BCrypt)
 - No dependencies on external frameworks or Chess context - pure business logic
 
@@ -172,12 +185,12 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
   - `RegisterUserUseCase`: User registration
     - Validates username/email uniqueness
     - Enforces password strength (minimum 8 characters)
-    - Generates ULID for PlayerId
+    - Generates ULID for UserId (permanent identity)
     - Returns `Result<User>` for error handling
   - `LoginUseCase`: User authentication
     - Validates credentials via `PasswordHasher.verify()`
     - Returns `Result<User>` (success) or failure
-  - `GetUserUseCase`: Retrieve user by ID
+  - `GetUserUseCase`: Retrieve user by UserId
 - Depends only on User domain layer and Shared Kernel
 
 **Infrastructure Layer** (`com.gchess.user.infrastructure`):
@@ -200,39 +213,46 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 
 **Domain Layer** (`com.gchess.matchmaking.domain`):
 - `model/`: Core matchmaking entities
-  - `QueueEntry`: Value object for players in matchmaking queue
-    - `playerId: PlayerId` - Player identifier
-    - `joinedAt: Instant` - Timestamp when player joined (FIFO ordering)
+  - `QueueEntry`: Value object for users in matchmaking queue
+    - `userId: UserId` - User identifier (permanent identity)
+    - `joinedAt: Instant` - Timestamp when user joined (FIFO ordering)
   - `Match`: Entity representing successful match with TTL
-    - `whitePlayerId: PlayerId` - Player assigned white pieces
-    - `blackPlayerId: PlayerId` - Player assigned black pieces
+    - `whiteUserId: UserId` - User assigned white pieces
+    - `blackUserId: UserId` - User assigned black pieces
     - `gameId: GameId` - Created game identifier
     - `matchedAt: Instant` - When match was created
     - `expiresAt: Instant` - When match expires (default: 5 minutes TTL)
     - `isExpired()` method for TTL validation
   - `MatchmakingStatus`: Enum (WAITING, MATCHED)
 - `port/`: Interfaces defining contracts
-  - `MatchmakingQueue`: FIFO queue operations (add, remove, findMatch)
-  - `MatchRepository`: Match persistence (save, find, delete expired)
+  - `MatchmakingQueue`: FIFO queue operations (add, remove, findMatch) - uses UserId
+  - `MatchRepository`: Match persistence (save, find, delete expired) - stores UserId
   - `GameCreator`: **ACL port** for Chess context game creation
-  - Reuses `PlayerExistenceChecker` from Chess context (port sharing)
+    - Signature: `createGame(whitePlayer: Player, blackPlayer: Player): Result<GameId>`
+    - Receives Player objects (not just IDs) to maintain Chess context isolation
+  - `UserExistenceChecker`: **ACL port** for user validation
+    - Signature: `exists(userId: UserId): Boolean`
 - No dependencies on external frameworks or other contexts - pure business logic
 
 **Application Layer** (`com.gchess.matchmaking.application`):
 - `usecase/`: Matchmaking orchestration use cases
   - `JoinMatchmakingUseCase`: Main matchmaking orchestrator
-    - Validates player exists via `PlayerExistenceChecker` (ACL)
-    - Checks player not already in queue or matched
+    - Validates user exists via `UserExistenceChecker` (ACL)
+    - Checks user not already in queue or matched
     - Adds to queue, attempts to find match
-    - If match found: creates game automatically, assigns colors randomly (50/50)
+    - If match found: delegates to `CreateGameFromMatchUseCase`
     - Returns `MatchmakingResult` (WAITING or MATCHED with game details)
-  - `GetMatchStatusUseCase`: Check player's matchmaking status
+  - `GetMatchStatusUseCase`: Check user's matchmaking status
     - Returns WAITING (with queue position), MATCHED (with gameId + color), or NOT_FOUND
-  - `LeaveMatchmakingUseCase`: Remove player from queue
-    - Returns boolean indicating if player was removed
-  - `CreateGameFromMatchUseCase`: Create game with random color assignment
-    - Uses `GameCreator` port (ACL to Chess context)
-    - 50/50 random assignment of WHITE/BLACK
+  - `LeaveMatchmakingUseCase`: Remove user from queue
+    - Returns boolean indicating if user was removed
+  - `CreateGameFromMatchUseCase`: **CRITICAL** - Creates game with Player objects
+    - Step 1: Validates both users exist via `UserExistenceChecker`
+    - Step 2: Randomly assigns colors (50/50) to user1/user2
+    - Step 3: **Creates Player objects** with `Player.create(userId, side)` (generates PlayerId)
+    - Step 4: Calls `GameCreator.createGame(whitePlayer, blackPlayer)` (ACL to Chess)
+    - Step 5: Creates Match entity with whiteUserId, blackUserId, gameId
+    - This is the ONLY place where Player objects are created for matchmaking
   - `CleanupExpiredMatchesUseCase`: Remove expired matches (TTL enforcement)
 - `MatchmakingResult`: Sealed class for result types (NotFound, Waiting, Matched)
 - Depends only on Matchmaking domain, shared ports, and Shared Kernel
@@ -241,8 +261,9 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 - `adapter/driver/`: Entry points (REST API routes)
   - `MatchmakingRoutes.kt`: Matchmaking endpoints (**all require JWT authentication**)
     - `POST /api/matchmaking/queue` - Join matchmaking queue
+      - Extracts userId from JWT token
       - Returns WAITING (solo) or MATCHED (if opponent found)
-      - Automatic game creation on match
+      - Automatic game creation on match (with Player objects created)
     - `DELETE /api/matchmaking/queue` - Leave matchmaking queue
     - `GET /api/matchmaking/status` - Poll for matchmaking status
       - Clients should poll every 2-3 seconds for match updates
@@ -252,20 +273,34 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
     - Uses `ConcurrentLinkedQueue` for queue + `ConcurrentHashMap` for index
     - `ReentrantLock` for race condition protection
     - In-memory design optimal for volatile, short-lived queue data
+    - Stores UserId (permanent identity)
   - `PostgresMatchRepository`: PostgreSQL match storage using jOOQ
     - Type-safe SQL queries via jOOQ DSL
-    - Indexed lookups by player ID
+    - Indexed lookups by userId (permanent identity)
     - TTL enforcement with automatic expiration
+    - Stores whiteUserId/blackUserId
   - `ChessContextGameCreator`: **Anti-Corruption Layer** adapter
     - Implements `GameCreator` port
-    - Calls `CreateGameUseCase` from Chess context
-    - Translates between contexts (GameId extraction)
-  - Reuses `UserContextPlayerChecker` via dependency injection
+    - Receives `Player` objects from CreateGameFromMatchUseCase
+    - Calls `CreateGameUseCase.execute(whitePlayer, blackPlayer)` from Chess context
+    - Extracts GameId from result
+  - `UserContextUserChecker`: **Anti-Corruption Layer** adapter
+    - Implements `UserExistenceChecker` port
+    - Calls `GetUserUseCase` from User context
+    - Returns true if user exists, false otherwise
 
 #### Shared Kernel (`com.gchess.shared`)
 
 - `domain/model/`: Common value objects shared across contexts
+  - `UserId`: ULID-based user identifier (value class)
+    - **Permanent identity** - same across all games for a user
+    - Used by: User context (user.id), Matchmaking context (queue, matches), Chess infrastructure (GameRoutes)
+    - **NEVER used directly in Chess use cases** - only in infrastructure layer
   - `PlayerId`: ULID-based player identifier (value class)
+    - **Ephemeral identity** - unique per game participation
+    - Generated when creating a Player object via `Player.create(userId, side)`
+    - Used by: Chess context (player.id in games), persisted with games
+    - Represents a specific participation in a game (not the user's permanent identity)
   - `GameId`: ULID-based game identifier (value class)
 - **Why ULID?**
   - Lexicographically sortable (time-ordered)
@@ -285,32 +320,41 @@ The codebase follows **Domain-Driven Design** with clearly separated **bounded c
 - `KoinModule.kt`: Dependency injection wiring for all contexts
   - **Database Layer**: DataSource, DSLContext (shared across contexts)
   - **Chess Context** dependencies (PostgreSQL repositories, services, use cases)
+    - No ACL dependencies (Chess is now fully isolated from User context)
   - **User Context** dependencies (PostgreSQL repositories, services, use cases)
   - **Matchmaking Context** dependencies (in-memory queue, PostgreSQL repositories, use cases)
   - **Anti-Corruption Layer** wiring:
-    - `PlayerExistenceChecker` → `UserContextPlayerChecker` (Chess → User)
-    - `GameCreator` → `ChessContextGameCreator` (Matchmaking → Chess)
+    - `GameCreator` → `ChessContextGameCreator` (Matchmaking → Chess, passes Player objects)
+    - `UserExistenceChecker` → `UserContextUserChecker` (Matchmaking → User, validates users)
 - `JwtConfig.kt`: JWT token generation and validation
   - HMAC256 algorithm
   - 24-hour token validity (configurable)
-  - Embeds `playerId` claim in token
+  - Embeds `userId` claim in token (permanent user identity)
   - Configuration via environment variables (JWT_SECRET, JWT_VALIDITY_MS)
 
 ### Key Design Patterns
 
 - **Bounded Contexts**: Three contexts (Chess, User, Matchmaking) with clear boundaries (see CONTEXT_MAP.md)
-- **Shared Kernel**: Common value objects (PlayerId, GameId) shared across all contexts
-- **Anti-Corruption Layer (ACL)**: Multiple ACL adapters protect context isolation
-  - `UserContextPlayerChecker`: Chess → User (player validation)
-  - `ChessContextGameCreator`: Matchmaking → Chess (game creation)
+- **Shared Kernel**: Common value objects (UserId, PlayerId, GameId) shared across all contexts
+  - **UserId**: Permanent user identity (used by User, Matchmaking, Chess infrastructure)
+  - **PlayerId**: Ephemeral player identity per game (generated in Chess domain)
+  - **GameId**: Game identifier
+- **Anti-Corruption Layer (ACL)**: ACL adapters protect context isolation
+  - `ChessContextGameCreator`: Matchmaking → Chess (game creation with Player objects)
+    - Translates from (userId1, userId2, colors) to (Player, Player)
+    - Maintains Chess isolation: Chess never sees UserId in use cases
+  - `UserContextUserChecker`: Matchmaking → User (user validation)
+    - Validates user existence before matchmaking
   - Domain defines ports (what it needs), infrastructure provides adapters (how to get it)
   - Fail-fast strategy for consistency
-- **Port Reuse**: Matchmaking reuses `PlayerExistenceChecker` port from Chess domain
-  - Acceptable trade-off: avoids port duplication while maintaining isolation
-  - Both contexts validate players through the same contract
+- **Player Object Pattern**: Separation of User (permanent) from Player (game participation)
+  - **User**: Permanent identity across all games (id: UserId)
+  - **Player**: Participation in specific game (id: PlayerId, userId: UserId, side: PlayerSide)
+  - **Player creation responsibility**: Matchmaking and GameRoutes create Player objects
+  - **Chess isolation**: Chess use cases NEVER manipulate UserId - only Player objects
 - **Hexagonal Architecture**: Ports and adapters within each bounded context
 - **Domain Services**: Business logic that doesn't belong to a single entity (e.g., ChessRules)
-- **Value Objects**: Immutable objects defined by their attributes (e.g., CastlingRights, Position, Move, QueueEntry, Match)
+- **Value Objects**: Immutable objects defined by their attributes (e.g., Player, CastlingRights, Position, Move, QueueEntry, Match)
 - **Repository Pattern**: Abstraction for data persistence
 - **Use Case Pattern**: Each user action is a dedicated class
 - **Dependency Inversion**: Domain defines interfaces; infrastructure implements
@@ -338,12 +382,17 @@ HTTP Request (with JWT)
 
 - **Game**: Complete game state including ChessPosition, players, current side, status, and move history
   - `id: GameId` - Unique game identifier (ULID)
-  - `whitePlayer: PlayerId` - White player identifier
-  - `blackPlayer: PlayerId` - Black player identifier
+  - `whitePlayer: Player` - White player (contains PlayerId, UserId, PlayerSide.WHITE)
+  - `blackPlayer: Player` - Black player (contains PlayerId, UserId, PlayerSide.BLACK)
   - `currentSide: PlayerSide` - Which side is to move (WHITE or BLACK)
-  - `currentPlayer: PlayerId` - Calculated property (derived from currentSide)
+  - `currentPlayer: Player` - Calculated property (derived from currentSide)
   - `status: GameStatus` - IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW
   - `moveHistory: List<Move>` - All moves played
+- **Player**: Value object representing a player's participation in a game
+  - `id: PlayerId` - Unique player identifier (ULID, ephemeral per game)
+  - `userId: UserId` - Reference to permanent user identity
+  - `side: PlayerSide` - WHITE or BLACK
+  - Factory method: `Player.create(userId, side)` generates PlayerId automatically
 - **Position**: Chess board position (file: 0-7, rank: 0-7), supports algebraic notation (e.g., "e4")
 - **Piece**: Chess piece with type, color, and movement tracking
 - **ChessPosition**: Bitboard-based chess position representation using 64-bit integers for efficient board state and move generation. Supports FEN notation import/export, castling rights, en passant tracking, and halfmove/fullmove counters
@@ -355,8 +404,8 @@ HTTP Request (with JWT)
 
 ### User Context
 
-- **User**: User aggregate
-  - `id: PlayerId` - Unique user identifier (ULID)
+- **User**: User aggregate representing permanent user identity
+  - `id: UserId` - Unique user identifier (ULID, permanent across all games)
   - `username: String` - Unique username (min 3 chars)
   - `email: String` - Unique email
   - `passwordHash: String` - BCrypt hashed password (never exposed in DTOs)
@@ -365,11 +414,11 @@ HTTP Request (with JWT)
 ### Matchmaking Context
 
 - **QueueEntry**: Value object for queue management
-  - `playerId: PlayerId` - Player in queue
+  - `userId: UserId` - User in queue (permanent identity)
   - `joinedAt: Instant` - Join timestamp (for FIFO ordering)
 - **Match**: Entity representing a successful match
-  - `whitePlayerId: PlayerId` - Player assigned WHITE
-  - `blackPlayerId: PlayerId` - Player assigned BLACK
+  - `whiteUserId: UserId` - User assigned WHITE (permanent identity)
+  - `blackUserId: UserId` - User assigned BLACK (permanent identity)
   - `gameId: GameId` - Created game identifier
   - `matchedAt: Instant` - Match creation time
   - `expiresAt: Instant` - Expiration time (TTL)
@@ -377,14 +426,15 @@ HTTP Request (with JWT)
   - **Default TTL**: 5 minutes
 - **MatchmakingStatus**: WAITING, MATCHED (enum)
 - **MatchmakingResult**: Sealed class for use case results
-  - `NotFound`: Player not in queue or matched
-  - `Waiting(queuePosition: Int)`: Player in queue at position
+  - `NotFound`: User not in queue or matched
+  - `Waiting(queuePosition: Int)`: User in queue at position
   - `Matched(gameId: GameId, yourColor: PlayerSide)`: Match found with game details
 - **PlayerSide**: WHITE or BLACK (reused from Chess context for color assignment)
 
 ### Shared Kernel
 
-- **PlayerId**: ULID-based identifier for players (value class)
+- **UserId**: ULID-based identifier for users (value class) - **permanent identity**
+- **PlayerId**: ULID-based identifier for players (value class) - **ephemeral per game**
 - **GameId**: ULID-based identifier for games (value class)
 
 ## Bitboard Architecture
@@ -485,56 +535,113 @@ The `StandardChessRules` domain service implements:
 
 ## Anti-Corruption Layer (ACL)
 
-The ACL pattern protects the Chess context from changes in the User context:
+The ACL pattern protects context isolation by translating between bounded contexts:
 
-### How It Works
+### ACL 1: Matchmaking → Chess (Game Creation)
 
-1. **Port Definition** (Chess Domain):
-   ```kotlin
-   interface PlayerExistenceChecker {
-       suspend fun exists(playerId: PlayerId): Boolean
-   }
-   ```
-   - Chess domain defines what it needs
-   - No knowledge of User context
+**Port Definition** (Matchmaking Domain):
+```kotlin
+interface GameCreator {
+    suspend fun createGame(whitePlayer: Player, blackPlayer: Player): Result<GameId>
+}
+```
+- Matchmaking defines what it needs from Chess
+- Receives **Player objects** (not just UserIds)
+- Maintains Chess isolation: Chess never sees UserId in use cases
 
-2. **Adapter Implementation** (Chess Infrastructure):
-   ```kotlin
-   class UserContextPlayerChecker(
-       private val getUserUseCase: GetUserUseCase
-   ) : PlayerExistenceChecker {
-       override suspend fun exists(playerId: PlayerId): Boolean {
-           val user = getUserUseCase.execute(playerId)
-           return user != null
-       }
-   }
-   ```
-   - Translates Chess needs into User context calls
-   - Fail-fast strategy: propagates errors immediately
+**Adapter Implementation** (Matchmaking Infrastructure):
+```kotlin
+class ChessContextGameCreator(
+    private val createGameUseCase: CreateGameUseCase
+) : GameCreator {
+    override suspend fun createGame(whitePlayer: Player, blackPlayer: Player): Result<GameId> {
+        val gameResult = createGameUseCase.execute(whitePlayer, blackPlayer)
+        return gameResult.map { game -> game.id }
+    }
+}
+```
+- Translates from Matchmaking to Chess context
+- Passes Player objects directly (no translation needed)
+- Extracts GameId from result
 
-3. **Usage** (Chess Application):
-   ```kotlin
-   class CreateGameUseCase(
-       private val gameRepository: GameRepository,
-       private val playerExistenceChecker: PlayerExistenceChecker // ACL port
-   ) {
-       suspend fun execute(whitePlayerId: PlayerId, blackPlayerId: PlayerId): Result<Game> {
-           // Validate players exist via ACL
-           if (!playerExistenceChecker.exists(whitePlayerId)) {
-               return Result.failure(Exception("White player does not exist"))
-           }
-           // ...
-       }
-   }
-   ```
+**Usage** (Matchmaking Application):
+```kotlin
+class CreateGameFromMatchUseCase(
+    private val gameCreator: GameCreator,
+    private val userExistenceChecker: UserExistenceChecker
+) {
+    suspend fun execute(user1Id: UserId, user2Id: UserId): Result<Match> {
+        // Step 1: Validate users exist
+        if (!userExistenceChecker.exists(user1Id)) { ... }
+
+        // Step 2: Randomly assign colors
+        val (whiteUserId, blackUserId) = if (random.nextBoolean()) {
+            Pair(user1Id, user2Id)
+        } else {
+            Pair(user2Id, user1Id)
+        }
+
+        // Step 3: CREATE PLAYER OBJECTS (critical responsibility)
+        val whitePlayer = Player.create(whiteUserId, PlayerSide.WHITE)
+        val blackPlayer = Player.create(blackUserId, PlayerSide.BLACK)
+
+        // Step 4: Call Chess via ACL with Player objects
+        val gameResult = gameCreator.createGame(whitePlayer, blackPlayer)
+
+        // Step 5: Create Match
+        return gameResult.map { gameId ->
+            Match.create(whiteUserId, blackUserId, gameId)
+        }
+    }
+}
+```
+
+### ACL 2: Matchmaking → User (User Validation)
+
+**Port Definition** (Matchmaking Domain):
+```kotlin
+interface UserExistenceChecker {
+    suspend fun exists(userId: UserId): Boolean
+}
+```
+- Matchmaking defines what it needs from User context
+- Simple validation: does user exist?
+
+**Adapter Implementation** (Matchmaking Infrastructure):
+```kotlin
+class UserContextUserChecker(
+    private val getUserUseCase: GetUserUseCase
+) : UserExistenceChecker {
+    override suspend fun exists(userId: UserId): Boolean {
+        val user = getUserUseCase.execute(userId)
+        return user != null
+    }
+}
+```
+- Translates Matchmaking needs into User context calls
+- Fail-fast strategy: returns boolean
+
+### Chess Context Isolation
+
+**IMPORTANT**: Chess context is now **completely isolated** from User context:
+
+- ✅ Chess **domain** never imports UserId
+- ✅ Chess **use cases** never manipulate UserId - only Player objects
+- ✅ Chess **infrastructure** (GameRoutes) creates Player objects from JWT userId
+- ✅ No ACL from Chess to User - Chess has zero dependencies on User context
+
+**Player Object Creation Points**:
+1. **Matchmaking**: `CreateGameFromMatchUseCase` creates Players (random color assignment)
+2. **GameRoutes**: Creates Player for move validation (from JWT + game lookup)
 
 ### Benefits
 
-- ✅ Chess context remains independent of User context
+- ✅ **Chess is fully isolated** - can be deployed as separate microservice
 - ✅ User context can change without affecting Chess domain
-- ✅ Clear boundary between contexts
+- ✅ Clear boundaries between all contexts
 - ✅ Easy to replace User context with external service later
-- ✅ Testable (can mock PlayerExistenceChecker in Chess tests)
+- ✅ Testable (can mock ACL ports in tests)
+- ✅ **Player Object Pattern** enforces User/Player separation
 
 ## Security
 
@@ -543,16 +650,18 @@ The ACL pattern protects the Chess context from changes in the User context:
 - **Token Generation**: On successful login, JWT token is generated with:
   - Issuer: "gchess"
   - Audience: "gchess-users"
-  - Claim: `playerId` (ULID of authenticated user)
+  - Claim: `userId` (ULID of authenticated user - **permanent identity**)
   - Expiration: 24 hours
   - Algorithm: HMAC256
 - **Token Validation**: Ktor's JWT authentication plugin validates:
   - Signature (HMAC256)
   - Issuer and audience
   - Expiration time
-  - Presence of `playerId` claim
-- **Protected Routes**: Chess game operations require valid JWT in `Authorization: Bearer <token>` header
-- **Player ID Extraction**: `playerId` is extracted from validated JWT token (cannot be spoofed)
+  - Presence of `userId` claim
+- **Protected Routes**: Chess game operations and matchmaking require valid JWT in `Authorization: Bearer <token>` header
+- **User ID Extraction**: `userId` is extracted from validated JWT token (cannot be spoofed)
+  - GameRoutes uses userId to create Player objects for move validation
+  - MatchmakingRoutes uses userId for queue operations
 
 ### Password Hashing
 
@@ -611,13 +720,10 @@ The project uses **ArchUnit** to enforce architecture rules automatically.
 **ACL Enforcement**:
 - ✅ Only infrastructure layer can cross context boundaries
 - ✅ ACL adapters reside in infrastructure layer:
-  - `UserContextPlayerChecker` (Chess → User)
+  - `UserContextUserChecker` (Matchmaking → User)
   - `ChessContextGameCreator` (Matchmaking → Chess)
+- ✅ Chess has NO ACL dependencies (fully isolated)
 - ✅ Domain and application layers remain isolated
-
-**Port Reuse**:
-- ✅ Matchmaking reuses `PlayerExistenceChecker` port from Chess domain
-- ✅ Acceptable trade-off to avoid port duplication while maintaining isolation
 
 **Shared Kernel**:
 - ✅ Shared Kernel contains only value objects (no services/use cases)

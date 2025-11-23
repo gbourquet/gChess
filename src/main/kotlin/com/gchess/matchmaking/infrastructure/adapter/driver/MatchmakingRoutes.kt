@@ -21,12 +21,12 @@
  */
 package com.gchess.matchmaking.infrastructure.adapter.driver
 
+import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.matchmaking.application.usecase.GetMatchStatusUseCase
 import com.gchess.matchmaking.application.usecase.JoinMatchmakingUseCase
 import com.gchess.matchmaking.application.usecase.LeaveMatchmakingUseCase
 import com.gchess.matchmaking.infrastructure.adapter.driver.dto.MatchmakingStatusDTO
 import com.gchess.matchmaking.infrastructure.adapter.driver.dto.toDTO
-import com.gchess.shared.domain.model.PlayerId
 import io.bkbn.kompendium.core.metadata.DeleteInfo
 import io.bkbn.kompendium.core.metadata.GetInfo
 import io.bkbn.kompendium.core.metadata.PostInfo
@@ -127,30 +127,17 @@ fun Application.configureMatchmakingRoutes() {
                     }
 
                     post {
-                        // Extract player ID from JWT token
+                        // Extract user ID from JWT token
                         val principal = call.principal<JWTPrincipal>()
                             ?: return@post call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("error" to "Missing authentication")
                             )
 
-                        val playerIdString = principal.payload.getClaim("playerId").asString()
-                            ?: return@post call.respond(
-                                HttpStatusCode.Unauthorized,
-                                mapOf("error" to "Invalid token: missing playerId")
-                            )
-
-                        val playerId = try {
-                            PlayerId.fromString(playerIdString)
-                        } catch (e: Exception) {
-                            return@post call.respond(
-                                HttpStatusCode.BadRequest,
-                                mapOf("error" to "Invalid playerId format")
-                            )
-                        }
+                        val userId = JwtConfig.extractUserId(principal.payload)
 
                         // Execute join matchmaking use case
-                        val result = joinMatchmakingUseCase.execute(playerId)
+                        val result = joinMatchmakingUseCase.execute(userId)
 
                         result.fold(
                             onSuccess = { matchmakingResult ->
@@ -170,30 +157,17 @@ fun Application.configureMatchmakingRoutes() {
                     }
 
                     delete {
-                        // Extract player ID from JWT token
+                        // Extract user ID from JWT token
                         val principal = call.principal<JWTPrincipal>()
                             ?: return@delete call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("error" to "Missing authentication")
                             )
 
-                        val playerIdString = principal.payload.getClaim("playerId").asString()
-                            ?: return@delete call.respond(
-                                HttpStatusCode.Unauthorized,
-                                mapOf("error" to "Invalid token: missing playerId")
-                            )
-
-                        val playerId = try {
-                            PlayerId.fromString(playerIdString)
-                        } catch (e: Exception) {
-                            return@delete call.respond(
-                                HttpStatusCode.BadRequest,
-                                mapOf("error" to "Invalid playerId format")
-                            )
-                        }
+                        val userId = JwtConfig.extractUserId(principal.payload)
 
                         // Execute leave matchmaking use case
-                        val result = leaveMatchmakingUseCase.execute(playerId)
+                        val result = leaveMatchmakingUseCase.execute(userId)
 
                         result.fold(
                             onSuccess = { removed ->
@@ -245,30 +219,17 @@ fun Application.configureMatchmakingRoutes() {
                     }
 
                     get {
-                        // Extract player ID from JWT token
+                        // Extract user ID from JWT token
                         val principal = call.principal<JWTPrincipal>()
                             ?: return@get call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("error" to "Missing authentication")
                             )
 
-                        val playerIdString = principal.payload.getClaim("playerId").asString()
-                            ?: return@get call.respond(
-                                HttpStatusCode.Unauthorized,
-                                mapOf("error" to "Invalid token: missing playerId")
-                            )
-
-                        val playerId = try {
-                            PlayerId.fromString(playerIdString)
-                        } catch (e: Exception) {
-                            return@get call.respond(
-                                HttpStatusCode.BadRequest,
-                                mapOf("error" to "Invalid playerId format")
-                            )
-                        }
+                        val userId = JwtConfig.extractUserId(principal.payload)
 
                         // Execute get match status use case
-                        val matchmakingResult = getMatchStatusUseCase.execute(playerId)
+                        val matchmakingResult = getMatchStatusUseCase.execute(userId)
 
                         call.respond(HttpStatusCode.OK, matchmakingResult.toDTO())
                     }

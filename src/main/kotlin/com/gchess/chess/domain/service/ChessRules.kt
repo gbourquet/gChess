@@ -22,7 +22,7 @@
 package com.gchess.chess.domain.service
 
 import com.gchess.chess.domain.model.ChessPosition
-import com.gchess.chess.domain.model.PlayerSide
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.model.Position
 

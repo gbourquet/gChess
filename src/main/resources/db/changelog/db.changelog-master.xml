@@ -8,4 +8,10 @@
     <!-- Schéma initial v1.0.0 -->
     <include file="db/changelog/changes/20251120215200-initial-schema.xml"/>
 
+    <!-- Refactoring User/Player separation -->
+    <include file="db/changelog/changes/20251123000000-rename-player-to-user-ids.xml"/>
+
+    <!-- Add persistent PlayerIds -->
+    <include file="db/changelog/changes/20251123120000-add-player-ids.xml"/>
+
 </databaseChangeLog>

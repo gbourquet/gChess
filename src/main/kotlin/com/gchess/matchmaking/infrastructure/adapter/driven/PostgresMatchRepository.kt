@@ -25,7 +25,7 @@ import com.gchess.infrastructure.persistence.jooq.tables.references.MATCHES
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.matchmaking.domain.port.MatchRepository
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
@@ -54,8 +54,8 @@ class PostgresMatchRepository(
     override suspend fun save(match: Match): Unit = withContext(Dispatchers.IO) {
         dsl.insertInto(MATCHES)
             .set(MATCHES.GAME_ID, match.gameId.value)
-            .set(MATCHES.WHITE_PLAYER_ID, match.whitePlayerId.value)
-            .set(MATCHES.BLACK_PLAYER_ID, match.blackPlayerId.value)
+            .set(MATCHES.WHITE_USER_ID, match.whiteUserId.value)
+            .set(MATCHES.BLACK_USER_ID, match.blackUserId.value)
             .set(MATCHES.MATCHED_AT, match.matchedAt.toLocalDateTime())
             .set(MATCHES.EXPIRES_AT, match.expiresAt.toLocalDateTime())
             .onConflict(MATCHES.GAME_ID)
@@ -63,24 +63,24 @@ class PostgresMatchRepository(
             .execute()
     }
 
-    override suspend fun findByPlayer(playerId: PlayerId): Match? = withContext(Dispatchers.IO) {
+    override suspend fun findByPlayer(userId: UserId): Match? = withContext(Dispatchers.IO) {
         dsl.select(
                 MATCHES.GAME_ID,
-                MATCHES.WHITE_PLAYER_ID,
-                MATCHES.BLACK_PLAYER_ID,
+                MATCHES.WHITE_USER_ID,
+                MATCHES.BLACK_USER_ID,
                 MATCHES.MATCHED_AT,
                 MATCHES.EXPIRES_AT
             )
             .from(MATCHES)
             .where(
-                MATCHES.WHITE_PLAYER_ID.eq(playerId.value)
-                    .or(MATCHES.BLACK_PLAYER_ID.eq(playerId.value))
+                MATCHES.WHITE_USER_ID.eq(userId.value)
+                    .or(MATCHES.BLACK_USER_ID.eq(userId.value))
             )
             .fetchOne()
             ?.let { record ->
                 Match(
-                    whitePlayerId = PlayerId(record.value2()!!),
-                    blackPlayerId = PlayerId(record.value3()!!),
+                    whiteUserId = UserId(record.value2()!!),
+                    blackUserId = UserId(record.value3()!!),
                     gameId = GameId(record.value1()!!),
                     matchedAt = record.value4()!!.toInstant(),
                     expiresAt = record.value5()!!.toInstant()
@@ -88,11 +88,11 @@ class PostgresMatchRepository(
             }
     }
 
-    override suspend fun delete(playerId: PlayerId): Unit = withContext(Dispatchers.IO) {
+    override suspend fun delete(userId: UserId): Unit = withContext(Dispatchers.IO) {
         dsl.deleteFrom(MATCHES)
             .where(
-                MATCHES.WHITE_PLAYER_ID.eq(playerId.value)
-                    .or(MATCHES.BLACK_PLAYER_ID.eq(playerId.value))
+                MATCHES.WHITE_USER_ID.eq(userId.value)
+                    .or(MATCHES.BLACK_USER_ID.eq(userId.value))
             )
             .execute()
     }

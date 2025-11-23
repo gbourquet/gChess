@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <!-- ============================================ -->
+    <!-- Add player IDs to games table                -->
+    <!-- ============================================ -->
+    <!--
+        This migration adds player ID columns to store persistent PlayerIds.
+
+        Now the games table will have both:
+        - white_user_id / black_user_id: Permanent user identity (UserId)
+        - white_player_id / black_player_id: Unique participation identity per game (PlayerId)
+
+        PlayerIds are no longer ephemeral - they are persisted and identify
+        a specific participation in a specific game.
+    -->
+
+    <changeSet id="20251123184300-001-add-player-ids-to-games" author="gchess">
+        <comment>Add white_player_id and black_player_id columns to games table</comment>
+
+        <!-- Precondition: This migration requires an empty games table OR will generate PlayerIds for existing games -->
+
+        <!-- Step 1: Add columns as nullable first -->
+        <addColumn tableName="games">
+            <column name="white_player_id" type="VARCHAR(26)"/>
+        </addColumn>
+
+        <addColumn tableName="games">
+            <column name="black_player_id" type="VARCHAR(26)"/>
+        </addColumn>
+
+        <!-- Step 2: For any existing games, generate PlayerIds from UserIds (development fallback) -->
+        <!-- In production, this should never run as games table should be empty during first deployment -->
+        <sql>
+            UPDATE games
+            SET white_player_id = white_user_id
+            WHERE white_player_id IS NULL;
+        </sql>
+
+        <sql>
+            UPDATE games
+            SET black_player_id = black_user_id
+            WHERE black_player_id IS NULL;
+        </sql>
+
+        <!-- Step 3: Make columns NOT NULL now that they have values -->
+        <addNotNullConstraint
+            tableName="games"
+            columnName="white_player_id"
+            columnDataType="VARCHAR(26)"/>
+
+        <addNotNullConstraint
+            tableName="games"
+            columnName="black_player_id"
+            columnDataType="VARCHAR(26)"/>
+
+        <!-- Step 4: Create indexes for player IDs -->
+        <createIndex tableName="games" indexName="idx_games_white_player_id">
+            <column name="white_player_id"/>
+        </createIndex>
+
+        <createIndex tableName="games" indexName="idx_games_black_player_id">
+            <column name="black_player_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

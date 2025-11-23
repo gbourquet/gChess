@@ -25,7 +25,7 @@ import org.koin.core.context.stopKoin
  * })
  * ```
  */
-abstract class DatabaseE2ETest(body: StringSpec.() -> Unit = {}) : StringSpec({
+abstract class DatabaseITest(body: StringSpec.() -> Unit = {}) : StringSpec({
     // Apply test body
     body()
 

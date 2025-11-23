@@ -22,7 +22,7 @@
 package com.gchess.user.infrastructure.adapter.driven
 
 import com.gchess.infrastructure.persistence.jooq.tables.references.USERS
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import com.gchess.user.domain.model.User
 import com.gchess.user.domain.port.UserRepository
 import kotlinx.coroutines.Dispatchers
@@ -67,14 +67,14 @@ class PostgresUserRepository(
         user
     }
 
-    override suspend fun findById(id: PlayerId): User? = withContext(Dispatchers.IO) {
+    override suspend fun findById(id: UserId): User? = withContext(Dispatchers.IO) {
         dsl.select(USERS.ID, USERS.USERNAME, USERS.EMAIL, USERS.PASSWORD_HASH)
             .from(USERS)
             .where(USERS.ID.eq(id.value))
             .fetchOne()
             ?.let { record ->
                 User(
-                    id = PlayerId(record.value1()!!),
+                    id = UserId(record.value1()!!),
                     username = record.value2()!!,
                     email = record.value3()!!,
                     passwordHash = record.value4()!!
@@ -89,7 +89,7 @@ class PostgresUserRepository(
             .fetchOne()
             ?.let { record ->
                 User(
-                    id = PlayerId(record.value1()!!),
+                    id = UserId(record.value1()!!),
                     username = record.value2()!!,
                     email = record.value3()!!,
                     passwordHash = record.value4()!!
@@ -104,7 +104,7 @@ class PostgresUserRepository(
             .fetchOne()
             ?.let { record ->
                 User(
-                    id = PlayerId(record.value1()!!),
+                    id = UserId(record.value1()!!),
                     username = record.value2()!!,
                     email = record.value3()!!,
                     passwordHash = record.value4()!!
@@ -128,7 +128,7 @@ class PostgresUserRepository(
         )
     }
 
-    override suspend fun delete(id: PlayerId): Unit = withContext(Dispatchers.IO) {
+    override suspend fun delete(id: UserId): Unit = withContext(Dispatchers.IO) {
         dsl.deleteFrom(USERS)
             .where(USERS.ID.eq(id.value))
             .execute()
@@ -140,7 +140,7 @@ class PostgresUserRepository(
             .fetch()
             .map { record ->
                 User(
-                    id = PlayerId(record.value1()!!),
+                    id = UserId(record.value1()!!),
                     username = record.value2()!!,
                     email = record.value3()!!,
                     passwordHash = record.value4()!!

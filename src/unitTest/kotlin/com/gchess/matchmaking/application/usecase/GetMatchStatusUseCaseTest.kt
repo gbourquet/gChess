@@ -1,10 +1,11 @@
 package com.gchess.matchmaking.application.usecase
 
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchRepository
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
 import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -20,7 +21,7 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val repository = InMemoryMatchRepository()
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         // When
         val result = useCase.execute(playerId)
@@ -35,7 +36,7 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val repository = InMemoryMatchRepository()
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
-        val playerId = PlayerId.generate()
+        val playerId = UserId.generate()
 
         queue.addPlayer(playerId)
 
@@ -54,9 +55,9 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
 
-        val player1 = PlayerId.generate()
-        val player2 = PlayerId.generate()
-        val player3 = PlayerId.generate()
+        val player1 = UserId.generate()
+        val player2 = UserId.generate()
+        val player3 = UserId.generate()
 
         queue.addPlayer(player1)
         delay(10)
@@ -82,14 +83,14 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
 
-        val whitePlayer = PlayerId.generate()
-        val blackPlayer = PlayerId.generate()
+        val whitePlayer = UserId.generate()
+        val blackPlayer = UserId.generate()
         val gameId = GameId.generate()
         val now = Clock.System.now()
 
         val match = Match(
-            whitePlayerId = whitePlayer,
-            blackPlayerId = blackPlayer,
+            whiteUserId = whitePlayer,
+            blackUserId = blackPlayer,
             gameId = gameId,
             matchedAt = now,
             expiresAt = now + 5.minutes
@@ -103,7 +104,7 @@ class GetMatchStatusUseCaseTest : FunSpec({
         // Then
         result.shouldBeInstanceOf<MatchmakingResult.Matched>()
         result.gameId shouldBe gameId
-        result.yourColor shouldBe MatchmakingResult.PlayerSide.WHITE
+        result.yourColor shouldBe PlayerSide.WHITE
     }
 
     test("execute should return Matched when player has a match as black") {
@@ -113,14 +114,14 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
 
-        val whitePlayer = PlayerId.generate()
-        val blackPlayer = PlayerId.generate()
+        val whitePlayer = UserId.generate()
+        val blackPlayer = UserId.generate()
         val gameId = GameId.generate()
         val now = Clock.System.now()
 
         val match = Match(
-            whitePlayerId = whitePlayer,
-            blackPlayerId = blackPlayer,
+            whiteUserId = whitePlayer,
+            blackUserId = blackPlayer,
             gameId = gameId,
             matchedAt = now,
             expiresAt = now + 5.minutes
@@ -134,7 +135,7 @@ class GetMatchStatusUseCaseTest : FunSpec({
         // Then
         result.shouldBeInstanceOf<MatchmakingResult.Matched>()
         result.gameId shouldBe gameId
-        result.yourColor shouldBe MatchmakingResult.PlayerSide.BLACK
+        result.yourColor shouldBe PlayerSide.BLACK
     }
 
     test("execute should cleanup expired matches before checking") {
@@ -144,14 +145,14 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
 
-        val playerId = PlayerId.generate()
-        val otherPlayer = PlayerId.generate()
+        val playerId = UserId.generate()
+        val otherPlayer = UserId.generate()
         val now = Clock.System.now()
 
         // Add expired match
         val expiredMatch = Match(
-            whitePlayerId = playerId,
-            blackPlayerId = otherPlayer,
+            whiteUserId = playerId,
+            blackUserId = otherPlayer,
             gameId = GameId.generate(),
             matchedAt = now - 10.minutes,
             expiresAt = now - 5.minutes
@@ -173,8 +174,8 @@ class GetMatchStatusUseCaseTest : FunSpec({
         val cleanupUseCase = CleanupExpiredMatchesUseCase(repository)
         val useCase = GetMatchStatusUseCase(queue, repository, cleanupUseCase)
 
-        val playerId = PlayerId.generate()
-        val otherPlayer = PlayerId.generate()
+        val playerId = UserId.generate()
+        val otherPlayer = UserId.generate()
         val gameId = GameId.generate()
         val now = Clock.System.now()
 
@@ -182,8 +183,8 @@ class GetMatchStatusUseCaseTest : FunSpec({
         queue.addPlayer(playerId)
 
         val match = Match(
-            whitePlayerId = playerId,
-            blackPlayerId = otherPlayer,
+            whiteUserId = playerId,
+            blackUserId = otherPlayer,
             gameId = gameId,
             matchedAt = now,
             expiresAt = now + 5.minutes

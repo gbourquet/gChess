@@ -23,7 +23,7 @@ package com.gchess.matchmaking.infrastructure.adapter.driven
 
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.matchmaking.domain.port.MatchRepository
-import com.gchess.shared.domain.model.PlayerId
+import com.gchess.shared.domain.model.UserId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -32,34 +32,34 @@ import java.util.concurrent.ConcurrentHashMap
  * In-memory implementation of MatchRepository.
  *
  * This implementation:
- * - Stores matches indexed by player ID (2 entries per match: one for each player)
+ * - Stores matches indexed by user ID (2 entries per match: one for each user)
  * - Uses ConcurrentHashMap for thread-safe operations
  * - TTL (Time To Live) is managed by the Match entity itself via isExpired()
  * - Automatically removes expired matches on cleanup
  */
 class InMemoryMatchRepository : MatchRepository {
 
-    // Maps PlayerId to Match (2 entries per match: whitePlayer and blackPlayer)
-    private val matchesByPlayer = ConcurrentHashMap<PlayerId, Match>()
+    // Maps UserId to Match (2 entries per match: whiteUser and blackUser)
+    private val matchesByPlayer = ConcurrentHashMap<UserId, Match>()
 
     override suspend fun save(match: Match): Unit = withContext(Dispatchers.IO) {
-        // Save the match under both player IDs
-        matchesByPlayer[match.whitePlayerId] = match
-        matchesByPlayer[match.blackPlayerId] = match
+        // Save the match under both user IDs
+        matchesByPlayer[match.whiteUserId] = match
+        matchesByPlayer[match.blackUserId] = match
     }
 
-    override suspend fun findByPlayer(playerId: PlayerId): Match? = withContext(Dispatchers.IO) {
-        matchesByPlayer[playerId]
+    override suspend fun findByPlayer(userId: UserId): Match? = withContext(Dispatchers.IO) {
+        matchesByPlayer[userId]
     }
 
-    override suspend fun delete(playerId: PlayerId): Unit = withContext(Dispatchers.IO) {
-        // Find the match for this player
-        val match = matchesByPlayer[playerId]
+    override suspend fun delete(userId: UserId): Unit = withContext(Dispatchers.IO) {
+        // Find the match for this user
+        val match = matchesByPlayer[userId]
 
         if (match != null) {
-            // Remove both entries (white and black player)
-            matchesByPlayer.remove(match.whitePlayerId)
-            matchesByPlayer.remove(match.blackPlayerId)
+            // Remove both entries (white and black user)
+            matchesByPlayer.remove(match.whiteUserId)
+            matchesByPlayer.remove(match.blackUserId)
         }
     }
 
@@ -69,10 +69,10 @@ class InMemoryMatchRepository : MatchRepository {
             .filter { it.isExpired() }
             .distinctBy { it.gameId } // Avoid processing same match twice
 
-        // Delete each expired match (removes both player entries)
+        // Delete each expired match (removes both user entries)
         expiredMatches.forEach { match ->
-            matchesByPlayer.remove(match.whitePlayerId)
-            matchesByPlayer.remove(match.blackPlayerId)
+            matchesByPlayer.remove(match.whiteUserId)
+            matchesByPlayer.remove(match.blackUserId)
         }
     }
 }
