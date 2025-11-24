@@ -1,0 +1,431 @@
+asyncapi: 3.0.0
+
+info:
+  title: gChess WebSocket API
+  version: 1.0.0
+  description: |
+    Real-time WebSocket API for gChess chess application.
+
+    Provides real-time communication for:
+    - Matchmaking (instant match notifications)
+    - Gameplay (move execution, game state sync)
+    - Spectators (observe games in real-time)
+
+    **Authentication**: All WebSocket connections require JWT authentication.
+    The JWT token must be provided either as a query parameter (?token=...)
+    or in the Sec-WebSocket-Protocol header.
+
+    **Architecture**:
+    - Matchmaking: Indexed by UserId (permanent user identity)
+    - Gameplay: Indexed by PlayerId (per-game participation)
+    - Spectators: Indexed by UserId (observers, not participants)
+
+  contact:
+    name: Guillaume Bourquet
+    email: gbourquet@gmail.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  development:
+    host: localhost:8080
+    protocol: ws
+    description: Development server (WebSocket)
+  production:
+    host: gchess.example.com
+    protocol: wss
+    description: Production server (WebSocket Secure)
+
+channels:
+  matchmaking:
+    address: /ws/matchmaking
+    description: |
+      WebSocket channel for matchmaking.
+      Users join the matchmaking queue and receive instant notifications when a match is found.
+
+      **Authentication**: JWT required
+      **Connection scope**: One connection per UserId
+    messages:
+      AuthSuccess:
+        $ref: '#/components/messages/AuthSuccess'
+      JoinQueue:
+        $ref: '#/components/messages/JoinQueue'
+      QueuePositionUpdate:
+        $ref: '#/components/messages/QueuePositionUpdate'
+      MatchFound:
+        $ref: '#/components/messages/MatchFound'
+      MatchmakingError:
+        $ref: '#/components/messages/MatchmakingError'
+      Error:
+        $ref: '#/components/messages/Error'
+
+  game:
+    address: /ws/game/{gameId}
+    description: |
+      WebSocket channel for participating in a game.
+      Players send moves and receive game state updates in real-time.
+
+      **Authentication**: JWT required
+      **Connection scope**: One connection per PlayerId (participation)
+      **Multi-device**: A user can have multiple connections (different games)
+    parameters:
+      gameId:
+        description: Unique identifier of the game (ULID format)
+        example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+    messages:
+      AuthSuccess:
+        $ref: '#/components/messages/AuthSuccess'
+      MoveAttempt:
+        $ref: '#/components/messages/MoveAttempt'
+      MoveExecuted:
+        $ref: '#/components/messages/MoveExecuted'
+      MoveRejected:
+        $ref: '#/components/messages/MoveRejected'
+      GameStateSync:
+        $ref: '#/components/messages/GameStateSync'
+      PlayerDisconnected:
+        $ref: '#/components/messages/PlayerDisconnected'
+      PlayerReconnected:
+        $ref: '#/components/messages/PlayerReconnected'
+      Error:
+        $ref: '#/components/messages/Error'
+
+  spectate:
+    address: /ws/game/{gameId}/spectate
+    description: |
+      WebSocket channel for observing a game (read-only).
+      Spectators receive all game events but cannot send moves.
+
+      **Authentication**: JWT required
+      **Connection scope**: One connection per UserId (observer)
+      **Permissions**: Read-only (no client → server messages)
+    parameters:
+      gameId:
+        description: Unique identifier of the game to observe (ULID format)
+        example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+    messages:
+      AuthSuccess:
+        $ref: '#/components/messages/AuthSuccess'
+      GameStateSync:
+        $ref: '#/components/messages/GameStateSync'
+      MoveExecuted:
+        $ref: '#/components/messages/MoveExecuted'
+      PlayerDisconnected:
+        $ref: '#/components/messages/PlayerDisconnected'
+      PlayerReconnected:
+        $ref: '#/components/messages/PlayerReconnected'
+
+components:
+  messages:
+    # ========== Authentication Messages ==========
+    AuthSuccess:
+      summary: Authentication successful
+      description: Sent by server immediately after successful JWT validation
+      payload:
+        type: object
+        required: [type, userId]
+        properties:
+          type:
+            type: string
+            const: AuthSuccess
+          userId:
+            type: string
+            description: User ID (ULID format)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    AuthFailed:
+      summary: Authentication failed
+      description: Sent by server when JWT validation fails
+      payload:
+        type: object
+        required: [type, reason]
+        properties:
+          type:
+            type: string
+            const: AuthFailed
+          reason:
+            type: string
+            description: Reason for authentication failure
+            example: 'Invalid or expired token'
+
+    # ========== Matchmaking Messages ==========
+    JoinQueue:
+      summary: Join matchmaking queue
+      description: Client → Server. User requests to join the matchmaking queue
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: JoinQueue
+
+    QueuePositionUpdate:
+      summary: Queue position update
+      description: Server → Client. Current position in the matchmaking queue
+      payload:
+        type: object
+        required: [type, position]
+        properties:
+          type:
+            type: string
+            const: QueuePositionUpdate
+          position:
+            type: integer
+            description: Current position in queue (1-indexed)
+            minimum: 1
+            example: 1
+
+    MatchFound:
+      summary: Match found
+      description: |
+        Server → Client. Match found and game created.
+        Client should disconnect from matchmaking and connect to /ws/game/{gameId}
+      payload:
+        type: object
+        required: [type, gameId, yourColor, playerId]
+        properties:
+          type:
+            type: string
+            const: MatchFound
+          gameId:
+            type: string
+            description: ID of the created game (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          yourColor:
+            type: string
+            description: Color assigned to this player
+            enum: [WHITE, BLACK]
+            example: 'WHITE'
+          playerId:
+            type: string
+            description: PlayerId for this participation (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          opponentUserId:
+            type: string
+            description: Opponent's UserId (optional, for display)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    MatchmakingError:
+      summary: Matchmaking error
+      description: Server → Client. Error during matchmaking process
+      payload:
+        type: object
+        required: [type, code, message]
+        properties:
+          type:
+            type: string
+            const: MatchmakingError
+          code:
+            type: string
+            description: Error code
+            example: 'ALREADY_IN_QUEUE'
+          message:
+            type: string
+            description: Human-readable error message
+            example: 'User is already in the matchmaking queue'
+
+    # ========== Gameplay Messages ==========
+    MoveAttempt:
+      summary: Attempt to make a move
+      description: Client → Server. Player attempts to make a move
+      payload:
+        type: object
+        required: [type, from, to]
+        properties:
+          type:
+            type: string
+            const: MoveAttempt
+          from:
+            type: string
+            description: Starting position (algebraic notation)
+            pattern: '^[a-h][1-8]$'
+            example: 'e2'
+          to:
+            type: string
+            description: Destination position (algebraic notation)
+            pattern: '^[a-h][1-8]$'
+            example: 'e4'
+          promotion:
+            type: string
+            description: Piece to promote to (for pawn promotion)
+            enum: [QUEEN, ROOK, BISHOP, KNIGHT]
+            example: 'QUEEN'
+
+    MoveExecuted:
+      summary: Move executed successfully
+      description: |
+        Server → Client. Move validated and executed.
+        Broadcast to both players and all spectators.
+      payload:
+        type: object
+        required: [type, move, newPositionFen, gameStatus, currentSide]
+        properties:
+          type:
+            type: string
+            const: MoveExecuted
+          move:
+            $ref: '#/components/schemas/Move'
+          newPositionFen:
+            type: string
+            description: New board position in FEN notation
+            example: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1'
+          gameStatus:
+            type: string
+            description: Current game status
+            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW]
+            example: 'IN_PROGRESS'
+          currentSide:
+            type: string
+            description: Whose turn it is now
+            enum: [WHITE, BLACK]
+            example: 'BLACK'
+
+    MoveRejected:
+      summary: Move rejected (invalid)
+      description: |
+        Server → Client. Move validation failed.
+        Sent only to the player who attempted the move.
+      payload:
+        type: object
+        required: [type, reason]
+        properties:
+          type:
+            type: string
+            const: MoveRejected
+          reason:
+            type: string
+            description: Reason for rejection
+            example: 'Not your turn'
+
+    GameStateSync:
+      summary: Complete game state synchronization
+      description: |
+        Server → Client. Full game state.
+        Sent on connection, reconnection, or explicit request.
+      payload:
+        type: object
+        required: [type, gameId, positionFen, moveHistory, gameStatus, currentSide, whitePlayerId, blackPlayerId]
+        properties:
+          type:
+            type: string
+            const: GameStateSync
+          gameId:
+            type: string
+            description: Game ID (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          positionFen:
+            type: string
+            description: Current board position in FEN notation
+            example: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+          moveHistory:
+            type: array
+            description: List of all moves played
+            items:
+              $ref: '#/components/schemas/Move'
+          gameStatus:
+            type: string
+            description: Current game status
+            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW]
+            example: 'IN_PROGRESS'
+          currentSide:
+            type: string
+            description: Whose turn it is
+            enum: [WHITE, BLACK]
+            example: 'WHITE'
+          whitePlayerId:
+            type: string
+            description: PlayerId of white player (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          blackPlayerId:
+            type: string
+            description: PlayerId of black player (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    PlayerDisconnected:
+      summary: Player disconnected
+      description: Server → Client. A player disconnected from the game
+      payload:
+        type: object
+        required: [type, playerId]
+        properties:
+          type:
+            type: string
+            const: PlayerDisconnected
+          playerId:
+            type: string
+            description: PlayerId of the disconnected player (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    PlayerReconnected:
+      summary: Player reconnected
+      description: Server → Client. A player reconnected to the game
+      payload:
+        type: object
+        required: [type, playerId]
+        properties:
+          type:
+            type: string
+            const: PlayerReconnected
+          playerId:
+            type: string
+            description: PlayerId of the reconnected player (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    # ========== Common Messages ==========
+    Error:
+      summary: Generic error
+      description: Server → Client. Generic error message
+      payload:
+        type: object
+        required: [type, code, message]
+        properties:
+          type:
+            type: string
+            const: Error
+          code:
+            type: string
+            description: Error code
+            example: 'INVALID_MESSAGE'
+          message:
+            type: string
+            description: Human-readable error message
+            example: 'Failed to parse message'
+
+  schemas:
+    Move:
+      type: object
+      description: Represents a chess move
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          description: Starting position (algebraic notation)
+          pattern: '^[a-h][1-8]$'
+          example: 'e2'
+        to:
+          type: string
+          description: Destination position (algebraic notation)
+          pattern: '^[a-h][1-8]$'
+          example: 'e4'
+        promotion:
+          type: string
+          description: Piece to promote to (for pawn promotion)
+          enum: [QUEEN, ROOK, BISHOP, KNIGHT]
+          example: 'QUEEN'
+
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT authentication for WebSocket connections.
+
+        The JWT token must be provided in one of two ways:
+        1. Query parameter: ws://localhost:8080/ws/matchmaking?token=YOUR_JWT_TOKEN
+        2. Sec-WebSocket-Protocol header: Bearer YOUR_JWT_TOKEN
+
+        The token must contain a 'userId' claim.
+        Token validity: 24 hours (configurable)

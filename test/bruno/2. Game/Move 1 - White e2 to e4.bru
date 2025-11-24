@@ -11,7 +11,7 @@ post {
 }
 
 auth:bearer {
-  token: {{whiteToken}}
+  token: {{blackToken}}
 }
 
 body:json {
@@ -25,11 +25,11 @@ tests {
   test("Status is 200", function() {
     expect(res.status).to.equal(200);
   });
-
+  
   test("Current side switched to BLACK", function() {
     expect(res.body.currentSide).to.equal("BLACK");
   });
-
+  
   test("Move history has 1 move", function() {
     expect(res.body.moveHistory).to.be.an('array');
     expect(res.body.moveHistory.length).to.equal(1);

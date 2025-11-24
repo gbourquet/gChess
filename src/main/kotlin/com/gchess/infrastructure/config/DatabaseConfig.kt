@@ -26,7 +26,12 @@ import com.typesafe.config.ConfigFactory
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import liquibase.Contexts
+import liquibase.LabelExpression
 import liquibase.Liquibase
+import liquibase.Scope
+import liquibase.command.CommandScope
+import liquibase.command.core.UpdateCommandStep
+import liquibase.command.core.helpers.DbUrlConnectionCommandStep
 import liquibase.database.DatabaseFactory
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.ClassLoaderResourceAccessor
@@ -129,14 +134,27 @@ object DatabaseConfig {
             val database = DatabaseFactory.getInstance()
                 .findCorrectDatabaseImplementation(JdbcConnection(connection))
 
-            val liquibase = Liquibase(
-                "db/changelog/db.changelog-master.xml",
-                ClassLoaderResourceAccessor(),
-                database
-            )
+            // On définit le ResourceAccessor dans un Scope temporaire
+            Scope.child(Scope.Attr.resourceAccessor, ClassLoaderResourceAccessor()) {
 
-            liquibase.update(Contexts())
-            println("✅ Migrations Liquibase exécutées avec succès")
+                CommandScope("update").apply {
+
+                    // 1. Utilisation de la clé String "database" (Stable)
+                    addArgumentValue("database", database)
+
+                    // 2. Utilisation de la clé String "changelogFile" (Stable)
+                    addArgumentValue("changelogFile", "db/changelog/db.changelog-master.xml")
+
+                    // 3. Contexts et Labels
+                    addArgumentValue("contexts", Contexts().toString())
+                    addArgumentValue(
+                        "labelFilter",
+                        LabelExpression().originalString
+                    ).execute() // Exécution de la commande
+                }.execute()
+
+                println("✅ Migrations Liquibase exécutées avec succès")
+            }
         }
     }
 }

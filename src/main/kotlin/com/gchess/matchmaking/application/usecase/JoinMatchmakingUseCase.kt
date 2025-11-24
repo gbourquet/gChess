@@ -23,6 +23,7 @@ package com.gchess.matchmaking.application.usecase
 
 import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.matchmaking.domain.port.MatchRepository
+import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.shared.domain.model.UserId
@@ -47,12 +48,14 @@ import com.gchess.shared.domain.model.UserId
  * @property matchRepository Repository for storing matches
  * @property userExistenceChecker ACL for validating users exist
  * @property createGameFromMatchUseCase Use case for creating games from matches
+ * @property matchmakingNotifier Notifier for sending real-time updates via WebSocket
  */
 class JoinMatchmakingUseCase(
     private val matchmakingQueue: MatchmakingQueue,
     private val matchRepository: MatchRepository,
     private val userExistenceChecker: UserExistenceChecker,
-    private val createGameFromMatchUseCase: CreateGameFromMatchUseCase
+    private val createGameFromMatchUseCase: CreateGameFromMatchUseCase,
+    private val matchmakingNotifier: MatchmakingNotifier
 ) {
     /**
      * Adds a user to the matchmaking queue.
@@ -89,12 +92,19 @@ class JoinMatchmakingUseCase(
         matchmakingQueue.addPlayer(userId)
 
         // 5. Try to find a match
-        val matchPair = matchmakingQueue.findMatch() ?: // 6a. No match found - user is waiting
-        return Result.success(
-            MatchmakingResult.Waiting(
-                queuePosition = matchmakingQueue.getQueueSize()
+        val matchPair = matchmakingQueue.findMatch()
+
+        if (matchPair == null) {
+            // 6a. No match found - user is waiting
+            val queuePosition = matchmakingQueue.getQueueSize()
+
+            // Send queue position notification via WebSocket
+            matchmakingNotifier.notifyQueuePosition(userId, queuePosition)
+
+            return Result.success(
+                MatchmakingResult.Waiting(queuePosition = queuePosition)
             )
-        )
+        }
 
         // 6b. Match found - create game automatically
         val (user1Entry, user2Entry) = matchPair
@@ -115,6 +125,9 @@ class JoinMatchmakingUseCase(
 
         // Save match to repository (indexed by both users)
         matchRepository.save(match)
+
+        // Send MatchFound notification to both players via WebSocket
+        matchmakingNotifier.notifyMatchFound(match)
 
         // Determine which user is calling this method and return their color
         val yourColor = when (userId) {

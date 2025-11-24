@@ -21,12 +21,12 @@ tests {
   test("Status is 200", function() {
     expect(res.status).to.equal(200);
   });
-
+  
   test("Response has token", function() {
     expect(res.body.token).to.be.a('string');
     bru.setEnvVar("whiteToken", res.body.token);
   });
-
+  
   test("Response has user", function() {
     expect(res.body.user.id).to.equal(bru.getEnvVar("whitePlayerId"));
   });

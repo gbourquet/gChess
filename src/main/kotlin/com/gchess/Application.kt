@@ -25,6 +25,7 @@ import com.gchess.chess.infrastructure.adapter.driver.configureGameRoutes
 import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.infrastructure.config.OpenApiConfig
 import com.gchess.infrastructure.config.appModule
+import com.gchess.infrastructure.websocket.routes.configureWebSocketRoutes
 import com.gchess.matchmaking.infrastructure.adapter.driver.configureMatchmakingRoutes
 import com.gchess.user.infrastructure.adapter.driver.configureAuthRoutes
 import com.gchess.user.infrastructure.adapter.driver.configureUserRoutes
@@ -42,10 +43,12 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
 import kotlinx.serialization.json.Json
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 import java.net.URI
+import java.time.Duration
 
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
@@ -67,6 +70,14 @@ fun Application.module() {
             isLenient = true
             ignoreUnknownKeys = true
         })
+    }
+
+    // WebSocket configuration
+    install(WebSockets) {
+        pingPeriod = Duration.ofSeconds(30)
+        timeout = Duration.ofSeconds(15)
+        maxFrameSize = Long.MAX_VALUE
+        masking = false
     }
 
     // OpenAPI Documentation
@@ -111,6 +122,7 @@ fun Application.module() {
     configureAuthRoutes()       // User context auth routes (register, login) - public
     configureUserRoutes()       // User context user routes (get user)
     configureMatchmakingRoutes() // Matchmaking context routes (protected with JWT)
+    configureWebSocketRoutes()  // WebSocket routes for real-time communication
 
     routing {
         get("/") {

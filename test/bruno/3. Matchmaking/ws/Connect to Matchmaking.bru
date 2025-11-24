@@ -1,0 +1,42 @@
+meta {
+  name: Connect to Matchmaking
+  type: http
+  seq: 1
+}
+
+ws {
+  url: {{base_url}}/ws/matchmaking?token={{jwt_token}}
+  send: [
+    {
+      "type": "json",
+      "data": {
+        "type": "JoinQueue"
+      },
+      "name": "JoinQueue"
+    }
+  ]
+}
+
+docs {
+  # Connect to Matchmaking Channel
+
+  Connects to the `/ws/matchmaking` WebSocket channel.
+
+  **Authentication**: Requires a valid JWT token. The token is passed as a query parameter `?token=...`.
+
+  **Expected Server-to-Client Messages:**
+  - `AuthSuccess`: Sent immediately after successful connection and authentication.
+  - `QueuePositionUpdate`: Updates on your position in the queue.
+  - `MatchFound`: Notifies when a match is found, providing `gameId` and `playerId`.
+  - `MatchmakingError`: Indicates an error during matchmaking.
+  - `Error`: Generic error message.
+
+  ---
+
+  ### How to Use:
+  1.  Ensure you have a valid `jwt_token` set in your active environment.
+  2.  Click "Connect" to establish the WebSocket connection.
+  3.  Observe messages in the Bruno WebSocket console.
+  4.  You can then manually send the `JoinQueue` message from the "Send Messages" section within the connected WebSocket tab, or use the pre-defined "Send JoinQueue" request.
+}
+

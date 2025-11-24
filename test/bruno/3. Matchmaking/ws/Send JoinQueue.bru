@@ -1,0 +1,40 @@
+meta {
+  name: Send JoinQueue
+  type: http
+  seq: 2
+}
+
+script:post-request {
+  // This script is not directly executable as a "SEND" message in Bruno outside an active WS connection.
+  // It's here to document the payload.
+  // To send this, open the "Connect to Matchmaking" request, establish a connection,
+  // then use the "Send Messages" feature and paste the JSON below.
+  console.log("This request documents the 'JoinQueue' message payload.");
+  console.log("Please send this manually from an active WebSocket connection tab.");
+}
+
+body {
+  json: {
+    "type": "JoinQueue"
+  }
+}
+
+docs {
+  # Send JoinQueue Message
+
+  **Client → Server**
+
+  This message is sent by the client to request joining the matchmaking queue.
+
+  **Note**: This request in Bruno is just for documenting the payload. To actually send this message, you need to:
+  1.  Open the `Connect to Matchmaking` request.
+  2.  Click "Connect" to establish the WebSocket connection.
+  3.  Once connected, go to the "Send Messages" tab in Bruno's WebSocket interface.
+  4.  Paste the following JSON into the message input field and click "Send":
+
+      ```json
+      {
+        "type": "JoinQueue"
+      }
+      ```
+}

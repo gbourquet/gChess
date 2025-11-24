@@ -25,6 +25,7 @@ import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.model.GameStatus
 import com.gchess.chess.domain.model.Move
 import com.gchess.shared.domain.model.Player
+import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.shared.domain.model.GameId
@@ -44,10 +45,15 @@ import com.gchess.shared.domain.model.GameId
  *
  * Note: Player validation is NOT done here - it's assumed the Player object is valid.
  * This keeps the Chess context focused on chess game logic, not user management.
+ *
+ * @property gameRepository Repository for persisting games
+ * @property chessRules Chess rules engine for move validation
+ * @property gameEventNotifier Notifier for sending real-time updates via WebSocket
  */
 class MakeMoveUseCase(
     private val gameRepository: GameRepository,
-    private val chessRules: ChessRules
+    private val chessRules: ChessRules,
+    private val gameEventNotifier: GameEventNotifier
 ) {
     /**
      * Executes a move in a game.
@@ -88,6 +94,9 @@ class MakeMoveUseCase(
         // Evaluate game status after the move
         val updatedGame = updateGameStatus(gameAfterMove)
         gameRepository.save(updatedGame)
+
+        // Notify all participants (players and spectators) via WebSocket
+        gameEventNotifier.notifyMoveExecuted(updatedGame, move)
 
         return Result.success(updatedGame)
     }

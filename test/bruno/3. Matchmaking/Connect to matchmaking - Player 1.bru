@@ -1,0 +1,21 @@
+meta {
+  name: Connect to matchmaking - Player 1
+  type: ws
+  seq: 1
+}
+
+ws {
+  url: {{baseUrl}}/ws/matchmaking?token={{whiteToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: message 1
+  type: json
+  content: '''
+    {
+      "type": "JoinQueue"
+    }
+  '''
+}
