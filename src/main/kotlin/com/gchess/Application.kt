@@ -21,14 +21,12 @@
  */
 package com.gchess
 
-import com.gchess.chess.infrastructure.adapter.driver.configureGameRoutes
+import com.gchess.chess.infrastructure.adapter.driver.configureGameWebSocketRoutes
 import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.infrastructure.config.OpenApiConfig
 import com.gchess.infrastructure.config.appModule
-import com.gchess.infrastructure.websocket.routes.configureWebSocketRoutes
-import com.gchess.matchmaking.infrastructure.adapter.driver.configureMatchmakingRoutes
+import com.gchess.matchmaking.infrastructure.adapter.driver.configureMatchmakingWebSocketRoutes
 import com.gchess.user.infrastructure.adapter.driver.configureAuthRoutes
-import com.gchess.user.infrastructure.adapter.driver.configureUserRoutes
 import io.bkbn.kompendium.core.plugin.NotarizedApplication
 import io.bkbn.kompendium.oas.OpenApiSpec
 import io.bkbn.kompendium.oas.info.Contact
@@ -118,11 +116,9 @@ fun Application.module() {
     }
 
     // Configure routes
-    configureGameRoutes()       // Chess context routes (protected with JWT)
     configureAuthRoutes()       // User context auth routes (register, login) - public
-    configureUserRoutes()       // User context user routes (get user)
-    configureMatchmakingRoutes() // Matchmaking context routes (protected with JWT)
-    configureWebSocketRoutes()  // WebSocket routes for real-time communication
+    configureMatchmakingWebSocketRoutes()  // Matchmaking webSocket routes for real-time communication
+    configureGameWebSocketRoutes()  // Game webSocket routes for real-time communication (players and spectators)
 
     routing {
         get("/") {

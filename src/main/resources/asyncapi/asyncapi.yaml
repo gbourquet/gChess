@@ -19,6 +19,7 @@ info:
     - Matchmaking: Indexed by UserId (permanent user identity)
     - Gameplay: Indexed by PlayerId (per-game participation)
     - Spectators: Indexed by UserId (observers, not participants)
+    - Authentication: Managed by WebSocketJwtAuth (shared kernel) across all contexts
 
   contact:
     name: Guillaume Bourquet
@@ -49,6 +50,8 @@ channels:
     messages:
       AuthSuccess:
         $ref: '#/components/messages/AuthSuccess'
+      AuthFailed:
+        $ref: '#/components/messages/AuthFailed'
       JoinQueue:
         $ref: '#/components/messages/JoinQueue'
       QueuePositionUpdate:
@@ -76,6 +79,8 @@ channels:
     messages:
       AuthSuccess:
         $ref: '#/components/messages/AuthSuccess'
+      AuthFailed:
+        $ref: '#/components/messages/AuthFailed'
       MoveAttempt:
         $ref: '#/components/messages/MoveAttempt'
       MoveExecuted:
@@ -107,6 +112,8 @@ channels:
     messages:
       AuthSuccess:
         $ref: '#/components/messages/AuthSuccess'
+      AuthFailed:
+        $ref: '#/components/messages/AuthFailed'
       GameStateSync:
         $ref: '#/components/messages/GameStateSync'
       MoveExecuted:

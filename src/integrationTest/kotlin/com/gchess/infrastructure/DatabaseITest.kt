@@ -6,7 +6,7 @@ import org.koin.core.context.GlobalContext
 import org.koin.core.context.stopKoin
 
 /**
- * Base class for E2E integration tests that use PostgreSQL via Testcontainers.
+ * Base class for integration tests that use PostgreSQL via Testcontainers.
  *
  * Features:
  * - Uses a shared Testcontainers PostgreSQL instance (auto-started on first use)
@@ -15,7 +15,7 @@ import org.koin.core.context.stopKoin
  *
  * Usage:
  * ```
- * class MyE2ETest : DatabaseE2ETest({
+ * class MyITest : DatabaseITest({
  *     "my test" {
  *         testApplication {
  *             application { module() } // Uses production config with Testcontainers DB

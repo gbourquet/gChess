@@ -1,11 +1,15 @@
 package com.gchess.matchmaking.application.usecase
 
+import com.gchess.matchmaking.domain.port.GameCreator
+import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlin.random.Random
 
 class CreateGameFromMatchUseCaseTest : FunSpec({
@@ -15,8 +19,11 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         val user1 = UserId.generate()
         val user2 = UserId.generate()
         val gameId = GameId.generate()
-        val gameCreator = FakeGameCreator(gameId)
-        val userChecker = FakeUserExistenceChecker(exists = true)
+        val gameCreator = mockk<GameCreator>()
+        val userChecker = mockk<UserExistenceChecker>()
+
+        coEvery { gameCreator.createGame(any(), any()) } returns Result.success(gameId)
+        coEvery { userChecker.exists(any()) } returns true
 
         val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
@@ -40,8 +47,11 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         val user1 = UserId.generate()
         val user2 = UserId.generate()
         val gameId = GameId.generate()
-        val gameCreator = FakeGameCreator(gameId)
-        val userChecker = FakeUserExistenceChecker(exists = true)
+        val gameCreator = mockk<GameCreator>()
+        val userChecker = mockk<UserExistenceChecker>()
+
+        coEvery { userChecker.exists(any()) } returns true
+        coEvery { gameCreator.createGame(any(), any()) } returns Result.success(gameId)
 
         // Use fixed seed for reproducible random
         val random = Random(42)
@@ -71,8 +81,11 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         val user1 = UserId.generate()
         val user2 = UserId.generate()
         val errorMessage = "Failed to create game"
-        val gameCreator = FakeGameCreator(failure = Exception(errorMessage))
-        val userChecker = FakeUserExistenceChecker(exists = true)
+        val gameCreator = mockk<GameCreator>()
+        val userChecker = mockk<UserExistenceChecker>()
+
+        coEvery { userChecker.exists(any()) } returns true
+        coEvery { gameCreator.createGame(any(), any()) } returns Result.failure(Exception(errorMessage))
 
         val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
@@ -90,8 +103,11 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         val user1 = UserId.generate()
         val user2 = UserId.generate()
         val specificError = "Player validation failed in Chess context"
-        val gameCreator = FakeGameCreator(failure = Exception(specificError))
-        val userChecker = FakeUserExistenceChecker(exists = true)
+        val gameCreator = mockk<GameCreator>()
+        val userChecker = mockk<UserExistenceChecker>()
+
+        coEvery { userChecker.exists(any()) } returns true
+        coEvery { gameCreator.createGame(any(), any()) } returns Result.failure(Exception(specificError))
 
         val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
@@ -107,8 +123,11 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         val user1 = UserId.generate()
         val user2 = UserId.generate()
         val gameId = GameId.generate()
-        val gameCreator = FakeGameCreator(gameId)
-        val userChecker = FakeUserExistenceChecker(exists = true)
+        val gameCreator = mockk<GameCreator>()
+        val userChecker = mockk<UserExistenceChecker>()
+
+        coEvery { userChecker.exists(any()) } returns true
+        coEvery { gameCreator.createGame(any(), any()) } returns Result.success(gameId)
 
         val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 
@@ -125,8 +144,11 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         val user1 = UserId.generate()
         val user2 = UserId.generate()
         val gameId = GameId.generate()
-        val gameCreator = FakeGameCreator(gameId)
-        val userChecker = FakeUserExistenceChecker(exists = true)
+        val gameCreator = mockk<GameCreator>()
+        val userChecker = mockk<UserExistenceChecker>()
+
+        coEvery { userChecker.exists(any()) } returns true
+        coEvery { gameCreator.createGame(any(), any()) } returns Result.success(gameId)
 
         val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
 

@@ -19,7 +19,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.infrastructure.websocket.dto
+package com.gchess.chess.infrastructure.adapter.driver.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -29,58 +29,9 @@ import kotlinx.serialization.Serializable
  * All messages follow the structure: {"type": "MessageType", "payload": {...}}
  */
 @Serializable
-sealed class WebSocketMessage {
+sealed class GameWebSocketMessage {
     abstract val type: String
 }
-
-// ========== Matchmaking Messages ==========
-
-/**
- * Client → Server: User wants to join the matchmaking queue
- */
-@Serializable
-@SerialName("JoinQueue")
-data class JoinQueueMessage(
-    @SerialName("myType")
-    override val type: String = "JoinQueue"
-) : WebSocketMessage()
-
-/**
- * Server → Client: User's queue position update
- */
-@Serializable
-@SerialName("QueuePositionUpdate")
-data class QueuePositionUpdateMessage(
-    @SerialName("myType")
-    override val type: String = "QueuePositionUpdate",
-    val position: Int
-) : WebSocketMessage()
-
-/**
- * Server → Client: Match found, game created
- */
-@Serializable
-@SerialName("MatchFound")
-data class MatchFoundMessage(
-    @SerialName("myType")
-    override val type: String = "MatchFound",
-    val gameId: String,
-    val yourColor: String, // "WHITE" or "BLACK"
-    val playerId: String, // PlayerId for this participation
-    val opponentUserId: String? = null // Optional: opponent's UserId for display
-) : WebSocketMessage()
-
-/**
- * Server → Client: Matchmaking error
- */
-@Serializable
-@SerialName("MatchmakingError")
-data class MatchmakingErrorMessage(
-    @SerialName("myType")
-    override val type: String = "MatchmakingError",
-    val code: String,
-    val message: String
-) : WebSocketMessage()
 
 // ========== Gameplay Messages ==========
 
@@ -95,7 +46,7 @@ data class MoveAttemptMessage(
     val from: String, // e.g., "e2"
     val to: String,   // e.g., "e4"
     val promotion: String? = null // "QUEEN", "ROOK", "BISHOP", "KNIGHT"
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 /**
  * Server → Client: Move executed successfully
@@ -110,7 +61,7 @@ data class MoveExecutedMessage(
     val newPositionFen: String, // FEN notation of the new position
     val gameStatus: String, // "IN_PROGRESS", "CHECK", "CHECKMATE", "STALEMATE", "DRAW"
     val currentSide: String // "WHITE" or "BLACK" - whose turn it is now
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 @Serializable
 data class MoveDto(
@@ -129,7 +80,7 @@ data class MoveRejectedMessage(
     @SerialName("myType")
     override val type: String = "MoveRejected",
     val reason: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 /**
  * Server → Client: Complete game state synchronization
@@ -147,7 +98,7 @@ data class GameStateSyncMessage(
     val currentSide: String,
     val whitePlayerId: String,
     val blackPlayerId: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 /**
  * Server → Client: Player disconnected
@@ -158,7 +109,7 @@ data class PlayerDisconnectedMessage(
     @SerialName("myType")
     override val type: String = "PlayerDisconnected",
     val playerId: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 /**
  * Server → Client: Player reconnected
@@ -169,7 +120,7 @@ data class PlayerReconnectedMessage(
     @SerialName("myType")
     override val type: String = "PlayerReconnected",
     val playerId: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 // ========== Common Messages ==========
 
@@ -178,12 +129,12 @@ data class PlayerReconnectedMessage(
  */
 @Serializable
 @SerialName("Error")
-data class ErrorMessage(
+data class GameErrorMessage(
     @SerialName("myType")
     override val type: String = "Error",
     val code: String,
     val message: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 /**
  * Server → Client: Authentication successful
@@ -191,19 +142,19 @@ data class ErrorMessage(
  */
 @Serializable
 @SerialName("AuthSuccess")
-data class AuthSuccessMessage(
+data class GameAuthSuccessMessage(
     @SerialName("myType")
     override val type: String = "AuthSuccess",
     val userId: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()
 
 /**
  * Server → Client: Authentication failed
  */
 @Serializable
 @SerialName("AuthFailed")
-data class AuthFailedMessage(
+data class GameAuthFailedMessage(
     @SerialName("myType")
     override val type: String = "AuthFailed",
     val reason: String
-) : WebSocketMessage()
+) : GameWebSocketMessage()

@@ -22,7 +22,6 @@
 package com.gchess.matchmaking.application.usecase
 
 import com.gchess.shared.domain.model.PlayerSide
-import com.gchess.matchmaking.domain.port.MatchRepository
 import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.domain.port.UserExistenceChecker
@@ -52,7 +51,6 @@ import com.gchess.shared.domain.model.UserId
  */
 class JoinMatchmakingUseCase(
     private val matchmakingQueue: MatchmakingQueue,
-    private val matchRepository: MatchRepository,
     private val userExistenceChecker: UserExistenceChecker,
     private val createGameFromMatchUseCase: CreateGameFromMatchUseCase,
     private val matchmakingNotifier: MatchmakingNotifier
@@ -81,17 +79,11 @@ class JoinMatchmakingUseCase(
             return Result.failure(Exception("User is already in the matchmaking queue"))
         }
 
-        // 3. Validate user doesn't have an active match
-        val existingMatch = matchRepository.findByPlayer(userId)
-        if (existingMatch != null && !existingMatch.isExpired()) {
-            return Result.failure(Exception("User already has an active match"))
-        }
-
-        // 4. Add user to queue
+        // 3. Add user to queue
         // Note: The queue implementation uses a lock internally for thread-safety
         matchmakingQueue.addPlayer(userId)
 
-        // 5. Try to find a match
+        // 4. Try to find a match
         val matchPair = matchmakingQueue.findMatch()
 
         if (matchPair == null) {
@@ -122,9 +114,6 @@ class JoinMatchmakingUseCase(
         }
 
         val match = gameResult.getOrNull()!!
-
-        // Save match to repository (indexed by both users)
-        matchRepository.save(match)
 
         // Send MatchFound notification to both players via WebSocket
         matchmakingNotifier.notifyMatchFound(match)

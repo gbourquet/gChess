@@ -30,31 +30,27 @@ import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.domain.service.StandardChessRules
 import com.gchess.chess.infrastructure.adapter.driven.PostgresGameRepository
 import com.gchess.chess.infrastructure.adapter.driven.WebSocketGameEventNotifier
-import com.gchess.user.application.usecase.GetUserUseCase
 import com.gchess.user.application.usecase.LoginUseCase
 import com.gchess.user.application.usecase.RegisterUserUseCase
 import com.gchess.user.domain.port.PasswordHasher
 import com.gchess.user.domain.port.UserRepository
 import com.gchess.user.infrastructure.adapter.driven.BcryptPasswordHasher
 import com.gchess.user.infrastructure.adapter.driven.PostgresUserRepository
-import com.gchess.matchmaking.application.usecase.CleanupExpiredMatchesUseCase
 import com.gchess.matchmaking.application.usecase.CreateGameFromMatchUseCase
-import com.gchess.matchmaking.application.usecase.GetMatchStatusUseCase
 import com.gchess.matchmaking.application.usecase.JoinMatchmakingUseCase
 import com.gchess.matchmaking.application.usecase.LeaveMatchmakingUseCase
 import com.gchess.matchmaking.domain.port.GameCreator
-import com.gchess.matchmaking.domain.port.MatchRepository
 import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.matchmaking.infrastructure.adapter.driven.ChessContextGameCreator
 import com.gchess.matchmaking.infrastructure.adapter.driven.InMemoryMatchmakingQueue
-import com.gchess.matchmaking.infrastructure.adapter.driven.PostgresMatchRepository
 import com.gchess.matchmaking.infrastructure.adapter.driven.UserContextUserChecker
 import com.gchess.matchmaking.infrastructure.adapter.driven.WebSocketMatchmakingNotifier
-import com.gchess.infrastructure.websocket.manager.GameConnectionManager
-import com.gchess.infrastructure.websocket.manager.MatchmakingConnectionManager
-import com.gchess.infrastructure.websocket.manager.SpectatorConnectionManager
+import com.gchess.chess.infrastructure.adapter.driver.GameConnectionManager
+import com.gchess.matchmaking.infrastructure.adapter.driver.MatchmakingConnectionManager
+import com.gchess.chess.infrastructure.adapter.driver.SpectatorConnectionManager
+import com.gchess.user.application.usecase.GetUserUseCase
 import org.jooq.DSLContext
 import org.koin.dsl.module
 import javax.sql.DataSource
@@ -108,7 +104,6 @@ val appModule = module {
     // Repositories (Output Adapters)
     // Note: MatchmakingQueue stays in-memory for performance (FIFO queue with race condition protection)
     single<MatchmakingQueue> { InMemoryMatchmakingQueue() }
-    single<MatchRepository> { PostgresMatchRepository(get()) }
 
     // Anti-Corruption Layer (ACL)
     // Connects Matchmaking → Chess for game creation
@@ -120,10 +115,8 @@ val appModule = module {
 
     // Use Cases (Application Layer)
     single { CreateGameFromMatchUseCase(get(), get()) }  // gameCreator, userExistenceChecker
-    single { CleanupExpiredMatchesUseCase(get()) }
     single { LeaveMatchmakingUseCase(get()) }
-    single { GetMatchStatusUseCase(get(), get(), get()) }
-    single { JoinMatchmakingUseCase(get(), get(), get(), get(), get()) }  // Added matchmakingNotifier
+    single { JoinMatchmakingUseCase(get(), get(), get(), get()) }  // Added matchmakingNotifier
 
     // ========== Infrastructure: WebSocket Connection Managers ==========
 

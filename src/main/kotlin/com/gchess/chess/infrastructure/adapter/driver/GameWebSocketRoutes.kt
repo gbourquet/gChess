@@ -19,20 +19,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.infrastructure.websocket.routes
+package com.gchess.chess.infrastructure.adapter.driver
 
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.model.Position
-import com.gchess.infrastructure.websocket.auth.WebSocketAuth
-import com.gchess.infrastructure.websocket.dto.*
-import com.gchess.infrastructure.websocket.manager.GameConnectionManager
-import com.gchess.infrastructure.websocket.manager.MatchmakingConnectionManager
-import com.gchess.infrastructure.websocket.manager.SpectatorConnectionManager
-import com.gchess.matchmaking.application.usecase.JoinMatchmakingUseCase
-import com.gchess.matchmaking.application.usecase.LeaveMatchmakingUseCase
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameAuthFailedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameAuthSuccessMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameErrorMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameStateSyncMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameWebSocketMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.MoveAttemptMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.MoveDto
+import com.gchess.chess.infrastructure.adapter.driver.dto.MoveRejectedMessage
 import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.infrastructure.websocket.WebSocketJwtAuth
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
@@ -45,8 +47,8 @@ import org.slf4j.LoggerFactory
  * Configure all WebSocket routes.
  * Phase 1 implementation: Basic infrastructure with authentication and connection management.
  */
-fun Application.configureWebSocketRoutes() {
-    val logger = LoggerFactory.getLogger("WebSocketRoutes")
+fun Application.configureGameWebSocketRoutes() {
+    val logger = LoggerFactory.getLogger("GameWebSocketRoutes")
     val json = Json {
         prettyPrint = false
         ignoreUnknownKeys = true
@@ -54,94 +56,14 @@ fun Application.configureWebSocketRoutes() {
     }
 
     // Inject connection managers
-    val matchmakingManager by inject<MatchmakingConnectionManager>()
     val gameManager by inject<GameConnectionManager>()
     val spectatorManager by inject<SpectatorConnectionManager>()
 
     // Inject use cases
     val getGameUseCase by inject<GetGameUseCase>()
     val makeMoveUseCase by inject<MakeMoveUseCase>()
-    val joinMatchmakingUseCase by inject<JoinMatchmakingUseCase>()
-    val leaveMatchmakingUseCase by inject<LeaveMatchmakingUseCase>()
 
     routing {
-        // ========== Matchmaking WebSocket ==========
-        webSocket("/ws/matchmaking") {
-            logger.info("New WebSocket connection attempt on /ws/matchmaking")
-
-            // Authenticate
-            val userId = WebSocketAuth.authenticate(call, this)
-            if (userId == null) {
-                logger.warn("Authentication failed, closing connection")
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
-                return@webSocket
-            }
-
-            // Register connection
-            matchmakingManager.register(userId, this)
-
-            try {
-                // Listen for incoming messages
-                for (frame in incoming) {
-                    if (frame is Frame.Text) {
-                        val text = frame.readText()
-                        logger.debug("Received message from user $userId: $text")
-
-                        try {
-                            // Parse message
-                            val message = json.decodeFromString<WebSocketMessage>(text)
-
-                            when (message) {
-                                is JoinQueueMessage -> {
-                                    logger.info("User $userId joining matchmaking queue")
-
-                                    // Call the use case
-                                    val result = joinMatchmakingUseCase.execute(userId)
-
-                                    if (result.isFailure) {
-                                        // Send error notification
-                                        val error = result.exceptionOrNull()!!
-                                        val errorMsg = MatchmakingErrorMessage(
-                                            code = "MATCHMAKING_ERROR",
-                                            message = error.message ?: "Unknown error"
-                                        )
-                                        matchmakingManager.send(userId, errorMsg)
-                                        logger.warn("Matchmaking failed for user $userId: ${error.message}")
-                                    } else {
-                                        // Success - notifications already sent by the use case
-                                        logger.info("Matchmaking request processed for user $userId")
-                                    }
-                                }
-
-                                else -> {
-                                    logger.warn("Unknown message type received from user $userId: ${message.type}")
-                                    val errorMsg = ErrorMessage(
-                                        code = "UNKNOWN_MESSAGE_TYPE",
-                                        message = "Unknown message type: ${message.type}"
-                                    )
-                                    matchmakingManager.send(userId, errorMsg)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            logger.error("Error parsing message from user $userId", e)
-                            val errorMsg = ErrorMessage(
-                                code = "INVALID_MESSAGE",
-                                message = "Failed to parse message"
-                            )
-                            matchmakingManager.send(userId, errorMsg)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                logger.error("Error in matchmaking WebSocket for user $userId", e)
-            } finally {
-                // Unregister on disconnection and remove from queue
-                matchmakingManager.unregister(userId)
-                leaveMatchmakingUseCase.execute(userId)
-                logger.info("User $userId disconnected from matchmaking")
-            }
-        }
-
         // ========== Game WebSocket ==========
         webSocket("/ws/game/{gameId}") {
             val gameIdParam = call.parameters["gameId"]
@@ -160,7 +82,20 @@ fun Application.configureWebSocketRoutes() {
             logger.info("New WebSocket connection attempt on /ws/game/$gameId")
 
             // Authenticate
-            val userId = WebSocketAuth.authenticate(call, this)
+            val userId = WebSocketJwtAuth.authenticate(
+                call = call,
+                session = this,
+                onSuccess = { userId ->
+                    val message = GameAuthSuccessMessage(userId = userId.toString())
+                    val jsonMessage = json.encodeToString(GameWebSocketMessage.serializer(), message)
+                    send(Frame.Text(jsonMessage))
+                },
+                onFailure = { reason ->
+                    val message = GameAuthFailedMessage(reason = reason)
+                    val jsonMessage = json.encodeToString(GameWebSocketMessage.serializer(), message)
+                    send(Frame.Text(jsonMessage))
+                }
+            )
             if (userId == null) {
                 logger.warn("Authentication failed, closing connection")
                 close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
@@ -219,7 +154,7 @@ fun Application.configureWebSocketRoutes() {
 
                         try {
                             // Parse message
-                            val message = json.decodeFromString<WebSocketMessage>(text)
+                            val message = json.decodeFromString<GameWebSocketMessage>(text)
 
                             when (message) {
                                 is MoveAttemptMessage -> {
@@ -253,7 +188,7 @@ fun Application.configureWebSocketRoutes() {
 
                                 else -> {
                                     logger.warn("Unknown message type received from player $playerId: ${message.type}")
-                                    val errorMsg = ErrorMessage(
+                                    val errorMsg = GameErrorMessage(
                                         code = "UNKNOWN_MESSAGE_TYPE",
                                         message = "Unknown message type: ${message.type}"
                                     )
@@ -262,7 +197,7 @@ fun Application.configureWebSocketRoutes() {
                             }
                         } catch (e: Exception) {
                             logger.error("Error parsing message from player $playerId", e)
-                            val errorMsg = ErrorMessage(
+                            val errorMsg = GameErrorMessage(
                                 code = "INVALID_MESSAGE",
                                 message = "Failed to parse message: ${e.message}"
                             )
@@ -307,7 +242,20 @@ fun Application.configureWebSocketRoutes() {
             logger.info("New spectator WebSocket connection attempt on /ws/game/$gameId/spectate")
 
             // Authenticate
-            val userId = WebSocketAuth.authenticate(call, this)
+            val userId = WebSocketJwtAuth.authenticate(
+                call = call,
+                session = this,
+                onSuccess = { userId ->
+                    val message = GameAuthSuccessMessage(userId = userId.toString())
+                    val jsonMessage = json.encodeToString(GameWebSocketMessage.serializer(), message)
+                    send(Frame.Text(jsonMessage))
+                },
+                onFailure = { reason ->
+                    val message = GameAuthFailedMessage(reason = reason)
+                    val jsonMessage = json.encodeToString(GameWebSocketMessage.serializer(), message)
+                    send(Frame.Text(jsonMessage))
+                }
+            )
             if (userId == null) {
                 logger.warn("Authentication failed, closing connection")
                 close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))

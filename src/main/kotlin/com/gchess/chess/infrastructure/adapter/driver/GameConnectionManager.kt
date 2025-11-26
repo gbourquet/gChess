@@ -1,31 +1,10 @@
-/*
- * Copyright (c) 2024-2025 Guillaume Bourquet
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-package com.gchess.infrastructure.websocket.manager
+package com.gchess.chess.infrastructure.adapter.driver
 
 import com.gchess.chess.domain.model.Game
-import com.gchess.infrastructure.websocket.dto.WebSocketMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameWebSocketMessage
 import com.gchess.shared.domain.model.PlayerId
-import io.ktor.websocket.*
-import kotlinx.serialization.encodeToString
+import io.ktor.websocket.Frame
+import io.ktor.websocket.WebSocketSession
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -88,7 +67,7 @@ class GameConnectionManager {
      * Send a message to a specific player.
      * @return true if sent successfully, false if player not connected
      */
-    suspend fun send(playerId: PlayerId, message: WebSocketMessage): Boolean {
+    suspend fun send(playerId: PlayerId, message: GameWebSocketMessage): Boolean {
         val session = connections[playerId]
         if (session == null) {
             logger.debug("Cannot send message to $playerId: not connected")
@@ -96,7 +75,7 @@ class GameConnectionManager {
         }
 
         return try {
-            val json = json.encodeToString(WebSocketMessage.serializer(), message)
+            val json = json.encodeToString(GameWebSocketMessage.serializer(), message)
             session.send(Frame.Text(json))
             logger.debug("Sent ${message.type} to player $playerId")
             true
@@ -114,7 +93,7 @@ class GameConnectionManager {
      *
      * @return Pair(whiteSent, blackSent) - true if sent successfully
      */
-    suspend fun broadcastToGame(game: Game, message: WebSocketMessage): Pair<Boolean, Boolean> {
+    suspend fun broadcastToGame(game: Game, message: GameWebSocketMessage): Pair<Boolean, Boolean> {
         val whitePlayerId = game.whitePlayer.id
         val blackPlayerId = game.blackPlayer.id
 

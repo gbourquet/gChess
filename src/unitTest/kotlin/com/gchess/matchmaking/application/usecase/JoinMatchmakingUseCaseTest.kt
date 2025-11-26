@@ -3,7 +3,6 @@ package com.gchess.matchmaking.application.usecase
 import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.matchmaking.domain.model.QueueEntry
-import com.gchess.matchmaking.domain.port.MatchRepository
 import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.domain.port.UserExistenceChecker
@@ -21,18 +20,16 @@ class JoinMatchmakingUseCaseTest : FunSpec({
     test("execute should add user to queue and return WAITING when no match found") {
         // Given
         val queue = mockk<MatchmakingQueue>()
-        val repository = mockk<MatchRepository>()
         val userChecker = mockk<UserExistenceChecker>()
         val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
         val userId = UserId.generate()
         val queueEntry = QueueEntry(userId, Clock.System.now())
 
         // Mock behavior
         coEvery { userChecker.exists(userId) } returns true
-        coEvery { repository.findByPlayer(userId) } returns null
         coEvery { queue.isPlayerInQueue(userId) } returns false
         coEvery { queue.addPlayer(userId) } returns queueEntry
         coEvery { queue.getQueueSize() } returns 10
@@ -48,24 +45,22 @@ class JoinMatchmakingUseCaseTest : FunSpec({
 
         // Verify interactions
         coVerify { userChecker.exists(userId) }
-        coVerify { repository.findByPlayer(userId) }
         coVerify { queue.isPlayerInQueue(userId) }
         coVerify { queue.addPlayer(userId) }
         coVerify { queue.findMatch() }
         coVerify { queue.getQueueSize() }
         coVerify { notifier.notifyQueuePosition(userId, 10) }
-        confirmVerified(userChecker, repository, queue, notifier)
+        confirmVerified(userChecker, queue, notifier)
     }
 
     test("execute should fail when user does not exist") {
         // Given
         val queue = mockk<MatchmakingQueue>()
-        val repository = mockk<MatchRepository>()
         val userChecker = mockk<UserExistenceChecker>()
         val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
         val userId = UserId.generate()
 
         // Mock behavior
@@ -87,17 +82,15 @@ class JoinMatchmakingUseCaseTest : FunSpec({
     test("execute should fail when user is already in queue") {
         // Given
         val queue = mockk<MatchmakingQueue>()
-        val repository = mockk<MatchRepository>()
         val userChecker = mockk<UserExistenceChecker>()
         val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
         val userId = UserId.generate()
 
         // Mock behavior
         coEvery { userChecker.exists(userId) } returns true
-        coEvery { repository.findByPlayer(userId) } returns null
         coEvery { queue.isPlayerInQueue(userId) } returns true
 
         // When
@@ -117,12 +110,11 @@ class JoinMatchmakingUseCaseTest : FunSpec({
     test("execute should fail when user already has a match") {
         // Given
         val queue = mockk<MatchmakingQueue>()
-        val repository = mockk<MatchRepository>()
         val userChecker = mockk<UserExistenceChecker>()
         val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
         val userId = UserId.generate()
         val now = Clock.System.now()
 
@@ -155,12 +147,11 @@ class JoinMatchmakingUseCaseTest : FunSpec({
     test("execute should create match and game when match is found") {
         // Given
         val queue = mockk<MatchmakingQueue>()
-        val repository = mockk<MatchRepository>()
         val userChecker = mockk<UserExistenceChecker>()
         val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
 
         val user1 = UserId.generate()
         val user2 = UserId.generate()
@@ -179,7 +170,6 @@ class JoinMatchmakingUseCaseTest : FunSpec({
 
         // Mock behavior for user1
         coEvery { userChecker.exists(user1) } returns true
-        coEvery { repository.findByPlayer(user1) } returns null
         coEvery { queue.isPlayerInQueue(user1) } returns false
         coEvery { queue.addPlayer(user1) } returns queueEntry1
         coEvery { queue.findMatch() } returns Pair(queueEntry1,queueEntry2)
@@ -190,9 +180,6 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         // Mock queue removal
         coEvery { queue.removePlayer(user1) } returns true
         coEvery { queue.removePlayer(user2) } returns true
-
-        // Mock repository save
-        coEvery { repository.save(match) } just Runs
 
         // Mock notifier
         coEvery { notifier.notifyMatchFound(match) } just Runs
@@ -211,7 +198,6 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         coVerify { queue.addPlayer(user1) }
         coVerify { queue.findMatch() }
         coVerify { createGameUseCase.execute(user1, user2) }
-        coVerify { repository.save(match) }
         coVerify { notifier.notifyMatchFound(match) } // Verify notification was sent
         coVerify(exactly = 0) { notifier.notifyQueuePosition(any(), any()) } // No queue position notification when matched
     }
@@ -219,12 +205,11 @@ class JoinMatchmakingUseCaseTest : FunSpec({
     test("execute should propagate game creation failure") {
         // Given
         val queue = mockk<MatchmakingQueue>()
-        val repository = mockk<MatchRepository>()
         val userChecker = mockk<UserExistenceChecker>()
         val createGameUseCase = mockk<CreateGameFromMatchUseCase>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, repository, userChecker, createGameUseCase, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
 
         val user1 = UserId.generate()
         val user2 = UserId.generate()
@@ -235,7 +220,6 @@ class JoinMatchmakingUseCaseTest : FunSpec({
 
         // Mock behavior
         coEvery { userChecker.exists(user1) } returns true
-        coEvery { repository.findByPlayer(user1) } returns null
         coEvery { queue.isPlayerInQueue(user1) } returns false
         coEvery { queue.addPlayer(user1) } returns QueueEntry(user1, now)
         coEvery { queue.findMatch() } returns Pair(queueEntry1, queueEntry2)
@@ -251,7 +235,6 @@ class JoinMatchmakingUseCaseTest : FunSpec({
 
         // Verify - no notifications should be sent on game creation failure
         coVerify { createGameUseCase.execute(user1, user2) }
-        coVerify(exactly = 0) { repository.save(any()) }
         coVerify(exactly = 0) { notifier.notifyMatchFound(any()) }
         coVerify(exactly = 0) { notifier.notifyQueuePosition(any(), any()) }
     }

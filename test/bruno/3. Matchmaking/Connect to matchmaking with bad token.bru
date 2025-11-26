@@ -1,0 +1,21 @@
+meta {
+  name: Connect to matchmaking with bad token
+  type: ws
+  seq: 3
+}
+
+ws {
+  url: {{baseUrl}}/ws/matchmaking?token={{blackToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: message 1
+  type: json
+  content: '''
+    {
+      "type": "JoinQueue"
+    }
+  '''
+}

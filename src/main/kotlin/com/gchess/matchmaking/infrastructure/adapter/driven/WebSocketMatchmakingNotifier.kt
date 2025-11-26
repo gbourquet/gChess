@@ -21,12 +21,12 @@
  */
 package com.gchess.matchmaking.infrastructure.adapter.driven
 
-import com.gchess.infrastructure.websocket.dto.MatchFoundMessage
-import com.gchess.infrastructure.websocket.dto.MatchmakingErrorMessage
-import com.gchess.infrastructure.websocket.dto.QueuePositionUpdateMessage
-import com.gchess.infrastructure.websocket.manager.MatchmakingConnectionManager
+import com.gchess.matchmaking.infrastructure.adapter.driver.MatchmakingConnectionManager
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.matchmaking.domain.port.MatchmakingNotifier
+import com.gchess.matchmaking.infrastructure.adapter.driver.dto.MatchFoundMessage
+import com.gchess.matchmaking.infrastructure.adapter.driver.dto.MatchmakingErrorMessage
+import com.gchess.matchmaking.infrastructure.adapter.driver.dto.QueuePositionUpdateMessage
 import com.gchess.shared.domain.model.UserId
 import org.slf4j.LoggerFactory
 

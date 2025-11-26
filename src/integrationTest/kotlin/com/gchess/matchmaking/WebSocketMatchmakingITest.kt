@@ -1,4 +1,4 @@
-package com.gchess.websocket.integration
+package com.gchess.matchmaking
 
 import com.gchess.infrastructure.DatabaseITest
 import io.kotest.matchers.shouldBe
@@ -141,11 +141,12 @@ class WebSocketMatchmakingITest : DatabaseITest({
                 // Expect Error response
                 val errorFrame = incoming.receive() as Frame.Text
                 val errorMessage = Json.parseToJsonElement(errorFrame.readText()).jsonObject
-                errorMessage["type"]?.jsonPrimitive?.content shouldBe "Error"
+                errorMessage["type"]?.jsonPrimitive?.content shouldBe "MatchmakingError"
                 errorMessage["code"]?.jsonPrimitive?.content shouldNotBe null
 
-                // Close connection
-                close()
+                // Connection should close after Error
+                val closeReason = closeReason.await()
+                closeReason shouldNotBe null
             }
         }
     }

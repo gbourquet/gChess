@@ -24,13 +24,13 @@ package com.gchess.chess.infrastructure.adapter.driven
 import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.port.GameEventNotifier
-import com.gchess.infrastructure.websocket.dto.MoveDto
-import com.gchess.infrastructure.websocket.dto.MoveExecutedMessage
-import com.gchess.infrastructure.websocket.dto.MoveRejectedMessage
-import com.gchess.infrastructure.websocket.dto.PlayerDisconnectedMessage
-import com.gchess.infrastructure.websocket.dto.PlayerReconnectedMessage
-import com.gchess.infrastructure.websocket.manager.GameConnectionManager
-import com.gchess.infrastructure.websocket.manager.SpectatorConnectionManager
+import com.gchess.chess.infrastructure.adapter.driver.dto.MoveDto
+import com.gchess.chess.infrastructure.adapter.driver.dto.MoveExecutedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.MoveRejectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.PlayerDisconnectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.PlayerReconnectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.GameConnectionManager
+import com.gchess.chess.infrastructure.adapter.driver.SpectatorConnectionManager
 import com.gchess.shared.domain.model.PlayerId
 import org.slf4j.LoggerFactory
 
