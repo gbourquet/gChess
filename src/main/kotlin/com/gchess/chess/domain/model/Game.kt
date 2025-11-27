@@ -89,7 +89,7 @@ data class Game(
      */
     fun makeMove(move: Move): Game {
         return copy(
-            board = board.movePiece(move.from, move.to),
+            board = board.movePiece(move.from, move.to, move.promotion),
             currentSide = currentSide.opposite(),
             moveHistory = moveHistory + move
         )

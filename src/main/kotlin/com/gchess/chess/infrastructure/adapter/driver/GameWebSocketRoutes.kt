@@ -154,9 +154,7 @@ fun Application.configureGameWebSocketRoutes() {
 
                         try {
                             // Parse message
-                            val message = json.decodeFromString<GameWebSocketMessage>(text)
-
-                            when (message) {
+                            when (val message = json.decodeFromString<GameWebSocketMessage>(text)) {
                                 is MoveAttemptMessage -> {
                                     logger.info("Player $playerId attempting move: ${message.from} → ${message.to}")
 

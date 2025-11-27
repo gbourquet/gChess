@@ -23,6 +23,7 @@ package com.gchess.matchmaking.application.usecase
 
 import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.domain.model.PlayerId
 
 /**
  * Result of a matchmaking status check.
@@ -53,6 +54,7 @@ sealed class MatchmakingResult {
      */
     data class Matched(
         val gameId: GameId,
+        val youPlayerId: PlayerId,
         val yourColor: PlayerSide
     ) : MatchmakingResult()
 }

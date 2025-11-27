@@ -23,6 +23,7 @@ package com.gchess.chess
 
 import com.gchess.infrastructure.DatabaseITest
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -30,7 +31,6 @@ import io.ktor.http.*
 import io.ktor.server.testing.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.serialization.json.*
 
 /**
@@ -92,6 +92,8 @@ class ScholarsMateITest : DatabaseITest({
             var player2GameId: String? = null
             var player1Color: String? = null
             var player2Color: String? = null
+            var player1Id: String? = null
+            var player2Id: String? = null
 
             println("Starting matchmaking coroutines...")
 
@@ -124,6 +126,7 @@ class ScholarsMateITest : DatabaseITest({
                         val matchMsg = Json.parseToJsonElement(matchFrame.readText()).jsonObject
                         matchMsg["type"]?.jsonPrimitive?.content shouldBe "MatchFound"
                         player1GameId = matchMsg["gameId"]?.jsonPrimitive?.content!!
+                        player1Id = matchMsg["playerId"]?.jsonPrimitive?.content!!
                         player1Color = matchMsg["yourColor"]?.jsonPrimitive?.content!!
 
                         close()
@@ -151,6 +154,7 @@ class ScholarsMateITest : DatabaseITest({
                         matchMsg["type"]?.jsonPrimitive?.content shouldBe "MatchFound"
                         player2GameId = matchMsg["gameId"]?.jsonPrimitive?.content!!
                         player2Color = matchMsg["yourColor"]?.jsonPrimitive?.content!!
+                        player2Id = matchMsg["playerId"]?.jsonPrimitive?.content!!
                         println("Player2 match received")
 
                         close()
@@ -164,6 +168,8 @@ class ScholarsMateITest : DatabaseITest({
             }
 
             player1GameId shouldBe player2GameId // Ensure both got the same game ID
+            player1Id shouldNotBe ""
+            player2Id shouldNotBe ""
             val gameId = player1GameId
             println("Game created: $gameId")
             println("Player1 ($userId1) is $player1Color")

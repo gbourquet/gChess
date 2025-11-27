@@ -44,7 +44,6 @@ import com.gchess.shared.domain.model.UserId
  *    - Returns WAITING status
  *
  * @property matchmakingQueue Queue for managing waiting users
- * @property matchRepository Repository for storing matches
  * @property userExistenceChecker ACL for validating users exist
  * @property createGameFromMatchUseCase Use case for creating games from matches
  * @property matchmakingNotifier Notifier for sending real-time updates via WebSocket
@@ -120,8 +119,18 @@ class JoinMatchmakingUseCase(
 
         // Determine which user is calling this method and return their color
         val yourColor = when (userId) {
-            match.whiteUserId -> PlayerSide.WHITE
-            match.blackUserId -> PlayerSide.BLACK
+            match.whitePlayer.userId -> PlayerSide.WHITE
+            match.blackPlayer.userId -> PlayerSide.BLACK
+            else -> {
+                // This should never happen unless there's a logic error
+                // The calling user should be one of the matched users
+                error("Caller $userId not found in match")
+            }
+        }
+
+        val yourPlayer = when (userId) {
+            match.whitePlayer.userId -> match.whitePlayer
+            match.blackPlayer.userId -> match.blackPlayer
             else -> {
                 // This should never happen unless there's a logic error
                 // The calling user should be one of the matched users
@@ -131,6 +140,7 @@ class JoinMatchmakingUseCase(
 
         return Result.success(MatchmakingResult.Matched(
             gameId = match.gameId,
+            youPlayerId = yourPlayer.id,
             yourColor = yourColor
         ))
     }

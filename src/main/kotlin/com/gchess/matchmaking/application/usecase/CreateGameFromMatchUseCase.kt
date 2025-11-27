@@ -85,8 +85,8 @@ class CreateGameFromMatchUseCase(
         // Step 5: Transform Result<GameId> to Result<Match>
         return gameResult.map { gameId ->
             Match.create(
-                whiteUserId = whiteUserId,
-                blackUserId = blackUserId,
+                whitePlayer = whitePlayer,
+                blackPlayer = blackPlayer,
                 gameId = gameId
             )
         }

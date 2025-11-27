@@ -27,11 +27,8 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import liquibase.Contexts
 import liquibase.LabelExpression
-import liquibase.Liquibase
 import liquibase.Scope
 import liquibase.command.CommandScope
-import liquibase.command.core.UpdateCommandStep
-import liquibase.command.core.helpers.DbUrlConnectionCommandStep
 import liquibase.database.DatabaseFactory
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.ClassLoaderResourceAccessor

@@ -22,6 +22,7 @@
 package com.gchess.matchmaking.domain.model
 
 import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.domain.model.Player
 import com.gchess.shared.domain.model.UserId
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -33,15 +34,15 @@ import kotlin.time.Duration.Companion.minutes
  * A match is created when two users are paired together from the queue.
  * It contains the game ID, user assignments, and expiration information.
  *
- * @property whiteUserId The user controlling white pieces
- * @property blackUserId The user controlling black pieces
+ * @property whitePlayer The player controlling white pieces
+ * @property blackPLayer The player controlling black pieces
  * @property gameId The unique identifier of the created game
  * @property matchedAt The timestamp when the match was created
  * @property expiresAt The timestamp when this match expires (TTL)
  */
 data class Match(
-    val whiteUserId: UserId,
-    val blackUserId: UserId,
+    val whitePlayer: Player,
+    val blackPlayer: Player,
     val gameId: GameId,
     val matchedAt: Instant,
     val expiresAt: Instant
@@ -73,15 +74,15 @@ data class Match(
          * @return A new Match instance
          */
         fun create(
-            whiteUserId: UserId,
-            blackUserId: UserId,
+            whitePlayer: Player,
+            blackPlayer: Player,
             gameId: GameId,
             ttlMinutes: Int = DEFAULT_TTL_MINUTES,
             now: Instant = Clock.System.now()
         ): Match {
             return Match(
-                whiteUserId = whiteUserId,
-                blackUserId = blackUserId,
+                whitePlayer = whitePlayer,
+                blackPlayer = blackPlayer,
                 gameId = gameId,
                 matchedAt = now,
                 expiresAt = now + ttlMinutes.minutes

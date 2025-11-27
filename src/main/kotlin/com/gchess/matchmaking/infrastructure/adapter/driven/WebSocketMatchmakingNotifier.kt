@@ -65,19 +65,19 @@ class WebSocketMatchmakingNotifier(
             val whiteMessage = MatchFoundMessage(
                 gameId = match.gameId.toString(),
                 yourColor = "WHITE",
-                playerId = "", // Will be populated by the client from GameStateSync
-                opponentUserId = match.blackUserId.toString()
+                playerId = match.whitePlayer.id.value, // Will be populated by the client from GameStateSync
+                opponentUserId = match.blackPlayer.userId.value
             )
-            val whiteSent = connectionManager.send(match.whiteUserId, whiteMessage)
+            val whiteSent = connectionManager.send(match.whitePlayer.userId, whiteMessage)
 
             // Send MatchFound to black player
             val blackMessage = MatchFoundMessage(
                 gameId = match.gameId.toString(),
                 yourColor = "BLACK",
-                playerId = "", // Will be populated by the client from GameStateSync
-                opponentUserId = match.whiteUserId.toString()
+                playerId = match.blackPlayer.id.value, // Will be populated by the client from GameStateSync
+                opponentUserId = match.whitePlayer.userId.value
             )
-            val blackSent = connectionManager.send(match.blackUserId, blackMessage)
+            val blackSent = connectionManager.send(match.blackPlayer.userId, blackMessage)
 
             if (whiteSent && blackSent) {
                 logger.info("Match found notification sent to both players (game ${match.gameId})")
@@ -89,8 +89,8 @@ class WebSocketMatchmakingNotifier(
 
             // Unregister both users from matchmaking connections
             // They should now connect to /ws/game/{gameId}
-            connectionManager.unregister(match.whiteUserId)
-            connectionManager.unregister(match.blackUserId)
+            connectionManager.unregister(match.whitePlayer.userId)
+            connectionManager.unregister(match.blackPlayer.userId)
 
             logger.debug("Unregistered both players from matchmaking connections")
         } catch (e: Exception) {

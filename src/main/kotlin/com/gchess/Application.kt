@@ -32,6 +32,7 @@ import io.bkbn.kompendium.oas.OpenApiSpec
 import io.bkbn.kompendium.oas.info.Contact
 import io.bkbn.kompendium.oas.info.Info
 import io.bkbn.kompendium.oas.server.Server
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -39,6 +40,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
@@ -68,6 +70,45 @@ fun Application.module() {
             isLenient = true
             ignoreUnknownKeys = true
         })
+    }
+
+    // CORS configuration for frontend development
+    install(CORS) {
+        // Allow localhost origins on common development ports
+        allowHost("localhost:3000")
+        allowHost("localhost:4200")  // Angular default
+        allowHost("localhost:5173")  // Vite default
+        allowHost("localhost:8080")  // Same origin
+        allowHost("127.0.0.1:3000")
+        allowHost("127.0.0.1:4200")
+        allowHost("127.0.0.1:5173")
+        allowHost("127.0.0.1:8080")
+
+        // Allow common HTTP methods
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Delete)
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Patch)
+
+        // Allow common headers including Authorization for JWT
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Accept)
+        allowHeader(HttpHeaders.AccessControlAllowOrigin)
+
+        // Allow credentials (cookies, authorization headers)
+        allowCredentials = true
+
+        // Allow WebSocket upgrade headers
+        allowHeader(HttpHeaders.SecWebSocketProtocol)
+        allowHeader(HttpHeaders.SecWebSocketVersion)
+        allowHeader(HttpHeaders.SecWebSocketKey)
+        allowHeader(HttpHeaders.SecWebSocketExtensions)
+
+        // Expose custom headers if needed
+        exposeHeader(HttpHeaders.Authorization)
     }
 
     // WebSocket configuration
