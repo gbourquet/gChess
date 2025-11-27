@@ -22,6 +22,7 @@
 package com.gchess.infrastructure.config
 
 import com.auth0.jwt.JWT
+import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
 import com.gchess.shared.domain.model.UserId
 import java.util.*
@@ -77,7 +78,7 @@ object JwtConfig {
      *
      * @return A configured JWT verifier
      */
-    fun makeVerifier() = JWT.require(algorithm)
+    fun makeVerifier() : JWTVerifier = JWT.require(algorithm)
         .withAudience(AUDIENCE)
         .withIssuer(ISSUER)
         .build()

@@ -1,9 +1,11 @@
 import org.gradle.api.DefaultTask
 import org.gradle.api.tasks.TaskAction
-import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import liquibase.Contexts
-import liquibase.Liquibase
+import liquibase.LabelExpression
+import liquibase.Scope
+import liquibase.command.CommandScope
 import liquibase.database.DatabaseFactory
 import liquibase.database.jvm.JdbcConnection
 import java.sql.DriverManager
@@ -107,17 +109,31 @@ open class JooqTestcontainersTask : DefaultTask() {
             val database = DatabaseFactory.getInstance()
                 .findCorrectDatabaseImplementation(JdbcConnection(connection))
 
-            // Utiliser DirectoryResourceAccessor pointant vers src/main/resources du projet
-            val resourcesDir = project.projectDir.resolve("src/main/resources")
-            val resourceAccessor = liquibase.resource.DirectoryResourceAccessor(resourcesDir)
+            // Utiliser DirectoryResourceAccessor pour accéder aux fichiers depuis le système de fichiers
+            val changelogPath = project.file("src/main/resources").absolutePath
+            val resourceAccessor = liquibase.resource.DirectoryResourceAccessor(java.io.File(changelogPath))
 
-            val liquibase = Liquibase(
-                "db/changelog/db.changelog-master.xml",
-                resourceAccessor,
-                database
-            )
+            // On définit le ResourceAccessor dans un Scope temporaire
+            Scope.child(Scope.Attr.resourceAccessor, resourceAccessor) {
 
-            liquibase.update(Contexts())
+                CommandScope("update").apply {
+
+                    // 1. Utilisation de la clé String "database" (Stable)
+                    addArgumentValue("database", database)
+
+                    // 2. Utilisation de la clé String "changelogFile" (Stable)
+                    addArgumentValue("changelogFile", "db/changelog/db.changelog-master.xml")
+
+                    // 3. Contexts et Labels
+                    addArgumentValue("contexts", Contexts().toString())
+                    addArgumentValue(
+                        "labelFilter",
+                        LabelExpression().originalString
+                    ).execute() // Exécution de la commande
+                }.execute()
+
+                println("✅ Migrations Liquibase exécutées avec succès")
+            }
         }
     }
 }

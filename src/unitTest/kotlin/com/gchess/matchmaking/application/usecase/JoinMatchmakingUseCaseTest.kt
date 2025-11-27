@@ -7,14 +7,18 @@ import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.domain.port.UserExistenceChecker
 import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.domain.model.Player
+import com.gchess.shared.domain.model.PlayerId
 import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class JoinMatchmakingUseCaseTest : FunSpec({
 
     test("execute should add user to queue and return WAITING when no match found") {
@@ -116,14 +120,12 @@ class JoinMatchmakingUseCaseTest : FunSpec({
 
         val useCase = JoinMatchmakingUseCase(queue, userChecker, createGameUseCase, notifier)
         val userId = UserId.generate()
-        val now = Clock.System.now()
+        Clock.System.now()
 
-        val existingMatch = Match(
-            whiteUserId = userId,
-            blackUserId = UserId.generate(),
+        Match(
+            whitePlayer = Player(userId = userId, id = PlayerId.generate(), side = PlayerSide.WHITE),
+            blackPlayer = Player(userId = UserId.generate(), id = PlayerId.generate(), side = PlayerSide.BLACK),
             gameId = GameId.generate(),
-            matchedAt = now,
-            expiresAt = now + 5.minutes
         )
 
         // Mock behavior
@@ -161,11 +163,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queueEntry1 = QueueEntry(user1, now)
         val queueEntry2 = QueueEntry(user2, now)
         val match = Match(
-            whiteUserId = user1,
-            blackUserId = user2,
+            whitePlayer = Player(userId = user1, id = PlayerId.generate(), side = PlayerSide.WHITE),
+            blackPlayer = Player(userId = user2, id = PlayerId.generate(), side = PlayerSide.BLACK),
             gameId = gameId,
-            matchedAt = now,
-            expiresAt = now + 5.minutes
         )
 
         // Mock behavior for user1

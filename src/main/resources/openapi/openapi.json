@@ -22,8 +22,7 @@
                 ],
                 "summary": "Register a new user",
                 "description": "Create a new user account with username, email, and password",
-                "parameters": [
-                ],
+                "parameters": [],
                 "requestBody": {
                     "description": "User registration information",
                     "content": {
@@ -58,8 +57,7 @@
                     }
                 }
             },
-            "parameters": [
-            ]
+            "parameters": []
         },
         "/api/auth/login": {
             "post": {
@@ -68,8 +66,7 @@
                 ],
                 "summary": "Login",
                 "description": "Authenticate a user and receive a JWT token",
-                "parameters": [
-                ],
+                "parameters": [],
                 "requestBody": {
                     "description": "User credentials",
                     "content": {
@@ -104,8 +101,7 @@
                     }
                 }
             },
-            "parameters": [
-            ]
+            "parameters": []
         }
     },
     "components": {

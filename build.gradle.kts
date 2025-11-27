@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "1.9.22"
-    kotlin("plugin.serialization") version "1.9.22"
+    kotlin("jvm") version "2.2.21"
+    kotlin("plugin.serialization") version "2.2.21"
     application
     idea
 }
@@ -78,87 +78,94 @@ configurations {
 }
 
 dependencies {
+    // Testcontainers BOM (Bill of Materials) for version management
+    implementation(platform("org.testcontainers:testcontainers-bom:2.0.2"))
+
+    // JUnit BOM (Bill of Materials) for version management
+    implementation(platform("org.junit:junit-bom:5.11.4"))
+
     // Ktor Server
-    implementation("io.ktor:ktor-server-core:2.3.7")
-    implementation("io.ktor:ktor-server-netty:2.3.7")
-    implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
-    implementation("io.ktor:ktor-server-cors:2.3.7")
-    implementation("io.ktor:ktor-server-websockets:2.3.7")
+    implementation("io.ktor:ktor-server-core:3.3.2")
+    implementation("io.ktor:ktor-server-netty:3.3.2")
+    implementation("io.ktor:ktor-server-content-negotiation:3.3.2")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.3.2")
+    implementation("io.ktor:ktor-server-cors:3.3.2")
+    implementation("io.ktor:ktor-server-websockets:3.3.2")
 
     // Authentication
-    implementation("io.ktor:ktor-server-auth:2.3.7")
-    implementation("io.ktor:ktor-server-auth-jwt:2.3.7")
+    implementation("io.ktor:ktor-server-auth:3.3.2")
+    implementation("io.ktor:ktor-server-auth-jwt:3.3.2")
 
     // OpenAPI / Swagger Documentation
-    implementation("io.bkbn:kompendium-core:3.14.4")
-    implementation("io.ktor:ktor-server-swagger:2.3.7")
+    implementation("io.bkbn:kompendium-core:4.0.3")
+    implementation("io.ktor:ktor-server-swagger:3.3.2")
 
     // Koin for Dependency Injection
-    implementation("io.insert-koin:koin-ktor:3.5.3")
-    implementation("io.insert-koin:koin-logger-slf4j:3.5.3")
+    implementation("io.insert-koin:koin-ktor:4.1.0")
+    implementation("io.insert-koin:koin-logger-slf4j:4.1.0")
 
     // ULID for unique identifiers
     implementation("de.huxhorn.sulky:de.huxhorn.sulky.ulid:8.3.0")
 
-    // Date/Time (kotlinx-datetime for multiplatform support)
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
+    // Date/Time - Using kotlin.time (built into Kotlin 2.1+)
+    // Note: kotlin.time.Instant and kotlin.time.Clock are now in stdlib, no dependency needed
 
     // Password hashing (BCrypt)
     implementation("org.mindrot:jbcrypt:0.4")
 
     // Logging
-    implementation("ch.qos.logback:logback-classic:1.4.14")
+    implementation("ch.qos.logback:logback-classic:1.5.21")
 
     // Configuration
     implementation("com.typesafe:config:1.4.3")
 
     // Database - PostgreSQL
-    implementation("org.postgresql:postgresql:42.7.3")
+    implementation("org.postgresql:postgresql:42.7.5")
 
     // Database - jOOQ (type-safe SQL)
-    implementation("org.jooq:jooq:3.19.6")
-    implementation("org.jooq:jooq-kotlin:3.19.6")
+    implementation("org.jooq:jooq:3.20.8")
+    implementation("org.jooq:jooq-kotlin:3.20.8")
 
     // Database - Connection Pooling
-    implementation("com.zaxxer:HikariCP:5.1.0")
+    implementation("com.zaxxer:HikariCP:7.0.2")
 
     // Database - Migrations
-    implementation("org.liquibase:liquibase-core:4.26.0")
+    implementation("org.liquibase:liquibase-core:5.0.1")
 
     // Unit Testing
-    "unitTestImplementation"("io.ktor:ktor-server-test-host:2.3.7")
-    "unitTestImplementation"("io.kotest:kotest-runner-junit5:5.8.0")
-    "unitTestImplementation"("io.kotest:kotest-assertions-core:5.8.0")
-    "unitTestImplementation"("io.insert-koin:koin-test:3.5.3")
-    "unitTestImplementation"("io.insert-koin:koin-test-junit5:3.5.3")
-    "unitTestImplementation"("io.mockk:mockk:1.13.9")
+    "unitTestImplementation"("io.ktor:ktor-server-test-host:3.3.2")
+    "unitTestImplementation"("io.kotest:kotest-runner-junit5:6.0.5")
+    "unitTestImplementation"("io.kotest:kotest-assertions-core:6.0.5")
+    "unitTestImplementation"("io.insert-koin:koin-test:4.1.0")
+    "unitTestImplementation"("io.insert-koin:koin-test-junit5:4.1.0")
+    "unitTestImplementation"("io.mockk:mockk:1.14.6")
 
     // Architecture Testing
-    "architectureTestImplementation"("com.tngtech.archunit:archunit-junit5:1.2.1")
-    "architectureTestImplementation"("org.junit.jupiter:junit-jupiter-api:5.10.1")
-    "architectureTestRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.10.1")
+    "architectureTestImplementation"("com.tngtech.archunit:archunit-junit5:1.4.1")
+    "architectureTestImplementation"("org.junit.jupiter:junit-jupiter-api") // version from BOM
+    "architectureTestRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine") // version from BOM
+    "architectureTestRuntimeOnly"("org.junit.platform:junit-platform-launcher") // Explicitly add launcher
 
     // Integration Testing (E2E)
-    "integrationTestImplementation"("io.ktor:ktor-server-test-host:2.3.7")
-    "integrationTestImplementation"("io.kotest:kotest-runner-junit5:5.8.0")
-    "integrationTestImplementation"("io.kotest:kotest-assertions-core:5.8.0")
-    "integrationTestImplementation"("io.insert-koin:koin-test:3.5.3")
-    "integrationTestImplementation"("io.insert-koin:koin-test-junit5:3.5.3")
+    "integrationTestImplementation"("io.ktor:ktor-server-test-host:3.3.2")
+    "integrationTestImplementation"("io.kotest:kotest-runner-junit5:6.0.5")
+    "integrationTestImplementation"("io.kotest:kotest-assertions-core:6.0.5")
+    "integrationTestImplementation"("io.insert-koin:koin-test:4.1.0")
+    "integrationTestImplementation"("io.insert-koin:koin-test-junit5:4.1.0")
 
-    // Testcontainers for integration tests
-    "integrationTestImplementation"("org.testcontainers:testcontainers:1.19.7")
-    "integrationTestImplementation"("org.testcontainers:postgresql:1.19.7")
+    // Testcontainers for integration tests (versions managed by BOM)
+    "integrationTestImplementation"("org.testcontainers:testcontainers")
+    "integrationTestImplementation"("org.testcontainers:testcontainers-postgresql")
 
     // jOOQ code generation dependencies (uses Testcontainers)
-    "jooqGenerator"("org.jooq:jooq-codegen:3.19.6")
-    "jooqGenerator"("org.jooq:jooq-meta:3.19.6")
-    "jooqGenerator"("org.testcontainers:postgresql:1.19.7")
-    "jooqGenerator"("org.postgresql:postgresql:42.7.3")
-    "jooqGenerator"("org.liquibase:liquibase-core:4.26.0")
+    "jooqGenerator"("org.jooq:jooq-codegen:3.20.8")
+    "jooqGenerator"("org.jooq:jooq-meta:3.20.8")
+    "jooqGenerator"("org.testcontainers:testcontainers-postgresql:2.0.2") // BOM doesn't work for custom configs
+    "jooqGenerator"("org.postgresql:postgresql:42.7.5")
+    "jooqGenerator"("org.liquibase:liquibase-core:5.0.1")
 
     // Documentation Generation
-    "docGenImplementation"("io.ktor:ktor-server-test-host:2.3.7")
+    "docGenImplementation"("io.ktor:ktor-server-test-host:3.3.2")
 }
 
 application {

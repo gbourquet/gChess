@@ -22,7 +22,8 @@
 package com.gchess.matchmaking.domain.model
 
 import com.gchess.shared.domain.model.UserId
-import kotlinx.datetime.Instant
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 /**
  * Value object representing a user waiting in the matchmaking queue.
@@ -30,7 +31,7 @@ import kotlinx.datetime.Instant
  * @property userId The unique identifier of the user
  * @property joinedAt The timestamp when the user joined the queue
  */
-data class QueueEntry(
+data class QueueEntry @OptIn(ExperimentalTime::class) constructor(
     val userId: UserId,
     val joinedAt: Instant
 )

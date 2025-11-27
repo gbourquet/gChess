@@ -22,6 +22,9 @@
 package com.gchess.chess
 
 import com.gchess.infrastructure.DatabaseITest
+import com.gchess.module
+import io.kotest.matchers.equals.shouldBeEqual
+import io.kotest.matchers.equals.shouldNotBeEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.ktor.client.plugins.websocket.*
@@ -32,6 +35,7 @@ import io.ktor.server.testing.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
+import org.apache.http.HttpStatus
 
 /**
  * End-to-end integration test for a complete chess game with a pawn promotion.
@@ -49,34 +53,37 @@ class PawnPromotionITest : DatabaseITest({
 
     "game from registration to pawn promotion" {
         testApplication {
+            application {
+                module()
+            }
             val httpClient = createClient { }
 
             // ========== 1. Register both players ==========
             httpClient.post("/api/auth/register") {
                 contentType(ContentType.Application.Json)
                 setBody("""{"username": "player3", "email": "player3@example.com", "password": "password123"}""")
-            }
+            }.status shouldBeEqual HttpStatusCode.Created
             httpClient.post("/api/auth/register") {
                 contentType(ContentType.Application.Json)
                 setBody("""{"username": "player4", "email": "player4@example.com", "password": "password123"}""")
-            }
+            }.status shouldBeEqual HttpStatusCode.Created
 
             // ========== 2. Login both players ==========
             val loginResponse1 = httpClient.post("/api/auth/login") {
                 contentType(ContentType.Application.Json)
                 setBody("""{"username": "player3", "password": "password123"}""")
             }
+            loginResponse1.status shouldBeEqual HttpStatusCode.OK
             val loginJson1 = Json.parseToJsonElement(loginResponse1.bodyAsText()).jsonObject
             val token1 = loginJson1["token"]?.jsonPrimitive?.content!!
-            val userId1 = loginJson1["user"]?.jsonObject?.get("id")?.jsonPrimitive?.content!!
 
             val loginResponse2 = httpClient.post("/api/auth/login") {
                 contentType(ContentType.Application.Json)
                 setBody("""{"username": "player4", "password": "password123"}""")
             }
+            loginResponse2.status shouldBeEqual HttpStatusCode.OK
             val loginJson2 = Json.parseToJsonElement(loginResponse2.bodyAsText()).jsonObject
             val token2 = loginJson2["token"]?.jsonPrimitive?.content!!
-            val userId2 = loginJson2["user"]?.jsonObject?.get("id")?.jsonPrimitive?.content!!
 
             // ========== 3. Join matchmaking and get game ID ==========
             val wsClient1 = createClient { install(WebSockets) }
@@ -150,6 +157,8 @@ class PawnPromotionITest : DatabaseITest({
             player1GameId shouldBe player2GameId // Ensure both got the same game ID
             player1Id shouldNotBe ""
             player2Id shouldNotBe ""
+            player1Color?.shouldNotBeEqual(player2Color!!)
+
             val gameId = player1GameId
 
             // Determine which player is white and which is black

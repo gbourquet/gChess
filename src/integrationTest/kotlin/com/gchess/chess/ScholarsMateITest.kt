@@ -22,6 +22,7 @@
 package com.gchess.chess
 
 import com.gchess.infrastructure.DatabaseITest
+import com.gchess.module
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.ktor.client.plugins.websocket.*
@@ -55,6 +56,9 @@ class ScholarsMateITest : DatabaseITest({
 
     "Complete Scholar's Mate game from registration to checkmate" {
         testApplication {
+            application {
+                module()
+            }
             val httpClient = createClient { }
 
             // ========== 1. Register both players ==========

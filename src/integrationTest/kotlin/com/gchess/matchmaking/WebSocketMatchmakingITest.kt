@@ -1,6 +1,7 @@
 package com.gchess.matchmaking
 
 import com.gchess.infrastructure.DatabaseITest
+import com.gchess.module
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.ktor.client.plugins.websocket.*
@@ -29,6 +30,9 @@ class WebSocketMatchmakingITest : DatabaseITest({
 
     "WebSocket matchmaking should authenticate and send queue position update" {
         testApplication {
+            application {
+                module()
+            }
             val httpClient = createClient { }
 
             // Register and login player
@@ -73,6 +77,9 @@ class WebSocketMatchmakingITest : DatabaseITest({
 
     "WebSocket matchmaking should reject connection without JWT token" {
         testApplication {
+            application {
+                module()
+            }
             val wsClient = createClient {
                 install(WebSockets)
             }
@@ -93,6 +100,9 @@ class WebSocketMatchmakingITest : DatabaseITest({
 
     "WebSocket matchmaking should reject invalid token" {
         testApplication {
+            application {
+                module()
+            }
             val wsClient = createClient {
                 install(WebSockets)
             }
@@ -113,6 +123,9 @@ class WebSocketMatchmakingITest : DatabaseITest({
 
     "WebSocket matchmaking should handle invalid message gracefully" {
         testApplication {
+            application {
+                module()
+            }
             val httpClient = createClient { }
 
             // Register and login

@@ -48,7 +48,7 @@ import kotlinx.serialization.json.Json
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 import java.net.URI
-import java.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
@@ -113,15 +113,15 @@ fun Application.module() {
 
     // WebSocket configuration
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(30)
-        timeout = Duration.ofSeconds(15)
+        pingPeriod = 30.seconds
+        timeout = 15.seconds
         maxFrameSize = Long.MAX_VALUE
         masking = false
     }
 
     // OpenAPI Documentation
     install(NotarizedApplication()) {
-        spec = OpenApiSpec(
+        spec =   { OpenApiSpec(
             info = Info(
                 title = OpenApiConfig.TITLE,
                 version = OpenApiConfig.VERSION,
@@ -137,7 +137,7 @@ fun Application.module() {
                     description = OpenApiConfig.Server.LOCAL_DESCRIPTION
                 )
             )
-        )
+        ) }
     }
 
     // JWT Authentication

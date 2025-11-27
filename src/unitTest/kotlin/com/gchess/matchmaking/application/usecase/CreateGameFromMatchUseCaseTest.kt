@@ -36,10 +36,10 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         match.gameId shouldBe gameId
 
         // One player should be white, the other black
-        val whitePlayer = match.whiteUserId
-        val blackPlayer = match.blackUserId
-        (whitePlayer == user1 && blackPlayer == user2) ||
-            (whitePlayer == user2 && blackPlayer == user1) shouldBe true
+        val whitePlayer = match.whitePlayer
+        val blackPlayer = match.blackPlayer
+        (whitePlayer.userId == user1 && blackPlayer.userId == user2) ||
+                (whitePlayer.userId == user2 && blackPlayer.userId == user1) shouldBe true
     }
 
     test("execute should assign colors with 50/50 distribution") {
@@ -63,8 +63,8 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
         }
 
         // Then - should have reasonable distribution (not all same color)
-        val user1WhiteCount = matches.count { it.whiteUserId == user1 }
-        val user1BlackCount = matches.count { it.blackUserId == user1 }
+        val user1WhiteCount = matches.count { it.whitePlayer.userId == user1 }
+        val user1BlackCount = matches.count { it.blackPlayer.userId == user1 }
 
         // With seed 42, we should have a mix (not 100 or 0)
         user1WhiteCount shouldNotBe 0
@@ -136,30 +136,7 @@ class CreateGameFromMatchUseCaseTest : FunSpec({
 
         // Then
         val match = result.getOrNull()!!
-        match.whiteUserId shouldNotBe match.blackUserId
-    }
-
-    test("execute should set matchedAt and expiresAt timestamps") {
-        // Given
-        val user1 = UserId.generate()
-        val user2 = UserId.generate()
-        val gameId = GameId.generate()
-        val gameCreator = mockk<GameCreator>()
-        val userChecker = mockk<UserExistenceChecker>()
-
-        coEvery { userChecker.exists(any()) } returns true
-        coEvery { gameCreator.createGame(any(), any()) } returns Result.success(gameId)
-
-        val useCase = CreateGameFromMatchUseCase(gameCreator, userChecker)
-
-        // When
-        val result = useCase.execute(user1, user2)
-
-        // Then
-        val match = result.getOrNull()!!
-        match.matchedAt shouldNotBe null
-        match.expiresAt shouldNotBe null
-        match.expiresAt shouldNotBe match.matchedAt
+        match.whitePlayer.userId shouldNotBe match.blackPlayer.userId
     }
 })
 

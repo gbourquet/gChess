@@ -8,7 +8,9 @@ import io.kotest.assertions.throwables.shouldThrow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class InMemoryMatchmakingQueueTest : FunSpec({
 
     test("addPlayer should add player to queue successfully") {

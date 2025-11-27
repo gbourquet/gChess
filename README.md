@@ -4,8 +4,8 @@
 
 **gChess** is a production-ready chess application that demonstrates Domain-Driven Design, hexagonal architecture, and real-time communication. Players can register, join matchmaking queues, and play complete chess games with instant move updates via WebSockets.
 
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.22-purple?logo=kotlin)](https://kotlinlang.org/)
-[![Ktor](https://img.shields.io/badge/Ktor-2.3.7-orange?logo=ktor)](https://ktor.io/)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-purple?logo=kotlin)](https://kotlinlang.org/)
+[![Ktor](https://img.shields.io/badge/Ktor-3.3.2-orange?logo=ktor)](https://ktor.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue?logo=postgresql)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -612,27 +612,28 @@ sequenceDiagram
 
 | Component | Technology | Version |
 |-----------|------------|---------|
-| **Language** | Kotlin (JVM) | 1.9.22 |
+| **Language** | Kotlin (JVM) | 2.2.21 |
 | **Runtime** | Java | 21 |
-| **Web Framework** | Ktor | 2.3.7 |
+| **Web Framework** | Ktor | 3.3.2 |
 | **HTTP Engine** | Netty | (via Ktor) |
-| **WebSocket** | Ktor WebSockets | 2.3.7 |
+| **WebSocket** | Ktor WebSockets | 3.3.2 |
 | **Database** | PostgreSQL | 16+ |
-| **Database Access** | jOOQ | 3.19.6 |
-| **Migrations** | Liquibase | 4.26.0 |
-| **Connection Pool** | HikariCP | 5.1.0 |
+| **Database Access** | jOOQ | 3.20.8 |
+| **Migrations** | Liquibase | 5.0.1 |
+| **Connection Pool** | HikariCP | 7.0.2 |
 | **Authentication** | JWT (auth0-jwt) | 4.4.0 |
 | **Password Hashing** | BCrypt (jbcrypt) | 0.4 |
-| **Unique IDs** | ULID | (sulky) |
-| **DI Framework** | Koin | 3.5.3 |
-| **Serialization** | Kotlinx Serialization | 1.6.2 |
-| **Testing** | Kotest | 5.8.0 |
-| **Architecture Tests** | ArchUnit | 1.2.1 |
-| **Integration Tests** | Testcontainers | 1.19.7 |
+| **Unique IDs** | ULID | (sulky 8.3.0) |
+| **DI Framework** | Koin | 4.1.0 |
+| **Serialization** | Kotlinx Serialization | (via Ktor) |
+| **Time/Date** | Kotlin Time (stdlib) | 2.2.21 |
+| **Testing** | Kotest | 6.0.5 |
+| **Architecture Tests** | ArchUnit | 1.4.1 |
+| **Integration Tests** | Testcontainers | 2.0.2 |
 | **Build Tool** | Gradle (KTS) | 8.x |
-| **Logging** | Logback + SLF4J | 1.4.14 |
+| **Logging** | Logback + SLF4J | 1.5.21 |
 | **Documentation** | Kompendium (OpenAPI) | 3.14.4 |
-| **CORS** | Ktor CORS | 2.3.7 |
+| **CORS** | Ktor CORS | 3.3.2 |
 
 ---
 

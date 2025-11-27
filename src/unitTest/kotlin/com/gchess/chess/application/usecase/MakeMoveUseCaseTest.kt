@@ -295,7 +295,7 @@ class MakeMoveUseCaseTest : FunSpec({
             promotion = null
         )
 
-        val positionAfterCheckmate = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3".toChessPosition()
+        "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3".toChessPosition()
 
         val savedGameSlot = slot<Game>()
 
@@ -355,7 +355,7 @@ class MakeMoveUseCaseTest : FunSpec({
             promotion = null
         )
 
-        val positionAfterStalemate = "7k/8/5QK1/8/8/8/8/8 b - - 1 1".toChessPosition()
+        "7k/8/5QK1/8/8/8/8/8 b - - 1 1".toChessPosition()
 
         val savedGameSlot = slot<Game>()
 

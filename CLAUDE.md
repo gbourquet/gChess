@@ -8,14 +8,15 @@ gChess is a Kotlin chess application using Domain-Driven Design with bounded con
 
 ## Technology Stack
 
-- **Language**: Kotlin 1.9.22, JVM: Java 21
-- **Web**: Ktor 2.3.7 (Netty), WebSocket, JWT (auth0-jwt)
-- **Database**: PostgreSQL 16+, jOOQ 3.19.6, Liquibase 4.26.0, HikariCP
+- **Language**: Kotlin 2.2.21, JVM: Java 21
+- **Web**: Ktor 3.3.2 (Netty), WebSocket, JWT (auth0-jwt)
+- **Database**: PostgreSQL 16+, jOOQ 3.20.8, Liquibase 5.0.1, HikariCP 7.0.2
 - **Security**: BCrypt (jbcrypt 0.4), JWT
-- **DI**: Koin 3.5.3
-- **IDs**: ULID (time-sortable, URL-safe)
+- **DI**: Koin 4.1.0
+- **IDs**: ULID (sulky 8.3.0)
+- **Time**: kotlin.time (stdlib)
 - **Serialization**: Kotlinx Serialization (JSON)
-- **Testing**: Kotest, ArchUnit, Testcontainers
+- **Testing**: Kotest 6.0.5, ArchUnit 1.4.1, Testcontainers 2.0.2
 - **Docs**: OpenAPI 3.0 (REST), AsyncAPI 3.0 (WebSocket)
 
 ## Build Commands

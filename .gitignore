@@ -30,3 +30,4 @@ bin/
 
 # Auto-generated OpenAPI configuration
 src/main/kotlin/com/gchess/infrastructure/config/OpenApiConfig.kt
+/.claude/commands/commit.md

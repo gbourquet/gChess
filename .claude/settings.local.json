@@ -8,7 +8,9 @@
       "Bash(./gradlew integrationTest:*)",
       "Bash(./gradlew clean integrationTest)",
       "Bash(./gradlew architectureTest:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
     ]
   },
   "outputStyle": "default"

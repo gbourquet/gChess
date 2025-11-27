@@ -46,7 +46,22 @@ class RegisterUserUseCase(
      * @param plainPassword The password in plain text (will be hashed)
      * @return Result containing the created User or an error
      */
-    suspend fun execute(username: String, email: String, plainPassword: String): Result<User> {
+    suspend fun execute(username: String, email: String, plainPassword: String): Result<User> =
+        validate(username, email, plainPassword) ?:
+        User(
+            id = UserId.generate(),
+            username = username,
+            email = email,
+            passwordHash = passwordHasher.hash(plainPassword)
+        )
+            .run { userRepository.save(this) }
+            .let { Result.success(it) }
+
+    private suspend fun validate(
+        username: String,
+        email: String,
+        plainPassword: String
+    ): Result<User>? {
         // Validate username uniqueness
         if (userRepository.existsByUsername(username)) {
             return Result.failure(Exception("Username '$username' is already taken"))
@@ -62,20 +77,6 @@ class RegisterUserUseCase(
             return Result.failure(Exception("Password must be at least 8 characters long"))
         }
 
-        // Hash the password
-        val passwordHash = passwordHasher.hash(plainPassword)
-
-        // Create the user
-        val user = User(
-            id = UserId.generate(),
-            username = username,
-            email = email,
-            passwordHash = passwordHash
-        )
-
-        // Save the user
-        val savedUser = userRepository.save(user)
-
-        return Result.success(savedUser)
+        return null
     }
 }

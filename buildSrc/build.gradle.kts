@@ -7,7 +7,8 @@ repositories {
 }
 
 dependencies {
-    implementation("org.testcontainers:postgresql:1.19.7")
-    implementation("org.postgresql:postgresql:42.7.3")
-    implementation("org.liquibase:liquibase-core:4.26.0")
+    // BOM platform doesn't work well in buildSrc, so we specify versions explicitly
+    implementation("org.testcontainers:testcontainers-postgresql:2.0.2")
+    implementation("org.postgresql:postgresql:42.7.5")
+    implementation("org.liquibase:liquibase-core:5.0.1")
 }

@@ -26,11 +26,12 @@ import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.shared.domain.model.UserId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlin.time.ExperimentalTime
 
 /**
  * In-memory implementation of MatchmakingQueue.
@@ -51,6 +52,7 @@ class InMemoryMatchmakingQueue : MatchmakingQueue {
     private val queue = ConcurrentLinkedQueue<QueueEntry>()
     private val indexByUser = ConcurrentHashMap<UserId, QueueEntry>()
 
+    @OptIn(ExperimentalTime::class)
     override suspend fun addPlayer(userId: UserId): QueueEntry = withContext(Dispatchers.IO) {
         lock.withLock {
             // Check if user already in queue

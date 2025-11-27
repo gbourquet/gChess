@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigValueFactory
 import org.jooq.DSLContext
 import org.koin.core.context.GlobalContext
-import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.postgresql.PostgreSQLContainer
 
 /**
  * Test database configuration using Testcontainers.
@@ -23,7 +23,7 @@ object TestDatabaseConfig {
      * Singleton PostgreSQL container.
      * Started once and reused across all tests.
      */
-    private val postgresContainer: PostgreSQLContainer<*> by lazy {
+    private val postgresContainer: PostgreSQLContainer by lazy {
         PostgreSQLContainer("postgres:16-alpine")
             .withDatabaseName("gchess_test")
             .withUsername("test_user")

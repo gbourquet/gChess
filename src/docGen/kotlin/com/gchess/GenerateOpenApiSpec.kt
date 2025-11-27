@@ -20,8 +20,9 @@ fun main(args: Array<String>) {
 
     // Start the application in test mode and fetch the generated OpenAPI spec
     testApplication {
-        // module() is automatically called from application.conf
-        // (see ktor.application.modules in application.conf)
+        application {
+            module()
+        }
 
         val client = createClient {
             // No additional configuration needed

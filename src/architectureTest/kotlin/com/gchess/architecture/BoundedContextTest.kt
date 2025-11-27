@@ -226,10 +226,10 @@ class BoundedContextTest {
     }
 
     @Test
-    @DisplayName("Shared Kernel should not have external dependencies")
-    fun `shared kernel should not depend on external frameworks`() {
+    @DisplayName("Shared Kernel domain should not have external dependencies")
+    fun `shared kernel domain should not depend on external frameworks`() {
         val rule = noClasses()
-            .that().resideInAPackage("..shared..")
+            .that().resideInAPackage("..shared.domain..")
             .should().dependOnClassesThat().resideInAnyPackage(
                 "io.ktor..",
                 "org.koin..",
@@ -237,7 +237,7 @@ class BoundedContextTest {
                 "org.mindrot..",
                 "com.auth0.."
             )
-            .because("Shared Kernel must remain framework-agnostic and dependency-free")
+            .because("Shared Kernel domain must remain framework-agnostic and dependency-free (infrastructure can use frameworks)")
 
         rule.check(classes)
     }
