@@ -1,59 +1,106 @@
-# gChess
+# gChess ♟️
 
-A high-performance chess application built with Kotlin, featuring bitboard-based move generation, hexagonal architecture, and Domain-Driven Design with bounded contexts.
+> A modern, real-time multiplayer chess platform built with Kotlin, featuring WebSocket-based gameplay, automatic matchmaking, and a complete FIDE-compliant chess engine.
 
-## Features
+**gChess** is a production-ready chess application that demonstrates Domain-Driven Design, hexagonal architecture, and real-time communication. Players can register, join matchmaking queues, and play complete chess games with instant move updates via WebSockets.
 
-### Chess Engine
-- ⚡ **Bitboard-based architecture** for efficient move generation and position evaluation
-- ♟️ **Complete FIDE chess rules implementation**:
-  - All piece movements (Pawn, Knight, Bishop, Rook, Queen, King)
-  - Special moves: Castling (kingside & queenside), En passant, Pawn promotion
-  - Check detection and pinned piece handling
-  - Move validation ensuring king safety (including protected piece validation)
-  - **Game-ending conditions**: Checkmate and Stalemate detection
-  - **Draw rules**: Fifty-move rule, Threefold repetition, Insufficient material
-- 📊 **FEN notation support** for position import/export
-- 🎯 **Legal move generation** with full rule compliance
+[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.22-purple?logo=kotlin)](https://kotlinlang.org/)
+[![Ktor](https://img.shields.io/badge/Ktor-2.3.7-orange?logo=ktor)](https://ktor.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue?logo=postgresql)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-### User Management & Security
-- 🔐 **JWT authentication** with Bearer tokens
-- 👤 **User registration and login** with BCrypt password hashing
-- 🛡️ **Protected endpoints** requiring authentication
-- 🔑 **ULID-based identifiers** for users and games
+---
 
-### API & Architecture
-- 🌐 **RESTful API** for game and user operations
-- 🏗️ **Hexagonal architecture** (ports and adapters)
-- 🎯 **Domain-Driven Design** with bounded contexts (Chess + User + Matchmaking)
-- 🔄 **Anti-Corruption Layer** for context communication
-- 🧪 **Comprehensive test coverage** (108+ unit tests, architecture tests, integration tests)
-- 💉 **Dependency injection** with Koin
-- 🗄️ **PostgreSQL persistence** with jOOQ and Liquibase migrations
+## 🎯 Project Overview
 
-## Quick Start
+**gChess** combines a powerful chess engine with modern web technologies to deliver a seamless multiplayer chess experience:
+
+- **Real-time gameplay**: WebSocket-based communication ensures instant move updates and matchmaking notifications
+- **Automatic matchmaking**: FIFO queue system that pairs players and automatically creates games
+- **Complete chess rules**: Bitboard-based engine with full FIDE compliance (castling, en passant, promotion, all draw conditions)
+- **Clean architecture**: Domain-Driven Design with three bounded contexts (Chess, User, Matchmaking)
+- **Production-ready**: PostgreSQL persistence, JWT authentication, comprehensive testing (100+ tests)
+
+---
+
+## ✨ Implemented Features
+
+### 🔐 User Management & Security
+- User registration with email validation
+- JWT-based authentication (Bearer tokens, 24-hour validity)
+- BCrypt password hashing (work factor 12)
+- User profile retrieval
+- ULID-based identifiers for all entities
+
+### 🎮 Game Management
+- **Real-time gameplay** via WebSocket connections
+- **Automatic game creation** from matchmaking
+- **Manual game creation** via REST API
+- **Move validation** with complete chess rules
+- **Game state persistence** with FEN notation
+- **Move history tracking** with algebraic notation
+- **Spectator mode** (read-only WebSocket connections)
+- **Multi-device support** (play multiple games simultaneously)
+
+### 🎲 Matchmaking System
+- **Real-time FIFO matchmaking queue**
+- **Instant match notifications** via WebSocket
+- **Automatic color assignment** (random)
+- **Queue position updates** in real-time
+- **Auto-cleanup** on disconnection
+- **5-minute match TTL** with expiration tracking
+- **Persistent match records** in database
+
+### ♟️ Chess Engine (Bitboard-Based)
+- **All piece movements**: Pawn, Knight, Bishop, Rook, Queen, King
+- **Special moves**:
+  - ✅ Castling (kingside & queenside)
+  - ✅ En passant capture
+  - ✅ Pawn promotion (Queen, Rook, Bishop, Knight)
+- **Check & checkmate detection**
+- **Pinned piece handling** (pieces exposing king to check)
+- **Protected piece validation** (king cannot capture defended pieces)
+- **Game-ending conditions**:
+  - ✅ Checkmate
+  - ✅ Stalemate
+  - ✅ Fifty-move rule
+  - ✅ Threefold repetition
+  - ✅ Insufficient material
+- **FEN notation** support for position serialization
+- **Bitboard architecture** for optimal performance
+
+### 🌐 Real-Time Communication
+- **Game WebSocket** (`/ws/game/{gameId}`) - Real-time move updates for players
+- **Matchmaking WebSocket** (`/ws/matchmaking`) - Instant queue and match notifications
+- **Spectator WebSocket** (`/ws/game/{gameId}/spectate`) - Watch games live (read-only)
+- **JWT authentication** for all WebSocket connections
+- **Automatic reconnection handling**
+- **Player disconnect/reconnect notifications**
+
+### 🏗️ Architecture & Quality
+- **Domain-Driven Design** with 3 bounded contexts (Chess, User, Matchmaking)
+- **Hexagonal architecture** (ports and adapters)
+- **Anti-Corruption Layer (ACL)** for context isolation
+- **100+ unit tests** with Kotest
+- **Architecture tests** with ArchUnit (enforces DDD rules)
+- **Integration tests** with Testcontainers (real PostgreSQL)
+- **PostgreSQL persistence** with jOOQ and Liquibase migrations
+- **Dependency injection** with Koin
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Java 21 or higher
-- Gradle (wrapper included)
-- Docker (required for Testcontainers during build and tests)
-- PostgreSQL 16+ (for production deployment)
+- **Java 21** or higher
+- **Docker** (for PostgreSQL and Testcontainers)
+- **Gradle** (wrapper included)
 
-### Database Setup
+### 1. Start PostgreSQL Database
 
-The application uses PostgreSQL for data persistence. You have two options:
+The quickest way to get started is with Docker:
 
-#### Option 1: Development with Default Configuration (Recommended)
-
-The application will attempt to connect to PostgreSQL using default development credentials:
-```
-URL: jdbc:postgresql://localhost:5432/gchess_dev
-Username: gchess
-Password: gchess
-```
-
-**Quick PostgreSQL setup with Docker:**
 ```bash
 docker run -d \
   --name gchess-postgres \
@@ -64,81 +111,32 @@ docker run -d \
   postgres:16-alpine
 ```
 
+Alternatively, use the provided `docker-compose.yml`:
+
+```bash
+cd docker && docker-compose up -d
+```
+
 Database migrations will run automatically on application startup via Liquibase.
 
-#### Option 2: Custom Configuration with Environment Variables
-
-Override default values with environment variables:
-
-```bash
-export DATABASE_URL="jdbc:postgresql://your-host:5432/your-database"
-export DATABASE_USER="your-username"
-export DATABASE_PASSWORD="your-password"
-export DATABASE_POOL_SIZE=20  # Optional: connection pool size (default: 10)
-
-# JWT secret (REQUIRED in production)
-export JWT_SECRET="your-secure-random-secret-min-256-bits"
-export JWT_VALIDITY_MS=86400000  # Optional: token validity in ms (default: 24h)
-
-./gradlew run
-```
-
-**Generate a secure JWT secret:**
-```bash
-openssl rand -base64 32
-```
-
-### Running the Application
+### 2. Run the Application
 
 ```bash
 ./gradlew run
 ```
 
-The server will start on `http://localhost:8080`
+The server will start on **http://localhost:8080**
 
-On first startup, you'll see:
-- Database connection established
-- Liquibase migrations applied (creates tables: users, games, game_moves, matches)
-- Server ready to accept requests
-
-### Building
-
-```bash
-./gradlew build
+You should see:
+```
+✅ Database connection established
+✅ Liquibase migrations applied (users, games, game_moves tables)
+✅ Server ready on http://localhost:8080
 ```
 
-### Testing
+### 3. Test the API
 
-Run all tests:
-```bash
-./gradlew check
-```
-
-Run unit tests only:
-```bash
-./gradlew unitTest
-```
-
-Run architecture tests only:
-```bash
-./gradlew architectureTest
-```
-
-Run integration tests only:
-```bash
-./gradlew integrationTest
-```
-
-Run specific test class:
-```bash
-./gradlew unitTest --tests "com.gchess.domain.service.StandardChessRulesTest"
-```
-
-## API Usage
-
-### User Management
-
-#### Register a new user
+**Register a user:**
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
@@ -149,449 +147,708 @@ curl -X POST http://localhost:8080/api/auth/register \
   }'
 ```
 
-**Response:**
-```json
-{
-  "id": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
-  "username": "alice",
-  "email": "alice@example.com"
-}
-```
-
-#### Login
+**Login:**
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "username": "alice",
-    "password": "SecurePassword123"
-  }'
+  -d '{"username": "alice", "password": "SecurePassword123"}'
 ```
 
-**Response:**
-```json
+Save the returned JWT token - you'll need it for authenticated requests!
+
+---
+
+## 🛠️ Development Environment
+
+### Building the Project
+
+```bash
+# Full build with all tests
+./gradlew build
+
+# Build without tests
+./gradlew assemble
+```
+
+### Testing
+
+```bash
+# Run all tests (unit + architecture + integration)
+./gradlew check
+
+# Run only unit tests (fast, 100+ tests)
+./gradlew unitTest
+
+# Run only architecture tests (ArchUnit DDD validation)
+./gradlew architectureTest
+
+# Run only integration tests (E2E with Testcontainers)
+./gradlew integrationTest
+
+# Run specific test class
+./gradlew unitTest --tests "com.gchess.chess.domain.service.StandardChessRulesTest"
+```
+
+### Database Operations
+
+```bash
+# Regenerate jOOQ classes after schema changes
+./gradlew generateJooq
+
+# Manually run migrations (usually automatic on startup)
+# Migrations are in src/main/resources/db/changelog/
+```
+
+### Code Quality
+
+The project includes automated architecture validation:
+
+```bash
+# Validate hexagonal architecture and bounded context isolation
+./gradlew architectureTest
+```
+
+**What gets validated:**
+- ✅ Domain layer has no dependencies on infrastructure/application
+- ✅ Bounded contexts are isolated (Chess cannot depend on User/Matchmaking)
+- ✅ Only infrastructure can cross context boundaries (via ACL)
+- ✅ Naming conventions (UseCase suffix, Repository suffix)
+
+---
+
+## 📡 API Reference
+
+### REST API (Synchronous - Authentication Only)
+
+gChess uses a **hybrid architecture**: REST for authentication, WebSocket for all real-time operations (matchmaking, gameplay).
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/auth/register` | POST | ❌ | Register new user |
+| `/api/auth/login` | POST | ❌ | Login and get JWT token |
+
+**Example: Register**
+```bash
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "username": "bob",
+  "email": "bob@example.com",
+  "password": "SecurePassword123"
+}
+
+# Response: 201 Created
+{
+  "id": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
+  "username": "bob",
+  "email": "bob@example.com"
+}
+```
+
+**Example: Login**
+```bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "bob",
+  "password": "SecurePassword123"
+}
+
+# Response: 200 OK
 {
   "user": {
     "id": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
-    "username": "alice",
-    "email": "alice@example.com"
+    "username": "bob",
+    "email": "bob@example.com"
   },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "message": "Login successful"
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 
-**Save the token** - you'll need it for authenticated requests!
+**Important**: After authentication, all game operations (matchmaking, moves, spectating) are done via WebSocket (see below).
 
-### Game Operations (Require Authentication)
+---
 
-#### Create a new game
-```bash
-# Register two players first, then:
-curl -X POST http://localhost:8080/api/games \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "whitePlayerId": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
-    "blackPlayerId": "01HQZN2K3M4P5Q6R7S8T9V0W2Y"
-  }'
+### WebSocket API (Asynchronous - Real-Time)
+
+All WebSocket endpoints require JWT authentication via query parameter:
+```
+ws://localhost:8080/ws/<endpoint>?token=<JWT_TOKEN>
 ```
 
-**Response:**
+#### 🎲 Matchmaking WebSocket
+
+**URL**: `ws://localhost:8080/ws/matchmaking?token=<JWT>`
+
+**Purpose**: Join matchmaking queue and receive instant match notifications
+
+**Client → Server Messages**:
 ```json
 {
-  "id": "01HQZN3A4B5C6D7E8F9G0H1J2K",
-  "whitePlayer": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
-  "blackPlayer": "01HQZN2K3M4P5Q6R7S8T9V0W2Y",
-  "board": {},
-  "currentSide": "WHITE",
-  "currentPlayer": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
-  "status": "IN_PROGRESS",
-  "moveHistory": []
+  "type": "JoinQueue"
 }
 ```
 
-#### Get game state (Public - No Auth Required)
-```bash
-curl http://localhost:8080/api/games/{gameId}
+**Server → Client Messages**:
+
+1. **Authentication Success**
+```json
+{
+  "type": "AuthSuccess",
+  "userId": "01HQZN2K3M4P5Q6R7S8T9V0W1X"
+}
 ```
 
-#### Make a move
-```bash
-# Player ID is extracted from JWT token
-# Simple pawn move
-curl -X POST http://localhost:8080/api/games/{gameId}/moves \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{"from": "e2", "to": "e4"}'
-
-# Pawn promotion to queen
-curl -X POST http://localhost:8080/api/games/{gameId}/moves \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{"from": "e7", "to": "e8", "promotion": "QUEEN"}'
-
-# Castling (just move the king 2 squares)
-curl -X POST http://localhost:8080/api/games/{gameId}/moves \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{"from": "e1", "to": "g1"}'
+2. **Queue Position Update** (sent periodically)
+```json
+{
+  "type": "QueuePositionUpdate",
+  "position": 3
+}
 ```
 
-**Note:** The API validates that:
-- Both players exist before creating a game
-- It's the authenticated player's turn
-- The move is legal according to chess rules
-
-## Chess Rules Implementation
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| **Basic Moves** | ✅ | All piece types (Pawn, Knight, Bishop, Rook, Queen, King) |
-| **Pawn Promotion** | ✅ | Promote to Queen, Rook, Bishop, or Knight |
-| **Castling** | ✅ | Kingside and queenside for both colors |
-| **En Passant** | ✅ | Special pawn capture |
-| **Check Detection** | ✅ | Validates king safety |
-| **Pinned Pieces** | ✅ | Pieces that cannot move without exposing king |
-| **Protected Pieces** | ✅ | King cannot capture protected pieces |
-| **FEN Support** | ✅ | Import/export positions via Forsyth-Edwards Notation |
-| **Checkmate** | ✅ | King in check with no legal moves |
-| **Stalemate** | ✅ | King not in check with no legal moves |
-| **Fifty-Move Rule** | ✅ | Draw after 50 moves without capture/pawn move |
-| **Threefold Repetition** | ✅ | Draw when same position occurs 3 times |
-| **Insufficient Material** | ✅ | Draw when checkmate is impossible (K vs K, K+B vs K, etc.) |
-
-## Architecture
-
-The project follows **Domain-Driven Design** with **bounded contexts**, implementing **hexagonal architecture** (ports and adapters) within each context:
-
-```
-                    ┌──────────────────────────────────────────┐
-                    │         Shared Kernel                    │
-                    │   (PlayerId, GameId - Value Objects)     │
-                    └──────────────────────────────────────────┘
-                              ↑        ↑        ↑
-                              │        │        │
-        ┌─────────────────────┘        │        └─────────────────────┐
-        │                              │                              │
-┌───────┴────────────┐    ┌───────────┴──────────┐    ┌─────────────┴──────┐
-│  Chess Context     │    │  Matchmaking Context │    │   User Context     │
-│ ┌────────────────┐ │    │ ┌──────────────────┐ │    │ ┌────────────────┐ │
-│ │Infrastructure  │ │    │ │ Infrastructure   │ │    │ │Infrastructure  │ │
-│ │• GameRoutes    │←┼────┼─│• MatchRoutes     │ │    │ │• AuthRoutes    │ │
-│ │• PostgresGame  │ │    │ │• PostgresMatch   │ │    │ │• PostgresUser  │ │
-│ │  Repository    │ │    │ │  Repository      │ │    │ │  Repository    │ │
-│ │                │ │    │ │• GameCreator ACL─┼─┼───→│ │                │ │
-│ │• PlayerChecker │ │    │ │• PlayerChecker ──┼─┼────┼→│• JwtConfig     │ │
-│ │  ACL ──────────┼─┼────┼─┼→ (reused port)   │ │    │ │                │ │
-│ └────────────────┘ │    │ └──────────────────┘ │    │ └────────────────┘ │
-│ ┌────────────────┐ │    │ ┌──────────────────┐ │    │ ┌────────────────┐ │
-│ │Application     │ │    │ │ Application      │ │    │ │Application     │ │
-│ │• CreateGame    │ │    │ │• JoinMatchmaking │ │    │ │• RegisterUser  │ │
-│ │• MakeMove      │ │    │ │• GetStatus       │ │    │ │• Login         │ │
-│ │• GetGame       │ │    │ │• LeaveQueue      │ │    │ │• GetUser       │ │
-│ └────────────────┘ │    │ └──────────────────┘ │    │ └────────────────┘ │
-│ ┌────────────────┐ │    │ ┌──────────────────┐ │    │ ┌────────────────┐ │
-│ │Domain          │ │    │ │ Domain           │ │    │ │Domain          │ │
-│ │• Game          │ │    │ │• Match           │ │    │ │• User          │ │
-│ │• ChessRules    │ │    │ │• QueueEntry      │ │    │ │• Credentials   │ │
-│ │• ChessPosition │ │    │ │• Ports           │ │    │ │• Ports         │ │
-│ └────────────────┘ │    │ └──────────────────┘ │    │ └────────────────┘ │
-└────────────────────┘    └──────────────────────┘    └────────────────────┘
-
-         ACL 1: Chess → User (Player validation)
-         ACL 2: Matchmaking → Chess (Game creation)
-         ACL 3: Matchmaking → User (Player validation, port reuse)
+3. **Match Found** (triggers game creation)
+```json
+{
+  "type": "MatchFound",
+  "gameId": "01HQZN3A4B5C6D7E8F9G0H1J2K",
+  "yourColor": "WHITE",
+  "playerId": "01HQZN3B5C6D7E8F9G0H1J2K3L"
+}
 ```
 
-### Bounded Contexts
-
-**Chess Context** (`com.gchess.chess`):
-- **Domain**: Game, ChessPosition, ChessRules, PlayerSide
-- **Application**: CreateGameUseCase, MakeMoveUseCase, GetGameUseCase
-- **Infrastructure**: GameRoutes, PostgresGameRepository (jOOQ), UserContextPlayerChecker (ACL)
-- **Purpose**: Manages chess games, rules, and gameplay
-
-**User Context** (`com.gchess.user`):
-- **Domain**: User, Credentials, PasswordHasher port
-- **Application**: RegisterUserUseCase, LoginUseCase, GetUserUseCase
-- **Infrastructure**: AuthRoutes, UserRoutes, PostgresUserRepository (jOOQ), BcryptPasswordHasher
-- **Purpose**: Manages user accounts, authentication, and security
-
-**Matchmaking Context** (`com.gchess.matchmaking`):
-- **Domain**: QueueEntry, Match, MatchmakingStatus
-- **Application**: JoinMatchmakingUseCase, GetMatchStatusUseCase, LeaveMatchmakingUseCase
-- **Infrastructure**: MatchmakingRoutes, PostgresMatchRepository (jOOQ), InMemoryMatchmakingQueue
-- **Purpose**: Manages player matchmaking, automatic game creation, and color assignment
-
-**Shared Kernel** (`com.gchess.shared`):
-- **Value Objects**: PlayerId, GameId (ULID-based)
-- **Purpose**: Common concepts shared across contexts
-
-### Anti-Corruption Layer (ACL)
-
-The application uses multiple ACL adapters to maintain bounded context isolation:
-
-**UserContextPlayerChecker** (Chess → User):
-- Chess domain defines `PlayerExistenceChecker` port (interface)
-- Infrastructure implements it by calling `GetUserUseCase` from User context
-- Validates player existence before creating games or making moves
-- Fail-fast strategy: errors propagate immediately
-
-**ChessContextGameCreator** (Matchmaking → Chess):
-- Matchmaking domain defines `GameCreator` port (interface)
-- Infrastructure implements it by calling `CreateGameUseCase` from Chess context
-- Creates games automatically when two players match
-- Isolates matchmaking logic from chess game creation details
-
-These ACLs maintain bounded context isolation while enabling cross-context communication.
-
-See [CONTEXT_MAP.md](CONTEXT_MAP.md) for detailed context relationships.
-
-### Bitboard Architecture
-
-The chess engine uses **bitboards** for optimal performance:
-- Each piece type/color stored as a 64-bit Long (1 bit per square)
-- Fast move generation using bitwise operations
-- Efficient occupancy and attack detection
-- Memory layout: 12 bitboards (6 piece types × 2 colors) + metadata
-
-See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
-
-## Technology Stack
-
-- **Language**: Kotlin 1.9.22
-- **Web Framework**: Ktor 2.3.7 (Netty engine)
-- **Database**: PostgreSQL 16+ with HikariCP connection pooling
-- **Database Access**: jOOQ 3.19.15 (type-safe SQL with Kotlin support)
-- **Database Migrations**: Liquibase 4.29.2
-- **Authentication**: JWT with auth0-jwt
-- **Password Hashing**: BCrypt (jbcrypt 0.4)
-- **Unique Identifiers**: ULID (Universally Unique Lexicographically Sortable Identifier)
-- **Dependency Injection**: Koin 3.5.3
-- **Build Tool**: Gradle with Kotlin DSL
-- **Testing**: Kotest (unit/integration), ArchUnit (architecture), Testcontainers (integration tests)
-- **JVM**: Java 21
-
-## Development
-
-### Project Structure
-```
-src/
-├── main/kotlin/com/gchess/
-│   ├── shared/                    # Shared Kernel
-│   │   └── domain/model/          # PlayerId, GameId
-│   ├── chess/                     # Chess Bounded Context
-│   │   ├── domain/
-│   │   │   ├── model/             # Game, ChessPosition, Move, etc.
-│   │   │   ├── service/           # ChessRules
-│   │   │   └── port/              # GameRepository, PlayerExistenceChecker
-│   │   ├── application/usecase/   # CreateGame, MakeMove, GetGame
-│   │   └── infrastructure/
-│   │       └── adapter/
-│   │           ├── driver/        # GameRoutes, DTOs
-│   │           └── driven/        # PostgresGameRepository (jOOQ), UserContextPlayerChecker (ACL)
-│   ├── user/                      # User Bounded Context
-│   │   ├── domain/
-│   │   │   ├── model/             # User, Credentials
-│   │   │   └── port/              # UserRepository, PasswordHasher
-│   │   ├── application/usecase/   # RegisterUser, Login, GetUser
-│   │   └── infrastructure/
-│   │       └── adapter/
-│   │           ├── driver/        # AuthRoutes, UserRoutes, DTOs
-│   │           └── driven/        # PostgresUserRepository (jOOQ), BcryptPasswordHasher
-│   ├── matchmaking/               # Matchmaking Bounded Context
-│   │   ├── domain/
-│   │   │   ├── model/             # QueueEntry, Match
-│   │   │   └── port/              # MatchRepository, MatchmakingQueue, GameCreator
-│   │   ├── application/usecase/   # JoinMatchmaking, GetMatchStatus, LeaveMatchmaking
-│   │   └── infrastructure/
-│   │       └── adapter/
-│   │           ├── driver/        # MatchmakingRoutes, DTOs
-│   │           └── driven/        # PostgresMatchRepository, InMemoryMatchmakingQueue, ChessContextGameCreator (ACL)
-│   └── infrastructure/
-│       ├── config/                # Shared infrastructure (KoinModule, JwtConfig, DatabaseConfig)
-│       └── persistence/jooq/      # Generated jOOQ code (Tables, Records)
-├── main/resources/
-│   ├── application.conf           # Application configuration
-│   └── db/changelog/              # Liquibase database migrations
-├── unitTest/kotlin/               # Unit tests
-│   └── com/gchess/chess/
-│       ├── domain/                # Chess domain tests
-│       └── application/           # Chess use case tests
-├── architectureTest/kotlin/       # Architecture tests
-│   └── com/gchess/architecture/
-│       ├── HexagonalArchitectureTest.kt    # Hexagonal architecture rules
-│       └── BoundedContextTest.kt           # Context isolation rules
-└── integrationTest/kotlin/        # E2E integration tests
-    └── com/gchess/chess/integration/
-        └── GameE2ETest.kt         # Full flow: Register → Login → Game → Moves
+4. **Error Message**
+```json
+{
+  "type": "MatchmakingError",
+  "code": "ALREADY_IN_QUEUE",
+  "message": "You are already in the matchmaking queue"
+}
 ```
 
-### Design Patterns Used
-- **Bounded Contexts**: Chess and User contexts with clear boundaries
-- **Shared Kernel**: Common value objects (PlayerId, GameId) shared across contexts
-- **Anti-Corruption Layer**: UserContextPlayerChecker protects Chess context from User context changes
-- **Hexagonal Architecture**: Ports and adapters within each bounded context
-- **Domain Services**: ChessRules encapsulates complex business logic
-- **Value Objects**: CastlingRights, Position, Move, PlayerId, GameId (immutable)
-- **Repository Pattern**: Abstraction for data persistence
-- **Use Case Pattern**: Each user action is a dedicated class
-- **Dependency Inversion**: Domain defines interfaces, infrastructure implements
-- **DTO Pattern**: Separation between domain models and API contracts
+**Lifecycle**:
+1. Connect with JWT
+2. Send `JoinQueue` message
+3. Receive queue position updates
+4. On match found, receive game ID and color
+5. Disconnect and connect to Game WebSocket
 
-### Test Organization
+---
 
-Tests are organized into three separate source sets for clarity and focused execution:
+#### ♟️ Game WebSocket
 
-**Unit Tests** (`src/unitTest/kotlin/`):
-- Domain model tests (108+ tests)
-- Chess rules implementation tests (move generation, checkmate, stalemate, draw rules)
-- Use case tests
-- Fast execution, run frequently during development
+**URL**: `ws://localhost:8080/ws/game/{gameId}?token=<JWT>`
 
-**Architecture Tests** (`src/architectureTest/kotlin/`):
-- ArchUnit-based validation of hexagonal architecture and bounded contexts
-- **Hexagonal Architecture Rules**:
-  - Layer dependency rules (domain → application → infrastructure)
-  - Framework independence checks
-  - Naming convention enforcement
-- **Bounded Context Isolation Rules**:
-  - Chess domain cannot depend on User context
-  - User domain cannot depend on Chess context
-  - Only infrastructure can cross context boundaries (via ACL)
-  - Shared Kernel accessible to all contexts
-- Ensures architecture integrity and maintainability
+**Purpose**: Real-time gameplay with instant move updates
 
-**Integration Tests** (`src/integrationTest/kotlin/`):
-- End-to-end API testing with Ktor test host
-- **Testcontainers PostgreSQL**: Real database for integration tests (not H2/in-memory)
-- Full authentication flow: Register → Login → JWT → Create Game → Make Moves
-- Matchmaking flow: Join queue → Match → Automatic game creation
-- Validates JWT authentication and authorization
-- Game flow testing with turn validation
-- Database persistence and retrieval testing
-- Ensures DTOs properly serialize/deserialize domain models
-- Verifies Anti-Corruption Layer works correctly across contexts
-- Automatic database cleanup between tests (TRUNCATE)
+**Client → Server Messages**:
 
-Run all tests with `./gradlew check` or run each category independently.
-
-### Architecture Testing with ArchUnit
-
-The project includes **automated architecture tests** using ArchUnit to enforce both hexagonal architecture and bounded context isolation:
-
-**Hexagonal Architecture Rules** (`HexagonalArchitectureTest.kt`):
-- **Layer Dependencies**: Domain layer has zero dependencies on infrastructure/application
-- **Framework Independence**: Domain is free from Ktor, Koin, and serialization dependencies
-- **Naming Conventions**: UseCase suffix, Repository suffix, consistent naming
-- **Package Structure**: Proper organization of domain/application/infrastructure
-
-**Bounded Context Rules** (`BoundedContextTest.kt`):
-- **Context Isolation**: Chess and User contexts are independent
-- **ACL Enforcement**: Only infrastructure layer can cross context boundaries
-- **Shared Kernel**: Value objects accessible to all contexts
-- **No Cross-Context Dependencies**: Domain and application layers remain isolated
-
-These tests run automatically with `./gradlew check` and fail the build if architecture rules are violated, ensuring the codebase remains clean, maintainable, and properly isolated.
-
-### Running Tests with Coverage
-```bash
-./gradlew check jacocoTestReport
+1. **Move Attempt**
+```json
+{
+  "type": "MoveAttempt",
+  "from": "e2",
+  "to": "e4",
+  "promotion": null
+}
 ```
 
-## Environment Variables
+For pawn promotion:
+```json
+{
+  "type": "MoveAttempt",
+  "from": "e7",
+  "to": "e8",
+  "promotion": "QUEEN"
+}
+```
 
-The application supports the following environment variables for configuration:
+**Server → Client Messages**:
 
-### Database Configuration
+1. **Game State Sync** (on connection)
+```json
+{
+  "type": "GameStateSync",
+  "gameId": "01HQZN3A4B5C6D7E8F9G0H1J2K",
+  "positionFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "moveHistory": [
+    { "from": "e2", "to": "e4", "promotion": null }
+  ],
+  "gameStatus": "IN_PROGRESS",
+  "currentSide": "BLACK",
+  "whitePlayerId": "01HQZN3B5C6D7E8F9G0H1J2K3L",
+  "blackPlayerId": "01HQZN3C6D7E8F9G0H1J2K3L4M"
+}
+```
+
+2. **Move Executed** (broadcast to both players)
+```json
+{
+  "type": "MoveExecuted",
+  "gameId": "01HQZN3A4B5C6D7E8F9G0H1J2K",
+  "from": "e2",
+  "to": "e4",
+  "promotion": null,
+  "newPositionFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+  "gameStatus": "IN_PROGRESS",
+  "nextSide": "BLACK"
+}
+```
+
+3. **Move Rejected** (invalid move)
+```json
+{
+  "type": "MoveRejected",
+  "reason": "It's not your turn"
+}
+```
+
+4. **Player Disconnected**
+```json
+{
+  "type": "PlayerDisconnected",
+  "playerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
+  "side": "BLACK"
+}
+```
+
+5. **Player Reconnected**
+```json
+{
+  "type": "PlayerReconnected",
+  "playerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
+  "side": "BLACK"
+}
+```
+
+**Lifecycle**:
+1. Connect with JWT and gameId
+2. Receive initial game state sync
+3. Send move attempts when it's your turn
+4. Receive move confirmations or rejections
+5. Receive opponent's moves in real-time
+6. Get notified of game ending (checkmate, stalemate, draw)
+
+---
+
+#### 👁️ Spectator WebSocket
+
+**URL**: `ws://localhost:8080/ws/game/{gameId}/spectate?token=<JWT>`
+
+**Purpose**: Watch games live (read-only)
+
+**Server → Client Messages**: Same as Game WebSocket (cannot send messages)
+
+---
+
+## 📊 Complete User Journey (Sequence Diagram)
+
+Here's a complete example of a user flow from registration to playing a game:
+
+```mermaid
+sequenceDiagram
+    participant Alice as Client (Alice)
+    participant Server as Ktor Server
+    participant UseCases as Use Cases (Domain)
+    participant DB as PostgreSQL
+
+    Note over Alice,DB: STEP 1: REGISTRATION
+    Alice->>Server: POST /api/auth/register<br/>{username, email, password}
+    Server->>UseCases: RegisterUserUseCase
+    UseCases->>UseCases: Hash password (BCrypt)
+    UseCases->>DB: INSERT INTO users
+    DB-->>UseCases: User created
+    UseCases-->>Server: User
+    Server-->>Alice: 201 Created<br/>{id, username, email}
+
+    Note over Alice,DB: STEP 2: LOGIN
+    Alice->>Server: POST /api/auth/login<br/>{username, password}
+    Server->>UseCases: LoginUseCase
+    UseCases->>DB: SELECT FROM users
+    DB-->>UseCases: User record
+    UseCases->>UseCases: Verify BCrypt
+    UseCases->>UseCases: Generate JWT token
+    UseCases-->>Server: User + Token
+    Server-->>Alice: 200 OK<br/>{user, token}
+    Note over Alice: Save JWT token
+
+    Note over Alice,DB: STEP 3: JOIN MATCHMAKING (WebSocket)
+    Alice->>Server: WS /ws/matchmaking?token=JWT
+    Server->>Server: Validate JWT<br/>Extract userId
+    Server-->>Alice: AuthSuccess
+    Alice->>Server: {"type": "JoinQueue"}
+    Server->>UseCases: JoinMatchmakingUseCase
+    UseCases->>UseCases: Add to in-memory queue
+    UseCases-->>Server: Queue position: 1
+    Server-->>Alice: QueuePositionUpdate (position: 1)
+
+    participant Bob as Client (Bob)
+    Note over Bob,DB: Bob registers & logs in (same as Alice)
+    Bob->>Server: WS /ws/matchmaking?token=JWT_BOB
+    Server-->>Bob: AuthSuccess
+    Bob->>Server: {"type": "JoinQueue"}
+    Server->>UseCases: JoinMatchmakingUseCase
+    UseCases->>UseCases: Match found!<br/>(Alice + Bob)
+
+    Note over Server,DB: STEP 3.1: CREATE GAME FROM MATCH
+    Server->>UseCases: CreateGameFromMatchUseCase
+    UseCases->>UseCases: Assign random colors<br/>Create Player objects
+    UseCases->>DB: INSERT INTO games
+    DB-->>UseCases: Game created
+    UseCases-->>Server: Game created
+    Server-->>Alice: MatchFound<br/>{gameId, yourColor: "WHITE", playerId}
+    Server-->>Bob: MatchFound<br/>{gameId, yourColor: "BLACK", playerId}
+
+    Note over Alice,DB: STEP 4: CONNECT TO GAME (WebSocket)
+    Alice->>Server: WS /ws/game/{gameId}?token=JWT_ALICE
+    Server->>Server: Validate JWT<br/>Load game from DB<br/>Match userId→playerId
+    Server-->>Alice: GameAuthSuccess
+    Server-->>Alice: GameStateSync<br/>{positionFen, moveHistory, status, ...}
+
+    Bob->>Server: WS /ws/game/{gameId}?token=JWT_BOB
+    Server-->>Bob: GameAuthSuccess
+    Server-->>Bob: GameStateSync
+
+    Note over Alice,DB: STEP 5: PLAY MOVES
+    Alice->>Server: {"type": "MoveAttempt",<br/>"from": "e2", "to": "e4"}
+    Server->>UseCases: MakeMoveUseCase
+    UseCases->>UseCases: Validate turn<br/>Validate move (chess rules)<br/>Update game state
+    UseCases->>DB: UPDATE games
+    UseCases->>DB: INSERT INTO game_moves
+    DB-->>UseCases: Move saved
+    UseCases-->>Server: Updated game
+    Server-->>Alice: MoveExecuted<br/>{from: "e2", to: "e4", ...}
+    Server-->>Bob: MoveExecuted<br/>{from: "e2", to: "e4", ...}
+
+    Bob->>Server: {"type": "MoveAttempt",<br/>"from": "e7", "to": "e5"}
+    Server->>UseCases: MakeMoveUseCase
+    UseCases->>UseCases: Validate & execute
+    UseCases->>DB: UPDATE games + INSERT move
+    UseCases-->>Server: Updated game
+    Server-->>Alice: MoveExecuted<br/>{from: "e7", to: "e5", ...}
+    Server-->>Bob: MoveExecuted<br/>{from: "e7", to: "e5", ...}
+
+    Note over Alice,Bob: ... game continues with alternating moves ...
+
+    Note over Alice,DB: STEP 6: GAME ENDING (Checkmate)
+    Alice->>Server: {"type": "MoveAttempt",<br/>"from": "d1", "to": "h5"}
+    Server->>UseCases: MakeMoveUseCase
+    UseCases->>UseCases: Validate move<br/>Execute move<br/>Detect CHECKMATE!<br/>Update status
+    UseCases->>DB: UPDATE games (status=CHECKMATE)
+    UseCases-->>Server: Game ended
+    Server-->>Alice: MoveExecuted<br/>{gameStatus: "CHECKMATE", winner: "WHITE"}
+    Server-->>Bob: MoveExecuted<br/>{gameStatus: "CHECKMATE", winner: "WHITE"}
+
+    Note over Alice,Bob: Game over - both players can disconnect
+```
+
+### Key Points:
+
+1. **Registration & Login**: Standard REST flow with JWT generation
+2. **Matchmaking**: Real-time WebSocket queue with instant pairing
+3. **Game Creation**: Automatic when two players match (random color assignment)
+4. **Gameplay**: WebSocket-based with real-time move broadcasting
+5. **Move Validation**: Complete chess rules (StandardChessRules service)
+6. **Game Ending**: Automatic checkmate/stalemate/draw detection
+
+---
+
+## 🏗️ Architecture
+
+### Domain-Driven Design with Bounded Contexts
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Shared Kernel                          │
+│  (UserId, PlayerId, GameId, Player, PlayerSide)             │
+└──────────────────┬─────────────┬────────────────────────────┘
+                   │             │             │
+         ┌─────────┘             │             └─────────┐
+         │                       │                       │
+┌────────┴────────┐    ┌─────────┴────────┐    ┌────────┴────────┐
+│ Chess Context   │    │ Matchmaking      │    │ User Context    │
+│                 │    │ Context          │    │                 │
+│ Domain:         │    │                  │    │ Domain:         │
+│ • Game          │    │ Domain:          │    │ • User          │
+│ • ChessPosition │    │ • Match          │    │ • Credentials   │
+│ • ChessRules    │    │ • QueueEntry     │    │                 │
+│ • Move, Piece   │    │ • MatchmakingResult   │                 │
+│                 │    │                  │    │ Use Cases:      │
+│ Use Cases:      │    │ Use Cases:       │    │ • RegisterUser  │
+│ • CreateGame    │    │ • JoinMatchmaking│    │ • Login         │
+│ • MakeMove      │    │ • LeaveQueue     │    │ • GetUser       │
+│ • GetGame       │    │ • CreateGameFrom │    │                 │
+│                 │    │   Match          │    │ Infra:          │
+│ Infra:          │    │                  │    │ • AuthRoutes    │
+│ • GameRoutes    │◄───┤ Infra:           │    │ • PostgresUser  │
+│ • GameWebSocket │    │ • MatchmakingWS  │    │   Repository    │
+│ • PostgresGame  │    │ • PostgresMatch  │    │ • BcryptPassword│
+│   Repository    │    │   Repository     │    │   Hasher        │
+│                 │    │ • InMemoryQueue  │    │ • JwtConfig     │
+│ • GameEventNotifier  │ • MatchmakingNotifier │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         ▲                      │                        ▲
+         │                      │                        │
+         └──────────────────────┴────────────────────────┘
+               Anti-Corruption Layer (ACL)
+          • GameCreator (Matchmaking → Chess)
+          • UserExistenceChecker (Chess ← User)
+```
+
+### Key Architectural Principles
+
+1. **Bounded Context Isolation**: Each context (Chess, User, Matchmaking) is independent with no direct dependencies
+2. **Anti-Corruption Layer (ACL)**: Adapters protect context boundaries
+3. **Hexagonal Architecture**: Domain → Application → Infrastructure (ports and adapters)
+4. **Value Objects**: Immutable, rich domain models (Move, Position, Player, etc.)
+5. **Event-Driven Communication**: WebSocket notifiers for real-time updates
+6. **Repository Pattern**: Data persistence abstraction
+
+---
+
+## 🔧 Technology Stack
+
+| Component | Technology | Version |
+|-----------|------------|---------|
+| **Language** | Kotlin (JVM) | 1.9.22 |
+| **Runtime** | Java | 21 |
+| **Web Framework** | Ktor | 2.3.7 |
+| **HTTP Engine** | Netty | (via Ktor) |
+| **WebSocket** | Ktor WebSockets | 2.3.7 |
+| **Database** | PostgreSQL | 16+ |
+| **Database Access** | jOOQ | 3.19.6 |
+| **Migrations** | Liquibase | 4.26.0 |
+| **Connection Pool** | HikariCP | 5.1.0 |
+| **Authentication** | JWT (auth0-jwt) | 4.4.0 |
+| **Password Hashing** | BCrypt (jbcrypt) | 0.4 |
+| **Unique IDs** | ULID | (sulky) |
+| **DI Framework** | Koin | 3.5.3 |
+| **Serialization** | Kotlinx Serialization | 1.6.2 |
+| **Testing** | Kotest | 5.8.0 |
+| **Architecture Tests** | ArchUnit | 1.2.1 |
+| **Integration Tests** | Testcontainers | 1.19.7 |
+| **Build Tool** | Gradle (KTS) | 8.x |
+| **Logging** | Logback + SLF4J | 1.4.14 |
+| **Documentation** | Kompendium (OpenAPI) | 3.14.4 |
+| **CORS** | Ktor CORS | 2.3.7 |
+
+---
+
+## 🗄️ Database Schema
+
+### Users Table
+```sql
+CREATE TABLE users (
+  id VARCHAR(26) PRIMARY KEY,           -- ULID
+  username VARCHAR(255) UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(60) NOT NULL,   -- BCrypt
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_users_username_lower ON users (LOWER(username));
+CREATE INDEX idx_users_email_lower ON users (LOWER(email));
+```
+
+### Games Table
+```sql
+CREATE TABLE games (
+  id VARCHAR(26) PRIMARY KEY,           -- ULID
+  white_user_id VARCHAR(26) NOT NULL REFERENCES users(id),
+  black_user_id VARCHAR(26) NOT NULL REFERENCES users(id),
+  white_player_id VARCHAR(26) NOT NULL, -- Ephemeral per-game player ID
+  black_player_id VARCHAR(26) NOT NULL,
+  board_fen TEXT NOT NULL,              -- Position in FEN notation
+  current_side VARCHAR(10) NOT NULL,    -- "WHITE" or "BLACK"
+  status VARCHAR(20) NOT NULL,          -- IN_PROGRESS, CHECKMATE, etc.
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+```
+
+### Game Moves Table
+```sql
+CREATE TABLE game_moves (
+  id BIGSERIAL PRIMARY KEY,
+  game_id VARCHAR(26) NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  move_number INT NOT NULL,
+  from_square VARCHAR(2) NOT NULL,      -- e.g., "e2"
+  to_square VARCHAR(2) NOT NULL,        -- e.g., "e4"
+  promotion VARCHAR(10),                -- QUEEN, ROOK, BISHOP, KNIGHT
+  created_at TIMESTAMP NOT NULL,
+  UNIQUE (game_id, move_number)
+);
+```
+
+**Note**: Matchmaking is handled in-memory (not persisted in database). When two players are matched, a game is created directly in the `games` table.
+
+Migrations are managed by **Liquibase** in `src/main/resources/db/changelog/`
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `DATABASE_URL` | PostgreSQL JDBC URL | `jdbc:postgresql://localhost:5432/gchess_dev` | No |
 | `DATABASE_USER` | Database username | `gchess` | No |
 | `DATABASE_PASSWORD` | Database password | `gchess` | No |
-| `DATABASE_POOL_SIZE` | HikariCP connection pool size | `10` | No |
-
-### JWT Configuration
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `JWT_SECRET` | Secret key for JWT signing (min 256 bits) | Development default | **YES** (production) |
-| `JWT_VALIDITY_MS` | Token validity in milliseconds | `86400000` (24h) | No |
-
-### Server Configuration
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
+| `DATABASE_POOL_SIZE` | HikariCP pool size | `10` | No |
+| `JWT_SECRET` | JWT signing secret (256-bit min) | Dev default | **YES (prod)** |
+| `JWT_VALIDITY_MS` | Token validity (milliseconds) | `86400000` (24h) | No |
 | `PORT` | HTTP server port | `8080` | No |
 
-**⚠️ Production Security Notes:**
-- `JWT_SECRET` **MUST** be set to a secure random value in production
-- Use `openssl rand -base64 32` to generate a strong secret
-- Never commit secrets to version control
-- Consider using a secrets management system (e.g., HashiCorp Vault, AWS Secrets Manager)
+**Production Security**:
+```bash
+# Generate secure JWT secret
+export JWT_SECRET=$(openssl rand -base64 32)
 
-## Current Limitations
+# Set production database
+export DATABASE_URL="jdbc:postgresql://prod-host:5432/gchess"
+export DATABASE_USER="gchess_prod"
+export DATABASE_PASSWORD="<secure-password>"
 
-- No token refresh mechanism (JWT expires after 24 hours by default)
-- No WebSocket support for real-time updates (matchmaking requires polling)
-- Matchmaking uses FIFO only (no ELO/skill-based matching)
-- No game history or replay functionality
-- Draw by mutual agreement not yet implemented (requires player interaction/API endpoint)
-- No rate limiting on API endpoints
+./gradlew run
+```
 
-## Future Enhancements
+---
 
-- [x] ~~Add persistent storage (database)~~ ✅ Completed (PostgreSQL + jOOQ + Liquibase)
-- [ ] Add move history with algebraic notation (e.g., "Nf3", "O-O")
-- [ ] Implement draw by mutual agreement
-- [ ] WebSocket support for real-time games
-- [ ] Chess clock/timer functionality
-- [ ] Game replay and analysis features
-- [ ] ELO rating system for matchmaking
-- [ ] Opening book and endgame tablebase integration
-- [ ] Move suggestion and hints functionality
-- [ ] API rate limiting and throttling
+## 🧪 Testing
 
-## Contributing
+The project has **100+ tests** organized into three categories:
 
-Contributions are welcome! This project is open source and follows Domain-Driven Design principles.
+### Unit Tests (`./gradlew unitTest`)
+- **108+ tests** covering domain logic and use cases
+- Chess rules validation (move generation, checkmate, stalemate, draws)
+- Fast execution, no external dependencies
+- Located in `src/unitTest/kotlin/`
 
-### How to contribute
+### Architecture Tests (`./gradlew architectureTest`)
+- **ArchUnit-based validation** of DDD and hexagonal architecture
+- Enforces layer dependencies (domain → application → infrastructure)
+- Validates bounded context isolation
+- Prevents circular dependencies
+- Located in `src/architectureTest/kotlin/`
+
+### Integration Tests (`./gradlew integrationTest`)
+- **End-to-end API testing** with real PostgreSQL (Testcontainers)
+- Full authentication flow (register → login → JWT → gameplay)
+- WebSocket communication testing
+- Database persistence validation
+- Located in `src/integrationTest/kotlin/`
+
+**Run all tests:**
+```bash
+./gradlew check
+```
+
+---
+
+## 📋 Current Limitations
+
+- ❌ No JWT refresh mechanism (tokens expire after 24 hours)
+- ❌ Matchmaking queue is in-memory (lost on restart; games persist)
+- ❌ No ELO/rating system (simple FIFO matchmaking)
+- ❌ No mutual draw agreement endpoint
+- ❌ No game clocks/time controls
+- ❌ No manual reconnection recovery (must reconnect manually)
+- ❌ No rate limiting on API endpoints
+- ❌ No game history/replay functionality
+
+---
+
+## 🚧 Future Enhancements
+
+- [ ] JWT refresh tokens
+- [ ] Persistent matchmaking queue (database-backed)
+- [ ] ELO rating system
+- [ ] Draw by mutual agreement
+- [ ] Game clocks with time controls
+- [ ] Move history with algebraic notation (e.g., "Nf3", "O-O")
+- [ ] Game replay and analysis
+- [ ] Opening book integration
+- [ ] Rate limiting and throttling
+- [ ] Mobile app (Kotlin Multiplatform)
+- [ ] AI opponent (chess engine integration)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! This project follows **Domain-Driven Design** and **hexagonal architecture** principles.
+
+### How to Contribute
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes following the existing architecture patterns
-4. Ensure all tests pass (`./gradlew check`)
-5. Commit your changes with descriptive messages
-6. Push to your branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Follow existing architecture patterns (hexagonal architecture and DDD)
+4. Ensure all tests pass: `./gradlew check`
+5. Commit with descriptive messages
+6. Push to your branch: `git push origin feature/amazing-feature`
 7. Open a Pull Request
 
 ### Architecture Guidelines
 
-- Follow hexagonal architecture (ports and adapters)
-- Respect bounded context isolation
-- Domain layer must remain framework-agnostic
-- Add tests for new features (unit + integration)
-- Run architecture tests to validate compliance
+- ✅ Follow hexagonal architecture (ports and adapters)
+- ✅ Respect bounded context isolation
+- ✅ Domain layer must remain framework-agnostic
+- ✅ Add tests for new features (unit + integration + architecture)
+- ✅ Run `./gradlew architectureTest` to validate compliance
 
-See [CLAUDE.md](CLAUDE.md) and [CONTEXT_MAP.md](CONTEXT_MAP.md) for detailed architecture documentation.
+---
 
-## License
+## 📄 License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
-### What this means
+**TL;DR**: Free to use, modify, and distribute. Just keep the license notice. 🎉
 
-✅ **You are free to:**
-- Use this software for any purpose (personal, commercial, educational)
-- Modify and adapt the code
-- Distribute copies
-- Sublicense and sell copies
+---
 
-⚠️ **Conditions:**
-- Include the original copyright notice and license in any copies
-- The software is provided "as is" without warranty
+## 🎮 Try It Out!
 
-**TL;DR**: Do whatever you want with this code, just keep the license notice. 🎉
+**Start the server:**
+```bash
+docker run -d --name gchess-postgres -e POSTGRES_DB=gchess_dev -e POSTGRES_USER=gchess -e POSTGRES_PASSWORD=gchess -p 5432:5432 postgres:16-alpine
+./gradlew run
+```
+
+**Open two terminals and play a game:**
+
+Terminal 1 (Alice):
+```bash
+# Register
+curl -X POST http://localhost:8080/api/auth/register -H "Content-Type: application/json" -d '{"username":"alice","email":"alice@example.com","password":"pass123"}'
+
+# Login and save token
+TOKEN_ALICE=$(curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" -d '{"username":"alice","password":"pass123"}' | jq -r '.token')
+
+# Connect to matchmaking WebSocket (use a WebSocket client like wscat)
+wscat -c "ws://localhost:8080/ws/matchmaking?token=$TOKEN_ALICE"
+> {"type":"JoinQueue"}
+```
+
+Terminal 2 (Bob):
+```bash
+# Register
+curl -X POST http://localhost:8080/api/auth/register -H "Content-Type: application/json" -d '{"username":"bob","email":"bob@example.com","password":"pass123"}'
+
+# Login
+TOKEN_BOB=$(curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" -d '{"username":"bob","password":"pass123"}' | jq -r '.token')
+
+# Connect and match
+wscat -c "ws://localhost:8080/ws/matchmaking?token=$TOKEN_BOB"
+> {"type":"JoinQueue"}
+
+# Both players receive MatchFound with gameId!
+```
+
+Now connect to the game WebSocket and start playing! ♟️
+
+---
+
+**Made with ❤️ using Kotlin, Ktor, and Domain-Driven Design**

@@ -181,10 +181,9 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 
 ## Current Limitations
 
-- Matchmaking queue is in-memory (lost on restart; games/users/matches persist)
+- Matchmaking queue is in-memory (lost on restart; games/users persist)
 - No JWT refresh mechanism
 - Simple FIFO matchmaking (no ELO)
-- Passive match TTL cleanup
 - No mutual draw agreement, no game clocks
 - WebSocket reconnection is manual (no auto-recovery)
 
