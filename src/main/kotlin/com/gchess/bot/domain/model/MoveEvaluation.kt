@@ -19,21 +19,19 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.matchmaking.domain.model
+package com.gchess.bot.domain.model
 
-import com.gchess.shared.domain.model.UserId
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
+import com.gchess.chess.domain.model.Move
 
 /**
- * Value object representing a user waiting in the matchmaking queue.
+ * Value object representing the evaluation of a move.
  *
- * @property userId The unique identifier of the user
- * @property joinedAt The timestamp when the user joined the queue
- * @property botRequest Optional request to match with a bot instead of another human
+ * @property move The chess move being evaluated
+ * @property score The evaluation score in centipawns (100 = 1 pawn advantage)
+ * @property depth The search depth at which this evaluation was performed
  */
-data class QueueEntry @OptIn(ExperimentalTime::class) constructor(
-    val userId: UserId,
-    val joinedAt: Instant,
-    val botRequest: BotMatchRequest? = null
+data class MoveEvaluation(
+    val move: Move,
+    val score: Int,
+    val depth: Int
 )

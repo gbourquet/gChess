@@ -102,6 +102,91 @@
                 }
             },
             "parameters": []
+        },
+        "/api/bots": {
+            "get": {
+                "tags": [
+                    "Bots"
+                ],
+                "summary": "List all bots",
+                "description": "Retrieve a list of all available bot opponents with their difficulty levels",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "List of all available bots",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/List-BotDTO"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to retrieve bots",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "parameters": []
+        },
+        "/api/bots/{id}": {
+            "get": {
+                "tags": [
+                    "Bots"
+                ],
+                "summary": "Get bot by ID",
+                "description": "Retrieve detailed information about a specific bot opponent",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "Bot details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BotDTO"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid bot ID format",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Bot not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Map-String-String"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "parameters": [
+                {
+                    "name": "id",
+                    "in": "path",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "description": "Bot ID (ULID format)"
+                }
+            ]
         }
     },
     "components": {
@@ -181,6 +266,34 @@
                     "password",
                     "username"
                 ]
+            },
+            "BotDTO": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string"
+                    },
+                    "difficulty": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "description",
+                    "difficulty",
+                    "id",
+                    "name"
+                ]
+            },
+            "List-BotDTO": {
+                "items": {
+                    "$ref": "#/components/schemas/BotDTO"
+                }
             }
         }
     }

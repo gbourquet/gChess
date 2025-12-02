@@ -21,6 +21,8 @@
  */
 package com.gchess.infrastructure.config
 
+import com.gchess.bot.domain.service.BotService
+import com.gchess.bot.domain.service.MinimaxBotService
 import com.gchess.chess.application.usecase.CreateGameUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
@@ -78,7 +80,7 @@ val appModule = module {
     single<ChessRules> { StandardChessRules() }
 
     // Game event notifier for WebSocket real-time updates
-    single<GameEventNotifier> { WebSocketGameEventNotifier(get(), get()) }
+    single<GameEventNotifier> { WebSocketGameEventNotifier(get(), get(), get()) }
 
     // Use Cases (Application Layer)
     // Note: CreateGameUseCase is only called from Matchmaking context (via ACL)
@@ -99,6 +101,33 @@ val appModule = module {
     single { LoginUseCase(get(), get()) }
     single { GetUserUseCase(get()) }
 
+    // ========== Bot Context ==========
+
+    // Repositories (Output Adapters)
+    single<com.gchess.bot.domain.port.BotRepository> {
+        com.gchess.bot.infrastructure.adapter.driven.PostgresBotRepository(get())
+    }
+
+    // Domain Services / Engines
+    single<BotService> {
+        MinimaxBotService()
+    }
+
+    // Anti-Corruption Layer (ACL)
+    // Connects Matchmaking → Bot for bot selection
+    single<com.gchess.matchmaking.domain.port.BotSelector> {
+        com.gchess.bot.infrastructure.adapter.driven.MatchmakingContextBotSelector(get())
+    }
+    // Connects Bot → Chess for move execution
+    single<com.gchess.bot.domain.port.MoveExecutor> {
+        com.gchess.bot.infrastructure.adapter.driven.ChessContextMoveExecutor(get())
+    }
+
+    // Use Cases (Application Layer)
+    single { com.gchess.bot.application.usecase.ExecuteBotMoveUseCase(get(), get(), get(), get()) }  // botEngine, gameRepository, moveExecutor, botRepository
+    single { com.gchess.bot.application.usecase.GetBotUseCase(get()) }
+    single { com.gchess.bot.application.usecase.ListBotsUseCase(get()) }
+
     // ========== Matchmaking Context ==========
 
     // Repositories (Output Adapters)
@@ -116,7 +145,7 @@ val appModule = module {
     // Use Cases (Application Layer)
     single { CreateGameFromMatchUseCase(get(), get()) }  // gameCreator, userExistenceChecker
     single { LeaveMatchmakingUseCase(get()) }
-    single { JoinMatchmakingUseCase(get(), get(), get(), get()) }  // Added matchmakingNotifier
+    single { JoinMatchmakingUseCase(get(), get(), get(), get(), get()) }  // queue, gameCreator, userChecker, botSelector, notifier
 
     // ========== Infrastructure: WebSocket Connection Managers ==========
 

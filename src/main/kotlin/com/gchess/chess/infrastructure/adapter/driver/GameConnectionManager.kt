@@ -3,8 +3,10 @@ package com.gchess.chess.infrastructure.adapter.driver
 import com.gchess.chess.domain.model.Game
 import com.gchess.chess.infrastructure.adapter.driver.dto.GameWebSocketMessage
 import com.gchess.shared.domain.model.PlayerId
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
+import io.ktor.websocket.close
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -117,5 +119,52 @@ class GameConnectionManager {
      */
     fun connectionCount(): Int {
         return connections.size
+    }
+
+    /**
+     * Close all WebSocket connections for a game (both players).
+     * Should be called when a game ends (CHECKMATE, STALEMATE, DRAW).
+     *
+     * @param game The game whose connections should be closed
+     * @return Pair(whiteClosed, blackClosed) - true if connection was closed
+     */
+    suspend fun closeGameConnections(game: Game): Pair<Boolean, Boolean> {
+        val whitePlayerId = game.whitePlayer.id
+        val blackPlayerId = game.blackPlayer.id
+
+        var whiteClosed = false
+        var blackClosed = false
+
+        // Close white player connection
+        connections[whitePlayerId]?.let { session ->
+            try {
+                session.close(CloseReason(
+                    CloseReason.Codes.NORMAL,
+                    "Game finished: ${game.status}"
+                ))
+                connections.remove(whitePlayerId)
+                whiteClosed = true
+                logger.info("Closed WebSocket for white player $whitePlayerId (game ended: ${game.status})")
+            } catch (e: Exception) {
+                logger.error("Error closing WebSocket for white player $whitePlayerId", e)
+            }
+        }
+
+        // Close black player connection
+        connections[blackPlayerId]?.let { session ->
+            try {
+                session.close(CloseReason(
+                    CloseReason.Codes.NORMAL,
+                    "Game finished: ${game.status}"
+                ))
+                connections.remove(blackPlayerId)
+                blackClosed = true
+                logger.info("Closed WebSocket for black player $blackPlayerId (game ended: ${game.status})")
+            } catch (e: Exception) {
+                logger.error("Error closing WebSocket for black player $blackPlayerId", e)
+            }
+        }
+
+        return Pair(whiteClosed, blackClosed)
     }
 }

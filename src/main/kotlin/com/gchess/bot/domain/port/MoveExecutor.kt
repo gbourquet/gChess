@@ -19,21 +19,29 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.matchmaking.domain.model
+package com.gchess.bot.domain.port
 
-import com.gchess.shared.domain.model.UserId
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
+import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.Move
+import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.domain.model.Player
 
 /**
- * Value object representing a user waiting in the matchmaking queue.
+ * Anti-Corruption Layer port for executing moves in the Chess context.
  *
- * @property userId The unique identifier of the user
- * @property joinedAt The timestamp when the user joined the queue
- * @property botRequest Optional request to match with a bot instead of another human
+ * This port is defined in the Bot context but implemented in the Bot infrastructure layer,
+ * protecting the Bot domain from depending on Chess application details.
+ *
+ * The implementation will delegate to MakeMoveUseCase in the Chess context.
  */
-data class QueueEntry @OptIn(ExperimentalTime::class) constructor(
-    val userId: UserId,
-    val joinedAt: Instant,
-    val botRequest: BotMatchRequest? = null
-)
+interface MoveExecutor {
+    /**
+     * Executes a move for a bot player in a game.
+     *
+     * @param gameId The ID of the game
+     * @param player The bot player making the move
+     * @param move The move to execute
+     * @return Result with updated Game if successful, or failure if move is illegal or game not found
+     */
+    suspend fun executeMove(gameId: GameId, player: Player, move: Move): Result<Game>
+}

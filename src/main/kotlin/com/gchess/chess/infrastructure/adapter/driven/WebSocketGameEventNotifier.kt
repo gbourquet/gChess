@@ -22,6 +22,7 @@
 package com.gchess.chess.infrastructure.adapter.driven
 
 import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.GameStatus
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveDto
@@ -34,6 +35,8 @@ import com.gchess.chess.infrastructure.adapter.driver.SpectatorConnectionManager
 import com.gchess.shared.domain.model.PlayerId
 import org.slf4j.LoggerFactory
 
+import com.gchess.chess.domain.service.ChessRules
+
 /**
  * WebSocket implementation of GameEventNotifier.
  *
@@ -45,7 +48,8 @@ import org.slf4j.LoggerFactory
  */
 class WebSocketGameEventNotifier(
     private val gameConnectionManager: GameConnectionManager,
-    private val spectatorConnectionManager: SpectatorConnectionManager
+    private val spectatorConnectionManager: SpectatorConnectionManager,
+    private val chessRules: ChessRules
 ) : GameEventNotifier {
     private val logger = LoggerFactory.getLogger(WebSocketGameEventNotifier::class.java)
 
@@ -59,7 +63,8 @@ class WebSocketGameEventNotifier(
                 ),
                 newPositionFen = game.board.toFen(),
                 gameStatus = game.status.toString(),
-                currentSide = game.currentSide.toString()
+                currentSide = game.currentSide.toString(),
+                isCheck = chessRules.isInCheck(game.board, game.currentSide)
             )
 
             // Broadcast to both players
@@ -72,9 +77,37 @@ class WebSocketGameEventNotifier(
                 "Move executed notification sent for game ${game.id}: " +
                         "white=$whiteSent, black=$blackSent, spectators=$spectatorCount"
             )
+
+            // Close WebSocket connections if game has ended
+            if (isGameFinished(game.status)) {
+                logger.info("Game ${game.id} finished with status ${game.status}, closing WebSocket connections")
+
+                // Give clients a moment to process the final move before closing
+                kotlinx.coroutines.delay(1000)
+
+                // Close player connections
+                val (whiteClosed, blackClosed) = gameConnectionManager.closeGameConnections(game)
+
+                // Close spectator connections
+                val spectatorsClosed = spectatorConnectionManager.closeGameSpectators(game.id)
+
+                logger.info(
+                    "Closed WebSocket connections for finished game ${game.id}: " +
+                            "white=$whiteClosed, black=$blackClosed, spectators=$spectatorsClosed"
+                )
+            }
         } catch (e: Exception) {
             logger.error("Error sending move executed notification for game ${game.id}", e)
         }
+    }
+
+    /**
+     * Check if a game has finished (terminal state).
+     */
+    private fun isGameFinished(status: GameStatus): Boolean {
+        return status == GameStatus.CHECKMATE ||
+                status == GameStatus.STALEMATE ||
+                status == GameStatus.DRAW
     }
 
     override suspend fun notifyMoveRejected(playerId: PlayerId, reason: String) {

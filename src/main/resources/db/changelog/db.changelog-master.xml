@@ -8,4 +8,11 @@
     <!-- Initial database schema -->
     <include file="db/changelog/changes/20251120215200-initial-schema.xml"/>
 
+    <!-- Bot context: bots table -->
+    <include file="db/changelog/changes/20251128-add-bots-table.xml"/>
+
+
+    <!-- Bot context: default bots seed data -->
+    <include file="db/changelog/changes/20251128-insert-default-bots.xml"/>
+
 </databaseChangeLog>

@@ -19,21 +19,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.matchmaking.domain.model
+package com.gchess.bot.infrastructure.adapter.driven
 
-import com.gchess.shared.domain.model.UserId
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
+import com.gchess.bot.domain.port.MoveExecutor
+import com.gchess.chess.application.usecase.MakeMoveUseCase
+import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.Move
+import com.gchess.shared.domain.model.GameId
+import com.gchess.shared.domain.model.Player
 
 /**
- * Value object representing a user waiting in the matchmaking queue.
+ * Anti-Corruption Layer adapter from Bot context to Chess context.
  *
- * @property userId The unique identifier of the user
- * @property joinedAt The timestamp when the user joined the queue
- * @property botRequest Optional request to match with a bot instead of another human
+ * Delegates move execution to MakeMoveUseCase in the Chess context,
+ * protecting the Bot domain from depending on Chess application details.
  */
-data class QueueEntry @OptIn(ExperimentalTime::class) constructor(
-    val userId: UserId,
-    val joinedAt: Instant,
-    val botRequest: BotMatchRequest? = null
-)
+class ChessContextMoveExecutor(
+    private val makeMoveUseCase: MakeMoveUseCase
+) : MoveExecutor {
+
+    override suspend fun executeMove(gameId: GameId, player: Player, move: Move): Result<Game> {
+        return makeMoveUseCase.execute(gameId, player, move)
+    }
+}

@@ -21,47 +21,58 @@
  */
 package com.gchess.matchmaking.application.usecase
 
-import com.gchess.shared.domain.model.PlayerSide
+import com.gchess.matchmaking.domain.model.BotMatchRequest
+import com.gchess.matchmaking.domain.model.Match
+import com.gchess.matchmaking.domain.port.BotSelector
+import com.gchess.matchmaking.domain.port.GameCreator
 import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
 import com.gchess.matchmaking.domain.port.UserExistenceChecker
+import com.gchess.shared.domain.model.Player
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.shared.domain.model.UserId
 
 /**
  * Use case for joining the matchmaking queue.
  *
- * This is the main matchmaking use case that:
- * 1. Validates the user exists (via ACL to User context)
- * 2. Validates the user is not already in queue
- * 3. Validates the user doesn't have an active match
- * 4. Adds the user to the queue (with lock for thread-safety)
- * 5. Attempts to find a match immediately
- * 6. If match found:
- *    - Creates a game automatically (via CreateGameFromMatchUseCase)
- *    - Saves the match to the repository
- *    - Returns MATCHED status
- * 7. If no match found:
- *    - Returns WAITING status
+ * Supports both human vs human and human vs bot matchmaking through the same interface.
  *
- * @property matchmakingQueue Queue for managing waiting users
- * @property userExistenceChecker ACL for validating users exist
- * @property createGameFromMatchUseCase Use case for creating games from matches
+ * **Human vs Human Flow:**
+ * 1. Validates the user exists (via ACL to User context)
+ * 2. Adds the user to the FIFO queue
+ * 3. Attempts to find a match with another waiting human
+ * 4. If match found: creates a game, saves match, returns MATCHED
+ * 5. If no match: returns WAITING with queue position
+ *
+ * **Human vs Bot Flow (when botRequest is provided):**
+ * 1. Validates the user exists
+ * 2. Selects a bot via ACL (specific or default)
+ * 3. Creates Players with specified or random colors
+ * 4. Creates a game immediately
+ * 5. Saves match and returns MATCHED
+ *
+ * @property matchmakingQueue Queue for managing waiting users (human matchmaking)
+ * @property gameCreator ACL port for creating games (to Chess context)
+ * @property userExistenceChecker ACL for validating users exist (to User context)
+ * @property botSelector ACL for selecting bots (to Bot context)
  * @property matchmakingNotifier Notifier for sending real-time updates via WebSocket
  */
 class JoinMatchmakingUseCase(
     private val matchmakingQueue: MatchmakingQueue,
+    private val gameCreator: GameCreator,
     private val userExistenceChecker: UserExistenceChecker,
-    private val createGameFromMatchUseCase: CreateGameFromMatchUseCase,
+    private val botSelector: BotSelector,
     private val matchmakingNotifier: MatchmakingNotifier
 ) {
     /**
      * Adds a user to the matchmaking queue.
      *
      * @param userId The ID of the user joining
+     * @param botRequest Optional request to match with a bot instead of another human
      * @return Result.success(MatchmakingResult) indicating status (WAITING or MATCHED),
      *         or Result.failure if validation fails
      */
-    suspend fun execute(userId: UserId): Result<MatchmakingResult> {
+    suspend fun execute(userId: UserId, botRequest: BotMatchRequest? = null): Result<MatchmakingResult> {
         // 1. Validate user exists (ACL to User context)
         val userExists = try {
             userExistenceChecker.exists(userId)
@@ -73,23 +84,25 @@ class JoinMatchmakingUseCase(
             return Result.failure(Exception("User does not exist"))
         }
 
-        // 2. Validate user is not already in queue
+        // 2. NOUVEAU: If bot match requested, handle immediately
+        if (botRequest != null) {
+            return handleBotMatch(userId, botRequest)
+        }
+
+        // 3. Validate user is not already in queue (human matchmaking only)
         if (matchmakingQueue.isPlayerInQueue(userId)) {
             return Result.failure(Exception("User is already in the matchmaking queue"))
         }
 
-        // 3. Add user to queue
-        // Note: The queue implementation uses a lock internally for thread-safety
+        // 4. Add user to queue
         matchmakingQueue.addPlayer(userId)
 
-        // 4. Try to find a match
+        // 5. Try to find a match
         val matchPair = matchmakingQueue.findMatch()
 
         if (matchPair == null) {
-            // 6a. No match found - user is waiting
+            // No match found - user is waiting
             val queuePosition = matchmakingQueue.getQueueSize()
-
-            // Send queue position notification via WebSocket
             matchmakingNotifier.notifyQueuePosition(userId, queuePosition)
 
             return Result.success(
@@ -97,51 +110,97 @@ class JoinMatchmakingUseCase(
             )
         }
 
-        // 6b. Match found - create game automatically
+        // Match found - create game with another human
         val (user1Entry, user2Entry) = matchPair
         val user1Id = user1Entry.userId
         val user2Id = user2Entry.userId
 
-        // Create game via CreateGameFromMatchUseCase
-        val gameResult = createGameFromMatchUseCase.execute(user1Id, user2Id)
-
-        if (gameResult.isFailure) {
-            // Game creation failed - propagate error
-            // Note: Users were already removed from queue by findMatch()
-            // In a production system, we might want to add them back
-            return Result.failure(gameResult.exceptionOrNull()!!)
+        // Randomly assign colors
+        val (whiteUserId, blackUserId) = if (kotlin.random.Random.nextBoolean()) {
+            user1Id to user2Id
+        } else {
+            user2Id to user1Id
         }
 
-        val match = gameResult.getOrNull()!!
+        val whitePlayer = Player.create(whiteUserId, PlayerSide.WHITE)
+        val blackPlayer = Player.create(blackUserId, PlayerSide.BLACK)
 
-        // Send MatchFound notification to both players via WebSocket
+        // Create game via ACL
+        val gameIdResult = gameCreator.createGame(whitePlayer, blackPlayer)
+        if (gameIdResult.isFailure) {
+            return Result.failure(gameIdResult.exceptionOrNull()!!)
+        }
+
+        val gameId = gameIdResult.getOrNull()!!
+
+        // Create match and send notifications
+        val match = Match.create(
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            gameId = gameId
+        )
+
         matchmakingNotifier.notifyMatchFound(match)
 
-        // Determine which user is calling this method and return their color
-        val yourColor = when (userId) {
-            match.whitePlayer.userId -> PlayerSide.WHITE
-            match.blackPlayer.userId -> PlayerSide.BLACK
-            else -> {
-                // This should never happen unless there's a logic error
-                // The calling user should be one of the matched users
-                error("Caller $userId not found in match")
-            }
-        }
-
-        val yourPlayer = when (userId) {
-            match.whitePlayer.userId -> match.whitePlayer
-            match.blackPlayer.userId -> match.blackPlayer
-            else -> {
-                // This should never happen unless there's a logic error
-                // The calling user should be one of the matched users
-                error("Caller $userId not found in match")
-            }
-        }
+        // Return result for the calling user
+        val yourColor = if (userId == whiteUserId) PlayerSide.WHITE else PlayerSide.BLACK
+        val yourPlayer = if (userId == whiteUserId) whitePlayer else blackPlayer
 
         return Result.success(MatchmakingResult.Matched(
-            gameId = match.gameId,
+            gameId = gameId,
             youPlayerId = yourPlayer.id,
             yourColor = yourColor
+        ))
+    }
+
+    /**
+     * Handles bot match requests (immediate matching with a bot).
+     *
+     * @param humanUserId The user requesting to play against a bot
+     * @param botRequest Configuration for the bot match (bot selection, color preference)
+     * @return Result.success(MatchmakingResult.Matched) or Result.failure
+     */
+    private suspend fun handleBotMatch(
+        humanUserId: UserId,
+        botRequest: BotMatchRequest
+    ): Result<MatchmakingResult> {
+        // 1. Select bot via ACL (to Bot context)
+        val botInfo = botSelector.selectBot(botRequest.botId)
+            .getOrElse { return Result.failure(it) }
+
+        // 2. Determine colors
+        val humanColor = botRequest.playerColor
+            ?: if (kotlin.random.Random.nextBoolean()) PlayerSide.WHITE else PlayerSide.BLACK
+        val botColor = if (humanColor == PlayerSide.WHITE) PlayerSide.BLACK else PlayerSide.WHITE
+
+        // 3. Create Players
+        val humanPlayer = Player.create(humanUserId, humanColor)
+        val botPlayer = Player.create(botInfo.systemUserId, botColor)
+
+        // 4. Create game via ACL (to Chess context)
+        val whitePlayer = if (humanColor == PlayerSide.WHITE) humanPlayer else botPlayer
+        val blackPlayer = if (humanColor == PlayerSide.BLACK) humanPlayer else botPlayer
+
+        val gameIdResult = gameCreator.createGame(whitePlayer, blackPlayer)
+        if (gameIdResult.isFailure) {
+            return Result.failure(gameIdResult.exceptionOrNull()!!)
+        }
+
+        val gameId = gameIdResult.getOrNull()!!
+
+        // 5. Create match and notify human player (bot doesn't need notification)
+        val match = Match.create(
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            gameId = gameId
+        )
+
+        matchmakingNotifier.notifyMatchFound(match)
+
+        return Result.success(MatchmakingResult.Matched(
+            gameId = gameId,
+            youPlayerId = humanPlayer.id,
+            yourColor = humanColor
         ))
     }
 }

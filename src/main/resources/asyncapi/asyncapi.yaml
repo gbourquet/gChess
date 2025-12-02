@@ -2,24 +2,29 @@ asyncapi: 3.0.0
 
 info:
   title: gChess WebSocket API
-  version: 1.0.0
+  version: 2.0.0
   description: |
     Real-time WebSocket API for gChess chess application.
 
     Provides real-time communication for:
-    - Matchmaking (instant match notifications)
-    - Gameplay (move execution, game state sync)
+    - Matchmaking (instant match notifications for human vs human and human vs bot)
+    - Gameplay (move execution, game state sync, automatic bot moves)
     - Spectators (observe games in real-time)
+
+    **Bot Integration**: Bots are integrated into the unified matchmaking flow.
+    Human vs bot games use the same WebSocket endpoint with a `bot: true` parameter.
+    Bots automatically calculate and execute moves after each human move.
 
     **Authentication**: All WebSocket connections require JWT authentication.
     The JWT token must be provided either as a query parameter (?token=...)
     or in the Sec-WebSocket-Protocol header.
 
     **Architecture**:
-    - Matchmaking: Indexed by UserId (permanent user identity)
+    - Matchmaking: Indexed by UserId (permanent user identity), unified for humans and bots
     - Gameplay: Indexed by PlayerId (per-game participation)
     - Spectators: Indexed by UserId (observers, not participants)
     - Authentication: Managed by WebSocketJwtAuth (shared kernel) across all contexts
+    - Bot moves: Automatically triggered after human moves via ExecuteBotMoveUseCase
 
   contact:
     name: Guillaume Bourquet
@@ -42,8 +47,15 @@ channels:
   matchmaking:
     address: /ws/matchmaking
     description: |
-      WebSocket channel for matchmaking.
-      Users join the matchmaking queue and receive instant notifications when a match is found.
+      WebSocket channel for unified matchmaking (human vs human and human vs bot).
+
+      **Human vs Human**: Users join the FIFO queue and receive notifications when matched with another human.
+      **Human vs Bot**: Users specify `bot: true` parameter for instant matching with a bot opponent.
+
+      **Bot Configuration**:
+      - `bot: true` - Request to play against a bot (immediate match)
+      - `botId` (optional) - Specific bot ID, or random if not specified
+      - `playerColor` (optional) - Desired color (WHITE/BLACK), or random if not specified
 
       **Authentication**: JWT required
       **Connection scope**: One connection per UserId
@@ -68,6 +80,10 @@ channels:
     description: |
       WebSocket channel for participating in a game.
       Players send moves and receive game state updates in real-time.
+
+      **Bot Gameplay**: If the opponent is a bot (username starts with "bot_"),
+      the bot will automatically calculate and execute its move immediately after
+      the human player's move. Bot moves are sent via MoveExecuted messages.
 
       **Authentication**: JWT required
       **Connection scope**: One connection per PlayerId (participation)
@@ -158,8 +174,15 @@ components:
 
     # ========== Matchmaking Messages ==========
     JoinQueue:
-      summary: Join matchmaking queue
-      description: Client → Server. User requests to join the matchmaking queue
+      summary: Join matchmaking queue (unified for humans and bots)
+      description: |
+        Client → Server. User requests to join matchmaking.
+
+        **Human vs Human** (default): Omit `bot` parameter or set to `false`.
+        User joins FIFO queue and waits for another human opponent.
+
+        **Human vs Bot**: Set `bot: true` for instant matching with a bot.
+        Optionally specify `botId` (specific bot) and `playerColor` (WHITE/BLACK preference).
       payload:
         type: object
         required: [type]
@@ -167,6 +190,20 @@ components:
           type:
             type: string
             const: JoinQueue
+          bot:
+            type: boolean
+            description: Request to play against a bot (default false)
+            default: false
+            example: true
+          botId:
+            type: string
+            description: Specific bot ID (ULID format). If not specified, a random bot is selected.
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          playerColor:
+            type: string
+            description: Desired color for the human player. If not specified, randomly assigned.
+            enum: [WHITE, BLACK]
+            example: 'WHITE'
 
     QueuePositionUpdate:
       summary: Queue position update
@@ -189,6 +226,9 @@ components:
       description: |
         Server → Client. Match found and game created.
         Client should disconnect from matchmaking and connect to /ws/game/{gameId}
+
+        **Important**: The opponent may be a human or a bot (username starts with "bot_").
+        Bots automatically calculate and execute moves after each human move.
       payload:
         type: object
         required: [type, gameId, yourColor, playerId]
@@ -211,7 +251,9 @@ components:
             example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
           opponentUserId:
             type: string
-            description: Opponent's UserId (optional, for display)
+            description: |
+              Opponent's UserId (optional, for display).
+              For bot games, this is the bot's system user ID (username starts with "bot_").
             example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
 
     MatchmakingError:
@@ -265,9 +307,13 @@ components:
       description: |
         Server → Client. Move validated and executed.
         Broadcast to both players and all spectators.
+
+        **Bot Moves**: This message is also sent for bot moves, which are
+        automatically calculated and executed by ExecuteBotMoveUseCase after
+        each human move in bot games.
       payload:
         type: object
-        required: [type, move, newPositionFen, gameStatus, currentSide]
+        required: [type, move, newPositionFen, gameStatus, currentSide, isCheck]
         properties:
           type:
             type: string
@@ -288,6 +334,12 @@ components:
             description: Whose turn it is now
             enum: [WHITE, BLACK]
             example: 'BLACK'
+          isCheck:
+            type: boolean
+            description: |
+              True if the current player (currentSide) is in check.
+              Useful for UI feedback to highlight the king in danger.
+            example: false
 
     MoveRejected:
       summary: Move rejected (invalid)

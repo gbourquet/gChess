@@ -36,9 +36,325 @@ import com.gchess.shared.domain.model.PlayerSide
 class StandardChessRules : ChessRules {
 
     override fun legalMovesFor(position: ChessPosition): List<Move> {
-        return position.getPiecesBySide(position.sideToMove)
-            .flatMap { (pos, piece) -> generatePseudoLegalMoves(pos, piece, position) }
-            .filter { move -> !wouldMoveCauseCheck(move, position) }
+        val moves = mutableListOf<Move>()
+        val sideToMove = position.sideToMove
+        val opponentSide = sideToMove.opposite()
+
+        // Find our king
+        val kingBitboard = if (sideToMove == PlayerSide.WHITE) position.whiteKings else position.blackKings
+        if (kingBitboard == 0L) return emptyList() // No king (shouldn't happen)
+        val kingSquare = kingBitboard.countTrailingZeroBits()
+
+        // Check if we're in check and find attackers
+        val attackers = findAttackers(position, kingSquare, opponentSide)
+        val inCheck = attackers.isNotEmpty()
+
+        if (inCheck) {
+            // In check: must block, capture attacker, or move king
+            // IMPORTANT: Still need to check for pins even in check!
+            val pinnedPieces = detectPinnedPieces(position, kingSquare, sideToMove, opponentSide)
+
+            if (attackers.size > 1) {
+                // Double check: only king moves are legal
+                for ((pos, piece) in position.getPiecesBySide(sideToMove)) {
+                    if (piece.type == PieceType.KING) {
+                        moves.addAll(generateLegalKingMoves(pos, piece, position, opponentSide))
+                    }
+                }
+            } else {
+                // Single check: can block or capture
+                val attacker = attackers[0]
+                val blockOrCaptureMask = calculateBlockOrCaptureMask(kingSquare, attacker, position)
+
+                for ((pos, piece) in position.getPiecesBySide(sideToMove)) {
+                    if (piece.type == PieceType.KING) {
+                        // King can move out of check
+                        moves.addAll(generateLegalKingMoves(pos, piece, position, opponentSide))
+                    } else {
+                        // Other pieces can only block or capture the attacker
+                        // BUT: pinned pieces can't move off their pin ray
+                        val pinRay = pinnedPieces[pos]
+                        val pseudoMoves = generatePseudoLegalMoves(pos, piece, position)
+
+                        if (pinRay != null) {
+                            // Pinned piece: must stay on pin ray AND block/capture
+                            moves.addAll(pseudoMoves.filter { move ->
+                                val destBit = 1L shl ChessPosition.positionToIndex(move.to)
+                                (blockOrCaptureMask and destBit) != 0L && (pinRay and destBit) != 0L
+                            })
+                        } else {
+                            // Non-pinned piece: just need to block/capture
+                            moves.addAll(pseudoMoves.filter { move ->
+                                val destBit = 1L shl ChessPosition.positionToIndex(move.to)
+                                (blockOrCaptureMask and destBit) != 0L
+                            })
+                        }
+                    }
+                }
+            }
+        } else {
+            // Not in check: normal move generation with pin detection
+            val pinnedPieces = detectPinnedPieces(position, kingSquare, sideToMove, opponentSide)
+
+            for ((pos, piece) in position.getPiecesBySide(sideToMove)) {
+                if (piece.type == PieceType.KING) {
+                    // King moves: exclude attacked squares
+                    moves.addAll(generateLegalKingMoves(pos, piece, position, opponentSide))
+                } else {
+                    // Check if this piece is pinned
+                    val pinRay = pinnedPieces[pos]
+                    if (pinRay != null) {
+                        // Pinned piece: only moves along the pin ray are legal
+                        val pseudoMoves = generatePseudoLegalMoves(pos, piece, position)
+                        moves.addAll(pseudoMoves.filter { move ->
+                            val destBit = 1L shl ChessPosition.positionToIndex(move.to)
+                            (pinRay and destBit) != 0L
+                        })
+                    } else {
+                        // Non-pinned piece: all pseudo-legal moves are legal
+                        moves.addAll(generatePseudoLegalMoves(pos, piece, position))
+                    }
+                }
+            }
+        }
+
+        return moves
+    }
+
+    /**
+     * Finds all pieces attacking a square.
+     * Returns list of attacker square indices.
+     */
+    private fun findAttackers(position: ChessPosition, targetSquare: Int, attackingSide: PlayerSide): List<Int> {
+        val attackers = mutableListOf<Int>()
+        val occupied = position.occupiedSquares()
+
+        // Get attacking side's bitboards
+        val pawns: Long
+        val knights: Long
+        val bishops: Long
+        val rooks: Long
+        val queens: Long
+
+        if (attackingSide == PlayerSide.WHITE) {
+            pawns = position.whitePawns
+            knights = position.whiteKnights
+            bishops = position.whiteBishops
+            rooks = position.whiteRooks
+            queens = position.whiteQueens
+        } else {
+            pawns = position.blackPawns
+            knights = position.blackKnights
+            bishops = position.blackBishops
+            rooks = position.blackRooks
+            queens = position.blackQueens
+        }
+
+        // Check pawn attacks
+        // IMPORTANT: Use opposite table (same reason as in isSquareAttacked)
+        val pawnAttacks = if (attackingSide == PlayerSide.WHITE) {
+            AttackTables.BLACK_PAWN_ATTACKS[targetSquare]
+        } else {
+            AttackTables.WHITE_PAWN_ATTACKS[targetSquare]
+        }
+        var attackingPawns = pawns and pawnAttacks
+        while (attackingPawns != 0L) {
+            attackers.add(attackingPawns.countTrailingZeroBits())
+            attackingPawns = attackingPawns and (attackingPawns - 1)
+        }
+
+        // Check knight attacks
+        val knightAttacks = AttackTables.KNIGHT_ATTACKS[targetSquare]
+        var attackingKnights = knights and knightAttacks
+        while (attackingKnights != 0L) {
+            attackers.add(attackingKnights.countTrailingZeroBits())
+            attackingKnights = attackingKnights and (attackingKnights - 1)
+        }
+
+        // Check bishop/queen diagonal attacks
+        val bishopAttacks = AttackTables.generateSliderAttacks(targetSquare, occupied, AttackTables.BISHOP_DIRECTIONS)
+        var attackingBishops = (bishops or queens) and bishopAttacks
+        while (attackingBishops != 0L) {
+            attackers.add(attackingBishops.countTrailingZeroBits())
+            attackingBishops = attackingBishops and (attackingBishops - 1)
+        }
+
+        // Check rook/queen attacks
+        val rookAttacks = AttackTables.generateSliderAttacks(targetSquare, occupied, AttackTables.ROOK_DIRECTIONS)
+        var attackingRooks = (rooks or queens) and rookAttacks
+        while (attackingRooks != 0L) {
+            attackers.add(attackingRooks.countTrailingZeroBits())
+            attackingRooks = attackingRooks and (attackingRooks - 1)
+        }
+
+        return attackers
+    }
+
+    /**
+     * Calculates bitboard of squares where blocking or capturing would resolve check.
+     * For slider attacks: includes all squares between king and attacker + attacker square.
+     * For non-slider attacks: only the attacker square (capture only).
+     */
+    private fun calculateBlockOrCaptureMask(kingSquare: Int, attackerSquare: Int, position: ChessPosition): Long {
+        val attacker = position.pieceAt(ChessPosition.indexToPosition(attackerSquare))
+        var mask = 1L shl attackerSquare // Can always capture the attacker
+
+        // For sliders, can also block
+        if (attacker?.type in listOf(PieceType.BISHOP, PieceType.ROOK, PieceType.QUEEN)) {
+            // Calculate ray between king and attacker
+            val kFile = kingSquare % 8
+            val kRank = kingSquare / 8
+            val aFile = attackerSquare % 8
+            val aRank = attackerSquare / 8
+
+            val df = when {
+                aFile > kFile -> 1
+                aFile < kFile -> -1
+                else -> 0
+            }
+            val dr = when {
+                aRank > kRank -> 1
+                aRank < kRank -> -1
+                else -> 0
+            }
+
+            var f = kFile + df
+            var r = kRank + dr
+            while (f != aFile || r != aRank) {
+                mask = mask or (1L shl (r * 8 + f))
+                f += df
+                r += dr
+            }
+        }
+
+        return mask
+    }
+
+    /**
+     * Detects pinned pieces using bitboard ray-casting.
+     *
+     * A piece is pinned if removing it would expose the king to attack by a slider.
+     *
+     * @return Map of pinned piece positions to their pin ray bitboard
+     */
+    private fun detectPinnedPieces(
+        position: ChessPosition,
+        kingSquare: Int,
+        ourSide: PlayerSide,
+        opponentSide: PlayerSide
+    ): Map<Position, Long> {
+        val pinnedPieces = mutableMapOf<Position, Long>()
+        val occupied = position.occupiedSquares()
+
+        // Get opponent's sliders (bishops, rooks, queens)
+        val opponentBishops: Long
+        val opponentRooks: Long
+        val opponentQueens: Long
+
+        if (opponentSide == PlayerSide.WHITE) {
+            opponentBishops = position.whiteBishops
+            opponentRooks = position.whiteRooks
+            opponentQueens = position.whiteQueens
+        } else {
+            opponentBishops = position.blackBishops
+            opponentRooks = position.blackRooks
+            opponentQueens = position.blackQueens
+        }
+
+        // Check diagonal pins (bishops and queens)
+        for (direction in AttackTables.BISHOP_DIRECTIONS) {
+            checkPinAlongRay(
+                kingSquare, direction, occupied, opponentBishops or opponentQueens,
+                ourSide, position, pinnedPieces
+            )
+        }
+
+        // Check horizontal/vertical pins (rooks and queens)
+        for (direction in AttackTables.ROOK_DIRECTIONS) {
+            checkPinAlongRay(
+                kingSquare, direction, occupied, opponentRooks or opponentQueens,
+                ourSide, position, pinnedPieces
+            )
+        }
+
+        return pinnedPieces
+    }
+
+    /**
+     * Checks for a pin along a single ray from the king.
+     */
+    private fun checkPinAlongRay(
+        kingSquare: Int,
+        direction: Pair<Int, Int>,
+        occupied: Long,
+        attackers: Long,
+        ourSide: PlayerSide,
+        position: ChessPosition,
+        pinnedPieces: MutableMap<Position, Long>
+    ) {
+        val (df, dr) = direction
+        var f = (kingSquare % 8) + df
+        var r = (kingSquare / 8) + dr
+        var pinRay = 0L
+        var ourPieceSquare: Int? = null
+
+        while (f in 0..7 && r in 0..7) {
+            val square = r * 8 + f
+            val bit = 1L shl square
+            pinRay = pinRay or bit
+
+            if ((occupied and bit) != 0L) {
+                // Found a piece
+                if (ourPieceSquare == null) {
+                    // First piece: check if it's ours
+                    val piece = position.pieceAt(ChessPosition.indexToPosition(square))
+                    if (piece?.side == ourSide) {
+                        ourPieceSquare = square
+                    } else {
+                        // Opponent piece or wrong color - no pin
+                        break
+                    }
+                } else {
+                    // Second piece: check if it's an attacking slider
+                    if ((attackers and bit) != 0L) {
+                        // Pin detected!
+                        pinnedPieces[ChessPosition.indexToPosition(ourPieceSquare)] = pinRay
+                    }
+                    break
+                }
+            }
+
+            f += df
+            r += dr
+        }
+    }
+
+    /**
+     * Generates legal king moves by excluding attacked squares.
+     *
+     * IMPORTANT: Must remove the king AND any captured piece from the board
+     * before checking if the destination is attacked, otherwise the king
+     * blocks slider attacks through its current position.
+     */
+    private fun generateLegalKingMoves(
+        position: Position,
+        piece: Piece,
+        board: ChessPosition,
+        opponentSide: PlayerSide
+    ): List<Move> {
+        val pseudoMoves = generatePseudoLegalMoves(position, piece, board)
+
+        // Remove king from the board for attack detection
+        val boardWithoutKing = board.setPiece(position, null)
+
+        return pseudoMoves.filter { move ->
+            // Also remove any piece being captured
+            val boardForCheck = boardWithoutKing.setPiece(move.to, null)
+
+            // Check if destination square is attacked in this modified board
+            val destSquare = ChessPosition.positionToIndex(move.to)
+            !isSquareAttacked(boardForCheck, destSquare, opponentSide)
+        }
     }
 
     override fun isMoveLegal(position: ChessPosition, move: Move): Boolean {
@@ -46,16 +362,83 @@ class StandardChessRules : ChessRules {
     }
 
     override fun isInCheck(position: ChessPosition, side: PlayerSide): Boolean {
-        // Find the king of the given side
-        val kingPosition = position.getPiecesBySide(side)
-            .entries
-            .find { (_, piece) -> piece.type == PieceType.KING }
-            ?.key
-            ?: return false // No king found (shouldn't happen in a valid game)
+        // Find the king of the given side using bitboards (O(1))
+        val kingBitboard = if (side == PlayerSide.WHITE) position.whiteKings else position.blackKings
+        if (kingBitboard == 0L) return false // No king found
 
-        // Check if the king's position is threatened by the opponent
-        val opponentSide = if (side == PlayerSide.WHITE) PlayerSide.BLACK else PlayerSide.WHITE
-        return threatenedSquares(position, opponentSide).contains(kingPosition)
+        val kingSquare = kingBitboard.countTrailingZeroBits()
+        val opponentSide = side.opposite()
+
+        // Use optimized attack detection
+        return isSquareAttacked(position, kingSquare, opponentSide)
+    }
+
+    /**
+     * Fast bitboard-based check if a square is attacked by a given side.
+     *
+     * Instead of generating all moves, we look from the target square
+     * to see if there are attackers. Much faster than threatenedSquares().
+     *
+     * @param position The chess position
+     * @param targetSquare The square to check (0-63)
+     * @param attackingSide Which side might be attacking
+     * @return true if the square is attacked
+     */
+    private fun isSquareAttacked(position: ChessPosition, targetSquare: Int, attackingSide: PlayerSide): Boolean {
+        val occupied = position.occupiedSquares()
+
+        // Get attacking side's bitboards
+        val pawns: Long
+        val knights: Long
+        val bishops: Long
+        val rooks: Long
+        val queens: Long
+        val kings: Long
+
+        if (attackingSide == PlayerSide.WHITE) {
+            pawns = position.whitePawns
+            knights = position.whiteKnights
+            bishops = position.whiteBishops
+            rooks = position.whiteRooks
+            queens = position.whiteQueens
+            kings = position.whiteKings
+        } else {
+            pawns = position.blackPawns
+            knights = position.blackKnights
+            bishops = position.blackBishops
+            rooks = position.blackRooks
+            queens = position.blackQueens
+            kings = position.blackKings
+        }
+
+        // Check pawn attacks
+        // IMPORTANT: Use opposite table! BLACK_PAWN_ATTACKS[square] tells us where a
+        // black pawn at square attacks, but we want to know where black pawns COULD BE
+        // to attack targetSquare. A white pawn at targetSquare would attack those squares!
+        val pawnAttacks = if (attackingSide == PlayerSide.WHITE) {
+            AttackTables.BLACK_PAWN_ATTACKS[targetSquare]  // Where white pawns could be
+        } else {
+            AttackTables.WHITE_PAWN_ATTACKS[targetSquare]  // Where black pawns could be
+        }
+        if ((pawns and pawnAttacks) != 0L) return true
+
+        // Check knight attacks (lookup table, O(1))
+        val knightAttacks = AttackTables.KNIGHT_ATTACKS[targetSquare]
+        if ((knights and knightAttacks) != 0L) return true
+
+        // Check king attacks (lookup table, O(1))
+        val kingAttacks = AttackTables.KING_ATTACKS[targetSquare]
+        if ((kings and kingAttacks) != 0L) return true
+
+        // Check bishop/queen diagonal attacks (ray-casting)
+        val bishopAttacks = AttackTables.generateSliderAttacks(targetSquare, occupied, AttackTables.BISHOP_DIRECTIONS)
+        if (((bishops or queens) and bishopAttacks) != 0L) return true
+
+        // Check rook/queen horizontal/vertical attacks (ray-casting)
+        val rookAttacks = AttackTables.generateSliderAttacks(targetSquare, occupied, AttackTables.ROOK_DIRECTIONS)
+        if (((rooks or queens) and rookAttacks) != 0L) return true
+
+        return false
     }
 
     override fun threatenedSquares(position: ChessPosition, by: PlayerSide): Set<Position> {

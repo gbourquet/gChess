@@ -94,6 +94,65 @@ class MakeMoveUseCaseTest : FunSpec({
         coVerify(exactly = 0) { gameEventNotifier.notifyMoveRejected(any(), any()) }
     }
 
+    test("execute should successfully make a valid move and notify - test 2") {
+        // Given
+        val gameRepository = mockk<GameRepository>()
+        val chessRules = mockk<ChessRules>()
+        val gameEventNotifier = mockk<GameEventNotifier>()
+        val useCase = MakeMoveUseCase(gameRepository, chessRules, gameEventNotifier)
+
+        val gameId = GameId.generate()
+        val whitePlayer = Player.create(UserId.generate(), PlayerSide.WHITE)
+        val blackPlayer = Player.create(UserId.generate(), PlayerSide.BLACK)
+        val initialPosition = "r3k2r/p1p3pp/2p5/6B1/1bB3p1/4p3/P1P3PP/R3RK1R w KQkq - 0 1".toChessPosition()
+
+        val game = Game(
+            id = gameId,
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            board = initialPosition,
+            currentSide = PlayerSide.WHITE,
+            status = GameStatus.IN_PROGRESS,
+            moveHistory = emptyList()
+        )
+
+        val move = Move(
+            from = Position.fromAlgebraic("e1"),
+            to = Position.fromAlgebraic("e3"),
+            promotion = null
+        )
+
+        val expectedBoard = "r3k2r/p1p3pp/2p5/6B1/1bB3p1/4R3/P1P3PP/R4K1R b KQkq - 0 1".toChessPosition()
+        val gameAfterMove = game.copy(
+            board = expectedBoard,
+            currentSide = PlayerSide.BLACK,
+            moveHistory = listOf(move)
+        )
+
+        // Mock behavior
+        coEvery { gameRepository.findById(gameId) } returns game
+        every { chessRules.isMoveLegal(initialPosition, move) } returns true
+        every { chessRules.isCheckmate(any()) } returns false
+        every { chessRules.isStalemate(any()) } returns false
+        every { chessRules.isFiftyMoveRule(any()) } returns false
+        every { chessRules.isInsufficientMaterial(any()) } returns false
+        coEvery { gameRepository.save(any()) } returns gameAfterMove
+        coEvery { gameEventNotifier.notifyMoveExecuted(any(), move) } returns Unit
+
+        // When
+        val result = useCase.execute(gameId, whitePlayer, move)
+
+        // Then
+        result.isSuccess shouldBe true
+
+        // Verify interactions
+        coVerify { gameRepository.findById(gameId) }
+        verify { chessRules.isMoveLegal(initialPosition, move) }
+        coVerify { gameRepository.save(any()) }
+        coVerify { gameEventNotifier.notifyMoveExecuted(any(), move) }
+        coVerify(exactly = 0) { gameEventNotifier.notifyMoveRejected(any(), any()) }
+    }
+
     test("execute should fail when game not found") {
         // Given
         val gameRepository = mockk<GameRepository>()
@@ -295,8 +354,6 @@ class MakeMoveUseCaseTest : FunSpec({
             promotion = null
         )
 
-        "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3".toChessPosition()
-
         val savedGameSlot = slot<Game>()
 
         // Mock behavior
@@ -354,8 +411,6 @@ class MakeMoveUseCaseTest : FunSpec({
             to = Position.fromAlgebraic("f6"), // Stalemate!
             promotion = null
         )
-
-        "7k/8/5QK1/8/8/8/8/8 b - - 1 1".toChessPosition()
 
         val savedGameSlot = slot<Game>()
 

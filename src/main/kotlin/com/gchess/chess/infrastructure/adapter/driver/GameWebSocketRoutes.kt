@@ -21,6 +21,7 @@
  */
 package com.gchess.chess.infrastructure.adapter.driver
 
+import com.gchess.bot.application.usecase.ExecuteBotMoveUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.domain.model.Move
@@ -35,10 +36,13 @@ import com.gchess.chess.infrastructure.adapter.driver.dto.MoveDto
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveRejectedMessage
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.infrastructure.websocket.WebSocketJwtAuth
+import com.gchess.user.application.usecase.GetUserUseCase
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -62,6 +66,8 @@ fun Application.configureGameWebSocketRoutes() {
     // Inject use cases
     val getGameUseCase by inject<GetGameUseCase>()
     val makeMoveUseCase by inject<MakeMoveUseCase>()
+    val getUserUseCase by inject<GetUserUseCase>()
+    val executeBotMoveUseCase by inject<ExecuteBotMoveUseCase>()
 
     routing {
         // ========== Game WebSocket ==========
@@ -180,7 +186,24 @@ fun Application.configureGameWebSocketRoutes() {
                                         logger.warn("Move rejected for player $playerId: ${error.message}")
                                     } else {
                                         // Success - notification already sent by the use case via GameEventNotifier
+                                        val updatedGame = result.getOrThrow()
                                         logger.info("Move executed for player $playerId in game $gameId")
+
+                                        // Check if the next player is a bot
+                                        val nextPlayer = updatedGame.currentPlayer
+                                        val nextUser = getUserUseCase.execute(nextPlayer.userId)
+
+                                        if (nextUser != null && nextUser.username.startsWith("bot_")) {
+                                            // Launch bot move asynchronously
+                                            launch(Dispatchers.Default) {
+                                                try {
+                                                    executeBotMoveUseCase.execute(updatedGame.id, nextPlayer)
+                                                    logger.info("Bot move executed for game ${updatedGame.id}")
+                                                } catch (e: Exception) {
+                                                    logger.error("Error executing bot move for game ${updatedGame.id}", e)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 

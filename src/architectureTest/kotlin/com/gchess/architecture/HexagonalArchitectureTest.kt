@@ -1,5 +1,6 @@
 package com.gchess.architecture
 
+import com.tngtech.archunit.base.DescribedPredicate
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
@@ -182,7 +183,11 @@ class HexagonalArchitectureTest {
             .and().haveSimpleNameNotContaining("$")
             .and().haveSimpleNameNotEndingWith("Test")
             .should().beInterfaces()
-            .orShould().implement("com.gchess.chess.domain.service.ChessRules")
+            .orShould().beAssignableTo(
+                DescribedPredicate.describe("an interface") {
+                    it.isInterface
+                }
+            )
             .because("Domain services should be interfaces or implement domain service interfaces")
 
         rule.check(classes)

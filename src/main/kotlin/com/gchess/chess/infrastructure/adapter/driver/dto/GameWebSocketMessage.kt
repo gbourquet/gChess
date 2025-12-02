@@ -60,7 +60,8 @@ data class MoveExecutedMessage(
     val move: MoveDto,
     val newPositionFen: String, // FEN notation of the new position
     val gameStatus: String, // "IN_PROGRESS", "CHECK", "CHECKMATE", "STALEMATE", "DRAW"
-    val currentSide: String // "WHITE" or "BLACK" - whose turn it is now
+    val currentSide: String, // "WHITE" or "BLACK" - whose turn it is now
+    val isCheck: Boolean // true if the current player is in check
 ) : GameWebSocketMessage()
 
 @Serializable

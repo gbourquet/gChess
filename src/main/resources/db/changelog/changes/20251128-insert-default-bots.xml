@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="20251128-2" author="gchess">
+        <comment>Insert default bots with system users</comment>
+
+        <!-- Create system users for bots (password hash is N/A as bots cannot authenticate) -->
+        <insert tableName="users">
+            <column name="id" value="01JDZK00BOTJUNIOR000000000"/>
+            <column name="username" value="bot_junior"/>
+            <column name="email" value="bot_junior@system.gchess.com"/>
+            <column name="password_hash" value="N/A"/>
+        </insert>
+
+        <insert tableName="users">
+            <column name="id" value="01JDZK00BOTMEDIUM000000000"/>
+            <column name="username" value="bot_medium"/>
+            <column name="email" value="bot_medium@system.gchess.com"/>
+            <column name="password_hash" value="N/A"/>
+        </insert>
+
+        <insert tableName="users">
+            <column name="id" value="01JDZK00BOTSTRONG000000000"/>
+            <column name="username" value="bot_strong"/>
+            <column name="email" value="bot_strong@system.gchess.com"/>
+            <column name="password_hash" value="N/A"/>
+        </insert>
+
+        <insert tableName="users">
+            <column name="id" value="01JDZK00BOTMASTER000000000"/>
+            <column name="username" value="bot_master"/>
+            <column name="email" value="bot_master@system.gchess.com"/>
+            <column name="password_hash" value="N/A"/>
+        </insert>
+
+        <!-- Create default bots -->
+        <insert tableName="bots">
+            <column name="id" value="01JDZK10BOTJUNIOR000000000"/>
+            <column name="name" value="Junior Bot"/>
+            <column name="system_user_id" value="01JDZK00BOTJUNIOR000000000"/>
+            <column name="difficulty" value="BEGINNER"/>
+            <column name="description" value="Perfect for learning the basics. Makes simple tactical moves."/>
+            <column name="engine_type" value="MINIMAX"/>
+        </insert>
+
+        <insert tableName="bots">
+            <column name="id" value="01JDZK10BOTMEDIUM000000000"/>
+            <column name="name" value="Medium Bot"/>
+            <column name="system_user_id" value="01JDZK00BOTMEDIUM000000000"/>
+            <column name="difficulty" value="INTERMEDIATE"/>
+            <column name="description" value="A moderate challenge. Looks ahead a few moves."/>
+            <column name="engine_type" value="MINIMAX"/>
+        </insert>
+
+        <insert tableName="bots">
+            <column name="id" value="01JDZK10BOTSTRONG000000000"/>
+            <column name="name" value="Strong Bot"/>
+            <column name="system_user_id" value="01JDZK00BOTSTRONG000000000"/>
+            <column name="difficulty" value="ADVANCED"/>
+            <column name="description" value="Tactical master. Calculates deep combinations."/>
+            <column name="engine_type" value="MINIMAX"/>
+        </insert>
+
+        <insert tableName="bots">
+            <column name="id" value="01JDZK10BOTMASTER000000000"/>
+            <column name="name" value="Master Bot"/>
+            <column name="system_user_id" value="01JDZK00BOTMASTER000000000"/>
+            <column name="difficulty" value="MASTER"/>
+            <column name="description" value="Near-perfect play. Extremely challenging."/>
+            <column name="engine_type" value="MINIMAX"/>
+        </insert>
+    </changeSet>
+</databaseChangeLog>

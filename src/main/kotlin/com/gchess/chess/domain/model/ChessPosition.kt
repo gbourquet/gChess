@@ -54,19 +54,37 @@ data class ChessPosition(
     val fullmoveNumber: Int = 1 // The full move number (starts at 1, incremented after Black's move)
 ) {
     /**
+     * Bitboard with all white pieces (computed once at construction).
+     */
+    private val whitePiecesBoard: Long =
+        whitePawns or whiteKnights or whiteBishops or whiteRooks or whiteQueens or whiteKings
+
+    /**
+     * Bitboard with all black pieces (computed once at construction).
+     */
+    private val blackPiecesBoard: Long =
+        blackPawns or blackKnights or blackBishops or blackRooks or blackQueens or blackKings
+
+    /**
+     * Bitboard with all occupied squares (computed once at construction).
+     */
+    private val occupiedSquaresBoard: Long =
+        whitePiecesBoard or blackPiecesBoard
+
+    /**
      * Returns a bitboard with all white pieces
      */
-    fun whitePieces(): Long = whitePawns or whiteKnights or whiteBishops or whiteRooks or whiteQueens or whiteKings
+    fun whitePieces(): Long = whitePiecesBoard
 
     /**
      * Returns a bitboard with all black pieces
      */
-    fun blackPieces(): Long = blackPawns or blackKnights or blackBishops or blackRooks or blackQueens or blackKings
+    fun blackPieces(): Long = blackPiecesBoard
 
     /**
      * Returns a bitboard with all occupied squares
      */
-    fun occupiedSquares(): Long = whitePieces() or blackPieces()
+    fun occupiedSquares(): Long = occupiedSquaresBoard
 
     /**
      * Returns a bitboard with all empty squares
@@ -82,27 +100,44 @@ data class ChessPosition(
     }
 
     /**
-     * Gets the piece at a given position, or null if empty
+     * Gets the piece at a given position, or null if empty.
+     *
+     * Optimized to check white/black pieces first, reducing average
+     * checks from 12 to ~7 (1 check for color + 6 for piece type).
      */
     fun pieceAt(position: Position): Piece? {
         val bit = positionToBit(position)
-        val hasMoved = (movedPieces and bit) != 0L
 
-        return when {
-            (whitePawns and bit) != 0L -> Piece(PieceType.PAWN, PlayerSide.WHITE, hasMoved)
-            (whiteKnights and bit) != 0L -> Piece(PieceType.KNIGHT, PlayerSide.WHITE, hasMoved)
-            (whiteBishops and bit) != 0L -> Piece(PieceType.BISHOP, PlayerSide.WHITE, hasMoved)
-            (whiteRooks and bit) != 0L -> Piece(PieceType.ROOK, PlayerSide.WHITE, hasMoved)
-            (whiteQueens and bit) != 0L -> Piece(PieceType.QUEEN, PlayerSide.WHITE, hasMoved)
-            (whiteKings and bit) != 0L -> Piece(PieceType.KING, PlayerSide.WHITE, hasMoved)
-            (blackPawns and bit) != 0L -> Piece(PieceType.PAWN, PlayerSide.BLACK, hasMoved)
-            (blackKnights and bit) != 0L -> Piece(PieceType.KNIGHT, PlayerSide.BLACK, hasMoved)
-            (blackBishops and bit) != 0L -> Piece(PieceType.BISHOP, PlayerSide.BLACK, hasMoved)
-            (blackRooks and bit) != 0L -> Piece(PieceType.ROOK, PlayerSide.BLACK, hasMoved)
-            (blackQueens and bit) != 0L -> Piece(PieceType.QUEEN, PlayerSide.BLACK, hasMoved)
-            (blackKings and bit) != 0L -> Piece(PieceType.KING, PlayerSide.BLACK, hasMoved)
-            else -> null
+        // Check if it's a white piece first (reduces to 6 checks instead of 12)
+        val whiteOccupied = whitePieces() and bit
+        if (whiteOccupied != 0L) {
+            val hasMoved = (movedPieces and bit) != 0L
+            return when {
+                (whitePawns and bit) != 0L -> Piece(PieceType.PAWN, PlayerSide.WHITE, hasMoved)
+                (whiteKnights and bit) != 0L -> Piece(PieceType.KNIGHT, PlayerSide.WHITE, hasMoved)
+                (whiteBishops and bit) != 0L -> Piece(PieceType.BISHOP, PlayerSide.WHITE, hasMoved)
+                (whiteRooks and bit) != 0L -> Piece(PieceType.ROOK, PlayerSide.WHITE, hasMoved)
+                (whiteQueens and bit) != 0L -> Piece(PieceType.QUEEN, PlayerSide.WHITE, hasMoved)
+                else -> Piece(PieceType.KING, PlayerSide.WHITE, hasMoved) // Must be king
+            }
         }
+
+        // Check if it's a black piece
+        val blackOccupied = blackPieces() and bit
+        if (blackOccupied != 0L) {
+            val hasMoved = (movedPieces and bit) != 0L
+            return when {
+                (blackPawns and bit) != 0L -> Piece(PieceType.PAWN, PlayerSide.BLACK, hasMoved)
+                (blackKnights and bit) != 0L -> Piece(PieceType.KNIGHT, PlayerSide.BLACK, hasMoved)
+                (blackBishops and bit) != 0L -> Piece(PieceType.BISHOP, PlayerSide.BLACK, hasMoved)
+                (blackRooks and bit) != 0L -> Piece(PieceType.ROOK, PlayerSide.BLACK, hasMoved)
+                (blackQueens and bit) != 0L -> Piece(PieceType.QUEEN, PlayerSide.BLACK, hasMoved)
+                else -> Piece(PieceType.KING, PlayerSide.BLACK, hasMoved) // Must be king
+            }
+        }
+
+        // Square is empty
+        return null
     }
 
     /**
@@ -345,24 +380,88 @@ data class ChessPosition(
     }
 
     /**
-     * Gets all pieces with their positions
+     * Gets all pieces with their positions.
+     *
+     * Optimized to iterate only over occupied squares using bitboards,
+     * instead of checking all 64 squares.
      */
     fun getAllPieces(): Map<Position, Piece> {
         val pieces = mutableMapOf<Position, Piece>()
-        for (rank in 0..7) {
-            for (file in 0..7) {
-                val position = Position(file, rank)
-                pieceAt(position)?.let { pieces[position] = it }
-            }
-        }
+
+        // Iterate over white bitboards
+        addPiecesFromBitboard(pieces, whitePawns, PieceType.PAWN, PlayerSide.WHITE)
+        addPiecesFromBitboard(pieces, whiteKnights, PieceType.KNIGHT, PlayerSide.WHITE)
+        addPiecesFromBitboard(pieces, whiteBishops, PieceType.BISHOP, PlayerSide.WHITE)
+        addPiecesFromBitboard(pieces, whiteRooks, PieceType.ROOK, PlayerSide.WHITE)
+        addPiecesFromBitboard(pieces, whiteQueens, PieceType.QUEEN, PlayerSide.WHITE)
+        addPiecesFromBitboard(pieces, whiteKings, PieceType.KING, PlayerSide.WHITE)
+
+        // Iterate over black bitboards
+        addPiecesFromBitboard(pieces, blackPawns, PieceType.PAWN, PlayerSide.BLACK)
+        addPiecesFromBitboard(pieces, blackKnights, PieceType.KNIGHT, PlayerSide.BLACK)
+        addPiecesFromBitboard(pieces, blackBishops, PieceType.BISHOP, PlayerSide.BLACK)
+        addPiecesFromBitboard(pieces, blackRooks, PieceType.ROOK, PlayerSide.BLACK)
+        addPiecesFromBitboard(pieces, blackQueens, PieceType.QUEEN, PlayerSide.BLACK)
+        addPiecesFromBitboard(pieces, blackKings, PieceType.KING, PlayerSide.BLACK)
+
         return pieces
     }
 
     /**
-     * Gets all pieces of a given side
+     * Gets all pieces of a given side.
+     *
+     * Optimized to iterate only over occupied squares using bitboards,
+     * instead of checking all 64 squares.
      */
     fun getPiecesBySide(side: PlayerSide): Map<Position, Piece> {
-        return getAllPieces().filterValues { it.side == side }
+        val pieces = mutableMapOf<Position, Piece>()
+
+        if (side == PlayerSide.WHITE) {
+            // Iterate over white bitboards only
+            addPiecesFromBitboard(pieces, whitePawns, PieceType.PAWN, PlayerSide.WHITE)
+            addPiecesFromBitboard(pieces, whiteKnights, PieceType.KNIGHT, PlayerSide.WHITE)
+            addPiecesFromBitboard(pieces, whiteBishops, PieceType.BISHOP, PlayerSide.WHITE)
+            addPiecesFromBitboard(pieces, whiteRooks, PieceType.ROOK, PlayerSide.WHITE)
+            addPiecesFromBitboard(pieces, whiteQueens, PieceType.QUEEN, PlayerSide.WHITE)
+            addPiecesFromBitboard(pieces, whiteKings, PieceType.KING, PlayerSide.WHITE)
+        } else {
+            // Iterate over black bitboards only
+            addPiecesFromBitboard(pieces, blackPawns, PieceType.PAWN, PlayerSide.BLACK)
+            addPiecesFromBitboard(pieces, blackKnights, PieceType.KNIGHT, PlayerSide.BLACK)
+            addPiecesFromBitboard(pieces, blackBishops, PieceType.BISHOP, PlayerSide.BLACK)
+            addPiecesFromBitboard(pieces, blackRooks, PieceType.ROOK, PlayerSide.BLACK)
+            addPiecesFromBitboard(pieces, blackQueens, PieceType.QUEEN, PlayerSide.BLACK)
+            addPiecesFromBitboard(pieces, blackKings, PieceType.KING, PlayerSide.BLACK)
+        }
+
+        return pieces
+    }
+
+    /**
+     * Helper to add pieces from a bitboard to the map.
+     * Uses efficient bitboard iteration (Brian Kernighan's algorithm).
+     */
+    private fun addPiecesFromBitboard(
+        pieces: MutableMap<Position, Piece>,
+        bitboard: Long,
+        pieceType: PieceType,
+        side: PlayerSide
+    ) {
+        var bits = bitboard
+        while (bits != 0L) {
+            // Find the index of the least significant bit
+            val squareIndex = bits.countTrailingZeroBits()
+            val position = indexToPosition(squareIndex)
+
+            // Check if piece has moved
+            val bit = 1L shl squareIndex
+            val hasMoved = (movedPieces and bit) != 0L
+
+            pieces[position] = Piece(pieceType, side, hasMoved)
+
+            // Clear the least significant bit
+            bits = bits and (bits - 1)
+        }
     }
 
     /**
@@ -377,6 +476,93 @@ data class ChessPosition(
      */
     fun getLegalMoves(): List<Move> {
         return standardRules.legalMovesFor(this)
+    }
+
+    /**
+     * Evaluates the position and returns a score in centipawns.
+     *
+     * Uses bitboard operations for efficient evaluation.
+     * Positive scores favor the side to move, negative scores favor the opponent.
+     *
+     * Evaluation combines:
+     * - Material value (piece values)
+     * - Positional bonus (piece-square tables)
+     *
+     * Optimized to iterate only over occupied squares using bitboard manipulation.
+     *
+     * Computed lazily - only evaluated when needed (leaf nodes in search tree).
+     * Temporary positions created for legality checks don't pay evaluation cost.
+     *
+     * @return Score in centipawns from the perspective of the side to move
+     */
+    val value: Int by lazy {
+        var whiteScore = 0
+        var blackScore = 0
+
+        // White pieces - iterate over occupied squares only
+        whiteScore += evaluateBitboard(whitePawns, PieceType.PAWN, true)
+        whiteScore += evaluateBitboard(whiteKnights, PieceType.KNIGHT, true)
+        whiteScore += evaluateBitboard(whiteBishops, PieceType.BISHOP, true)
+        whiteScore += evaluateBitboard(whiteRooks, PieceType.ROOK, true)
+        whiteScore += evaluateBitboard(whiteQueens, PieceType.QUEEN, true)
+        whiteScore += evaluateBitboard(whiteKings, PieceType.KING, true)
+
+        // Black pieces - iterate over occupied squares only
+        blackScore += evaluateBitboard(blackPawns, PieceType.PAWN, false)
+        blackScore += evaluateBitboard(blackKnights, PieceType.KNIGHT, false)
+        blackScore += evaluateBitboard(blackBishops, PieceType.BISHOP, false)
+        blackScore += evaluateBitboard(blackRooks, PieceType.ROOK, false)
+        blackScore += evaluateBitboard(blackQueens, PieceType.QUEEN, false)
+        blackScore += evaluateBitboard(blackKings, PieceType.KING, false)
+
+        val score = whiteScore - blackScore
+
+        // Return from perspective of side to move
+        if (sideToMove == PlayerSide.WHITE) score else -score
+    }
+
+    /**
+     * Evaluates a single bitboard by iterating over all set bits.
+     *
+     * Uses efficient bitboard iteration:
+     * - Long.countTrailingZeroBits() finds the index of the least significant bit (O(1))
+     * - bits and (bits - 1) clears that bit (Brian Kernighan's algorithm)
+     *
+     * This approach only visits occupied squares, making it much faster than
+     * iterating over all 64 squares.
+     *
+     * @param bitboard The bitboard to evaluate
+     * @param pieceType The type of piece
+     * @param isWhite True if white pieces
+     * @return Total score (material + positional) for all pieces in this bitboard
+     */
+    private fun evaluateBitboard(bitboard: Long, pieceType: PieceType, isWhite: Boolean): Int {
+        var score = 0
+        var bits = bitboard
+
+        // Get material value for this piece type
+        val materialValue = when (pieceType) {
+            PieceType.PAWN -> PAWN_VALUE
+            PieceType.KNIGHT -> KNIGHT_VALUE
+            PieceType.BISHOP -> BISHOP_VALUE
+            PieceType.ROOK -> ROOK_VALUE
+            PieceType.QUEEN -> QUEEN_VALUE
+            PieceType.KING -> KING_VALUE
+        }
+
+        // Iterate over all set bits (occupied squares)
+        while (bits != 0L) {
+            // Find the index of the least significant bit (trailing zeros)
+            val squareIndex = bits.countTrailingZeroBits()
+
+            // Add material value + positional bonus
+            score += materialValue + PieceSquareTables.getBonus(pieceType, squareIndex, isWhite)
+
+            // Clear the least significant bit
+            bits = bits and (bits - 1)
+        }
+
+        return score
     }
 
     /**
@@ -502,6 +688,16 @@ data class ChessPosition(
          * Since StandardChessRules is stateless, we can safely reuse the same instance.
          */
         private val standardRules = StandardChessRules()
+
+        /**
+         * Material values in centipawns for position evaluation.
+         */
+        const val PAWN_VALUE = 100
+        const val KNIGHT_VALUE = 320
+        const val BISHOP_VALUE = 330
+        const val ROOK_VALUE = 500
+        const val QUEEN_VALUE = 900
+        const val KING_VALUE = 10000
 
         /**
          * Converts a Position to a bit index (0-63)

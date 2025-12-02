@@ -120,7 +120,7 @@ dependencies {
     implementation("com.typesafe:config:1.4.3")
 
     // Database - PostgreSQL
-    implementation("org.postgresql:postgresql:42.7.5")
+    implementation("org.postgresql:postgresql:42.7.8")
 
     // Database - jOOQ (type-safe SQL)
     implementation("org.jooq:jooq:3.20.8")
@@ -133,7 +133,7 @@ dependencies {
     implementation("org.liquibase:liquibase-core:5.0.1")
 
     // Unit Testing
-    "unitTestImplementation"("io.ktor:ktor-server-test-host:3.3.2")
+    "unitTestImplementation"("io.ktor:ktor-server-test-host:3.3.3")
     "unitTestImplementation"("io.kotest:kotest-runner-junit5:6.0.5")
     "unitTestImplementation"("io.kotest:kotest-assertions-core:6.0.5")
     "unitTestImplementation"("io.insert-koin:koin-test:4.1.0")
@@ -147,7 +147,7 @@ dependencies {
     "architectureTestRuntimeOnly"("org.junit.platform:junit-platform-launcher") // Explicitly add launcher
 
     // Integration Testing (E2E)
-    "integrationTestImplementation"("io.ktor:ktor-server-test-host:3.3.2")
+    "integrationTestImplementation"("io.ktor:ktor-server-test-host:3.3.3")
     "integrationTestImplementation"("io.kotest:kotest-runner-junit5:6.0.5")
     "integrationTestImplementation"("io.kotest:kotest-assertions-core:6.0.5")
     "integrationTestImplementation"("io.insert-koin:koin-test:4.1.0")
@@ -161,11 +161,11 @@ dependencies {
     "jooqGenerator"("org.jooq:jooq-codegen:3.20.8")
     "jooqGenerator"("org.jooq:jooq-meta:3.20.8")
     "jooqGenerator"("org.testcontainers:testcontainers-postgresql:2.0.2") // BOM doesn't work for custom configs
-    "jooqGenerator"("org.postgresql:postgresql:42.7.5")
+    "jooqGenerator"("org.postgresql:postgresql:42.7.8")
     "jooqGenerator"("org.liquibase:liquibase-core:5.0.1")
 
     // Documentation Generation
-    "docGenImplementation"("io.ktor:ktor-server-test-host:3.3.2")
+    "docGenImplementation"("io.ktor:ktor-server-test-host:3.3.3")
 }
 
 application {
@@ -233,7 +233,10 @@ kotlin {
 // ============================================
 
 // Créer la tâche de setup de la base de données pour jOOQ
-val setupJooqDatabase by tasks.registering(JooqTestcontainersTask::class)
+val setupJooqDatabase by tasks.registering(JooqTestcontainersTask::class) {
+    inputs.files(fileTree("src/main/resources/db/changelog")) // surveille les migrations
+    outputs.dir(layout.buildDirectory.dir("generated-src/jooq/main")) // répertoire de sortie
+}
 
 // Tâche personnalisée pour générer le code jOOQ
 val generateJooq by tasks.registering(JavaExec::class) {
@@ -248,20 +251,25 @@ val generateJooq by tasks.registering(JavaExec::class) {
     mainClass.set("org.jooq.codegen.GenerationTool")
 
     // Le fichier de configuration sera créé par setupJooqDatabase
-    args = listOf(
-        project.provider {
+    val jooqConfigFile = project.provider {
             if (project.extensions.extraProperties.has("jooqConfigFile")) {
                 project.extensions.extraProperties["jooqConfigFile"] as String
             } else {
                 project.layout.buildDirectory.dir("jooq-config/jooq-config.xml").get().asFile.absolutePath
             }
-        }.get()
-    )
+        }
+
+    args = listOf(jooqConfigFile.get())
 
     // S'assurer que le répertoire de sortie existe
     doFirst {
         project.layout.buildDirectory.dir("generated-src/jooq/main").get().asFile.mkdirs()
     }
+
+    inputs.files(fileTree("src/main/resources/db/changelog")) // surveille les migrations
+    inputs.file(jooqConfigFile)                     // surveille le fichier jooq-config.xml
+    outputs.dir(layout.buildDirectory.dir("generated-src/jooq/main")) // répertoire de sortie
+
 }
 
 // Ajouter les sources générées au sourceSet principal

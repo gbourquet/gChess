@@ -3,8 +3,10 @@ package com.gchess.chess.infrastructure.adapter.driver
 import com.gchess.chess.infrastructure.adapter.driver.dto.GameWebSocketMessage
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.UserId
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
+import io.ktor.websocket.close
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -108,5 +110,34 @@ class SpectatorConnectionManager {
      */
     fun getGamesWithSpectators(): Set<GameId> {
         return spectators.keys.toSet()
+    }
+
+    /**
+     * Close all spectator WebSocket connections for a game.
+     * Should be called when a game ends (CHECKMATE, STALEMATE, DRAW).
+     *
+     * @param gameId The game whose spectator connections should be closed
+     * @return Number of spectator connections that were closed
+     */
+    suspend fun closeGameSpectators(gameId: GameId): Int {
+        val gameSpectators = spectators.remove(gameId) ?: return 0
+
+        var closedCount = 0
+
+        for ((userId, session) in gameSpectators) {
+            try {
+                session.close(CloseReason(
+                    CloseReason.Codes.NORMAL,
+                    "Game finished"
+                ))
+                closedCount++
+                logger.info("Closed WebSocket for spectator $userId (game $gameId ended)")
+            } catch (e: Exception) {
+                logger.error("Error closing WebSocket for spectator $userId", e)
+            }
+        }
+
+        logger.info("Closed $closedCount spectator connections for game $gameId")
+        return closedCount
     }
 }

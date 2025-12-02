@@ -1,0 +1,14 @@
+package com.gchess.bot.domain.model
+
+/**
+ * Bot difficulty levels with search depths optimized for alpha-beta pruning.
+ *
+ * Phase 4: Increased depths thanks to alpha-beta pruning efficiency.
+ * Alpha-beta reduces search complexity from O(b^d) to ~O(b^(d/2)) with good move ordering.
+ */
+enum class BotDifficulty(val searchDepth: Int) {
+    BEGINNER(1),
+    INTERMEDIATE(2),
+    ADVANCED(3),
+    MASTER(7)
+}

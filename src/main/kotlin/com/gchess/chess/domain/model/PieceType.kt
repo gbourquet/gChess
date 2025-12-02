@@ -21,11 +21,11 @@
  */
 package com.gchess.chess.domain.model
 
-enum class PieceType {
-    PAWN,
-    KNIGHT,
-    BISHOP,
-    ROOK,
-    QUEEN,
-    KING
+enum class PieceType(val value: Int) {
+    PAWN(100),
+    KNIGHT(320),
+    BISHOP(330),
+    ROOK(500),
+    QUEEN(900),
+    KING(20000)
 }

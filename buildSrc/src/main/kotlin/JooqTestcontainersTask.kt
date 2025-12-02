@@ -131,8 +131,6 @@ open class JooqTestcontainersTask : DefaultTask() {
                         LabelExpression().originalString
                     ).execute() // Exécution de la commande
                 }.execute()
-
-                println("✅ Migrations Liquibase exécutées avec succès")
             }
         }
     }

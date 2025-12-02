@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="20251128-1" author="gchess">
+        <createTable tableName="bots">
+            <column name="id" type="VARCHAR(26)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="system_user_id" type="VARCHAR(26)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="difficulty" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="engine_type" type="VARCHAR(50)" defaultValue="MINIMAX">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="bots"
+                baseColumnNames="system_user_id"
+                constraintName="fk_bot_user"
+                referencedTableName="users"
+                referencedColumnNames="id"
+                onDelete="RESTRICT"
+                onUpdate="CASCADE"/>
+
+        <createIndex tableName="bots" indexName="idx_bots_system_user_id">
+            <column name="system_user_id"/>
+        </createIndex>
+
+        <createIndex tableName="bots" indexName="idx_bots_difficulty">
+            <column name="difficulty"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
