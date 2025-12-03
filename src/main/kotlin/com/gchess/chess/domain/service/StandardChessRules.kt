@@ -656,7 +656,8 @@ class StandardChessRules : ChessRules {
     }
 
     /**
-     * Generates pawn capture moves (diagonal)
+     * Generates pawn capture moves (diagonal).
+     * Optimized to reduce list allocations.
      */
     private fun generatePawnCaptures(
         position: Position,
@@ -665,34 +666,53 @@ class StandardChessRules : ChessRules {
         promotionRank: Int,
         board: ChessPosition
     ): List<Move> {
-        return listOf(position.file - 1, position.file + 1)
-            .filter { it in 0..7 }
-            .map { captureFile -> Position(captureFile, position.rank + direction) }
-            .filter { capturePos ->
-                val targetPiece = board.pieceAt(capturePos)
-                targetPiece != null && targetPiece.side != side
-            }
-            .flatMap { capturePos ->
-                if (capturePos.rank == promotionRank) {
-                    createPromotionMoves(position, capturePos)
+        val moves = mutableListOf<Move>()
+        val targetRank = position.rank + direction
+
+        // Check left capture
+        if (position.file > 0) {
+            val capturePos = Position(position.file - 1, targetRank)
+            val targetPiece = board.pieceAt(capturePos)
+            if (targetPiece != null && targetPiece.side != side) {
+                if (targetRank == promotionRank) {
+                    moves.addAll(createPromotionMoves(position, capturePos))
                 } else {
-                    listOf(Move(position, capturePos))
+                    moves.add(Move(position, capturePos))
                 }
             }
+        }
+
+        // Check right capture
+        if (position.file < 7) {
+            val capturePos = Position(position.file + 1, targetRank)
+            val targetPiece = board.pieceAt(capturePos)
+            if (targetPiece != null && targetPiece.side != side) {
+                if (targetRank == promotionRank) {
+                    moves.addAll(createPromotionMoves(position, capturePos))
+                } else {
+                    moves.add(Move(position, capturePos))
+                }
+            }
+        }
+
+        return moves
     }
 
     /**
-     * Generates en passant capture moves
+     * Generates en passant capture moves.
+     * Optimized to reduce list allocations.
      */
     private fun generateEnPassantMoves(position: Position, direction: Int, board: ChessPosition): List<Move> {
-        return board.enPassantSquare?.let { epSquare ->
-            val epPosition = Position.fromAlgebraic(epSquare)
-            listOf(position.file - 1, position.file + 1)
-                .filter { it in 0..7 }
-                .map { captureFile -> Position(captureFile, position.rank + direction) }
-                .filter { it == epPosition }
-                .map { Move(position, it) }
-        } ?: emptyList()
+        val epSquare = board.enPassantSquare ?: return emptyList()
+        val epPosition = Position.fromAlgebraic(epSquare)
+        val targetRank = position.rank + direction
+
+        // Check if en passant square is adjacent and at the correct rank
+        if (epPosition.rank == targetRank && kotlin.math.abs(epPosition.file - position.file) == 1) {
+            return listOf(Move(position, epPosition))
+        }
+
+        return emptyList()
     }
 
     /**
@@ -710,126 +730,140 @@ class StandardChessRules : ChessRules {
     // ========== Knight Moves ==========
 
     /**
-     * Generates pseudo-legal knight moves.
+     * Generates pseudo-legal knight moves using pre-computed attack tables.
      * Knight moves in an L-shape: 2 squares in one direction and 1 square perpendicular.
+     *
+     * Optimized version using bitboards:
+     * - Uses AttackTables.KNIGHT_ATTACKS for O(1) attack lookup
+     * - Filters destinations using bitwise operations instead of list operations
+     * - Significantly faster than the previous list-based approach
      */
-    private fun generateKnightMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> =
-        // All 8 possible L-shaped knight moves (2+1 or 1+2 in any direction)
-        listOf(
-            Pair(2, 1), Pair(2, -1),
-            Pair(-2, 1), Pair(-2, -1),
-            Pair(1, 2), Pair(1, -2),
-            Pair(-1, 2), Pair(-1, -2)
-        )
-            .map { (dFile, dRank) -> Pair(position.file + dFile, position.rank + dRank) }
-            .filter { (file, rank) -> file in 0..7 && rank in 0..7 }
-            .map { (file, rank) -> Position(file, rank) }
-            .filter { targetPos ->
-                val targetPiece = board.pieceAt(targetPos)
-                targetPiece == null || targetPiece.side != piece.side
-            }
-            .map { targetPos -> Move(position, targetPos) }
+    private fun generateKnightMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> {
+        val fromIndex = ChessPosition.positionToIndex(position)
 
-    // ========== Sliding Pieces Helper ==========
+        // Get bitboard of squares occupied by our own pieces
+        val ownPieces = board.occupiedBySide(piece.side)
 
-    /**
-     * Generates moves along a ray (direction) until blocked by a piece or board edge.
-     * Used for sliding pieces: bishops, rooks, and queens.
-     */
-    private fun generateRayMoves(
-        position: Position,
-        piece: Piece,
-        board: ChessPosition,
-        fileDirection: Int,
-        rankDirection: Int
-    ): List<Move> =
-        generateSequence(1) { it + 1 }
-            .map { distance ->
-                val file = position.file + fileDirection * distance
-                val rank = position.rank + rankDirection * distance
-                Triple(file, rank, distance)
-            }
-            .takeWhile { (file, rank, _) -> file in 0..7 && rank in 0..7 }
-            .map { (file, rank, _) ->
-                val targetPos = Position(file, rank)
-                val targetPiece = board.pieceAt(targetPos)
-                Pair(targetPos, targetPiece)
-            }
-            .takeWhileInclusive { (_, targetPiece) -> targetPiece == null }
-            .filter { (_, targetPiece) -> targetPiece == null || targetPiece.side != piece.side }
-            .map { (targetPos, _) -> Move(position, targetPos) }
-            .toList()
+        // Get knight attacks from pre-computed table, excluding our own pieces
+        var destinations = AttackTables.KNIGHT_ATTACKS[fromIndex] and ownPieces.inv()
 
-    /**
-     * Helper extension to take elements while predicate is true, including the first false element.
-     */
-    private fun <T> Sequence<T>.takeWhileInclusive(predicate: (T) -> Boolean): Sequence<T> = sequence {
-        for (item in this@takeWhileInclusive) {
-            yield(item)
-            if (!predicate(item)) break
+        // Generate moves by iterating through set bits in destinations bitboard
+        val moves = mutableListOf<Move>()
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(position, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)  // Clear the bit
         }
+
+        return moves
     }
 
     // ========== Bishop Moves ==========
 
     /**
-     * Generates pseudo-legal bishop moves.
+     * Generates pseudo-legal bishop moves using bitboard ray-casting.
      * Bishop moves diagonally in all 4 diagonal directions.
+     *
+     * Optimized version:
+     * - Uses AttackTables.generateSliderAttacks() for efficient diagonal ray-casting
+     * - Returns bitboard of destinations, then iterates over set bits
+     * - Significantly faster than the previous sequence-based approach
      */
-    private fun generateBishopMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> =
-        listOf(
-            Pair(1, 1),   // up-right
-            Pair(1, -1),  // down-right
-            Pair(-1, 1),  // up-left
-            Pair(-1, -1)  // down-left
-        ).flatMap { (fileDir, rankDir) ->
-            generateRayMoves(position, piece, board, fileDir, rankDir)
+    private fun generateBishopMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> {
+        val fromIndex = ChessPosition.positionToIndex(position)
+        val occupied = board.occupiedSquares()
+        val ownPieces = board.occupiedBySide(piece.side)
+
+        // Get all bishop attacks using pre-defined diagonal directions
+        var destinations = AttackTables.generateSliderAttacks(
+            fromIndex,
+            occupied,
+            AttackTables.BISHOP_DIRECTIONS
+        ) and ownPieces.inv()
+
+        // Generate moves by iterating through set bits
+        val moves = mutableListOf<Move>()
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(position, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
         }
+
+        return moves
+    }
 
     // ========== Rook Moves ==========
 
     /**
-     * Generates pseudo-legal rook moves.
+     * Generates pseudo-legal rook moves using bitboard ray-casting.
      * Rook moves orthogonally (horizontally and vertically) in all 4 directions.
+     *
+     * Optimized version using bitboards for efficient move generation.
      */
-    private fun generateRookMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> =
-        listOf(
-            Pair(0, 1),   // up (north)
-            Pair(0, -1),  // down (south)
-            Pair(1, 0),   // right (east)
-            Pair(-1, 0)   // left (west)
-        ).flatMap { (fileDir, rankDir) ->
-            generateRayMoves(position, piece, board, fileDir, rankDir)
+    private fun generateRookMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> {
+        val fromIndex = ChessPosition.positionToIndex(position)
+        val occupied = board.occupiedSquares()
+        val ownPieces = board.occupiedBySide(piece.side)
+
+        // Get all rook attacks using pre-defined orthogonal directions
+        var destinations = AttackTables.generateSliderAttacks(
+            fromIndex,
+            occupied,
+            AttackTables.ROOK_DIRECTIONS
+        ) and ownPieces.inv()
+
+        // Generate moves by iterating through set bits
+        val moves = mutableListOf<Move>()
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(position, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
         }
+
+        return moves
+    }
 
     // ========== Queen Moves ==========
 
     /**
-     * Generates pseudo-legal queen moves.
+     * Generates pseudo-legal queen moves using bitboard ray-casting.
      * Queen combines rook and bishop movement patterns: moves in all 8 directions.
+     *
+     * Optimized version using bitboards for efficient move generation.
      */
-    private fun generateQueenMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> =
-        listOf(
-            // Orthogonal (rook-like)
-            Pair(0, 1),   // up (north)
-            Pair(0, -1),  // down (south)
-            Pair(1, 0),   // right (east)
-            Pair(-1, 0),  // left (west)
-            // Diagonal (bishop-like)
-            Pair(1, 1),   // up-right (northeast)
-            Pair(1, -1),  // down-right (southeast)
-            Pair(-1, 1),  // up-left (northwest)
-            Pair(-1, -1)  // down-left (southwest)
-        ).flatMap { (fileDir, rankDir) ->
-            generateRayMoves(position, piece, board, fileDir, rankDir)
+    private fun generateQueenMoves(position: Position, piece: Piece, board: ChessPosition): List<Move> {
+        val fromIndex = ChessPosition.positionToIndex(position)
+        val occupied = board.occupiedSquares()
+        val ownPieces = board.occupiedBySide(piece.side)
+
+        // Get all queen attacks (combination of rook + bishop directions)
+        var destinations = AttackTables.generateSliderAttacks(
+            fromIndex,
+            occupied,
+            AttackTables.QUEEN_DIRECTIONS
+        ) and ownPieces.inv()
+
+        // Generate moves by iterating through set bits
+        val moves = mutableListOf<Move>()
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(position, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
         }
+
+        return moves
+    }
 
     // ========== King Moves ==========
 
     /**
-     * Generates pseudo-legal king moves.
+     * Generates pseudo-legal king moves using pre-computed attack tables.
      * King moves one square in any direction (8 directions total).
      * Also includes castling moves if conditions are met.
+     *
+     * Optimized version:
+     * - Uses AttackTables.KING_ATTACKS for O(1) attack lookup
+     * - Filters destinations using bitwise operations
      */
     private fun generateKingMoves(
         position: Position,
@@ -837,24 +871,19 @@ class StandardChessRules : ChessRules {
         board: ChessPosition,
         includeCastling: Boolean = true
     ): List<Move> {
-        val normalMoves = listOf(
-            Pair(0, 1),   // up (north)
-            Pair(0, -1),  // down (south)
-            Pair(1, 0),   // right (east)
-            Pair(-1, 0),  // left (west)
-            Pair(1, 1),   // up-right (northeast)
-            Pair(1, -1),  // down-right (southeast)
-            Pair(-1, 1),  // up-left (northwest)
-            Pair(-1, -1)  // down-left (southwest)
-        )
-            .map { (fileDir, rankDir) -> Pair(position.file + fileDir, position.rank + rankDir) }
-            .filter { (file, rank) -> file in 0..7 && rank in 0..7 }
-            .map { (file, rank) -> Position(file, rank) }
-            .filter { targetPos ->
-                val targetPiece = board.pieceAt(targetPos)
-                targetPiece == null || targetPiece.side != piece.side
-            }
-            .map { targetPos -> Move(position, targetPos) }
+        val fromIndex = ChessPosition.positionToIndex(position)
+        val ownPieces = board.occupiedBySide(piece.side)
+
+        // Get king attacks from pre-computed table, excluding our own pieces
+        var destinations = AttackTables.KING_ATTACKS[fromIndex] and ownPieces.inv()
+
+        // Generate normal moves by iterating through set bits
+        val normalMoves = mutableListOf<Move>()
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            normalMoves.add(Move(position, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
+        }
 
         val castlingMoves = if (includeCastling) {
             generateCastlingMoves(position, piece, board)

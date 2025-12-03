@@ -92,6 +92,14 @@ data class ChessPosition(
     fun emptySquares(): Long = occupiedSquares().inv()
 
     /**
+     * Returns a bitboard with all squares occupied by the given side.
+     * Uses pre-computed values for efficiency (no recalculation).
+     */
+    fun occupiedBySide(side: PlayerSide): Long {
+        return if (side == PlayerSide.WHITE) whitePiecesBoard else blackPiecesBoard
+    }
+
+    /**
      * Checks if a position is occupied
      */
     fun isOccupied(position: Position): Boolean {
