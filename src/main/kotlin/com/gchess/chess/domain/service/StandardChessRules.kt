@@ -36,7 +36,8 @@ import com.gchess.shared.domain.model.PlayerSide
 class StandardChessRules : ChessRules {
 
     override fun legalMovesFor(position: ChessPosition): List<Move> {
-        val moves = mutableListOf<Move>()
+        // Pre-allocate list with typical size to avoid resizing
+        val moves = ArrayList<Move>(40)
         val sideToMove = position.sideToMove
         val opponentSide = sideToMove.opposite()
 
@@ -51,71 +52,31 @@ class StandardChessRules : ChessRules {
 
         if (inCheck) {
             // In check: must block, capture attacker, or move king
-            // IMPORTANT: Still need to check for pins even in check!
             val pinnedPieces = detectPinnedPieces(position, kingSquare, sideToMove, opponentSide)
 
             if (attackers.size > 1) {
                 // Double check: only king moves are legal
-                for ((pos, piece) in position.getPiecesBySide(sideToMove)) {
-                    if (piece.type == PieceType.KING) {
-                        moves.addAll(generateLegalKingMoves(pos, piece, position, opponentSide))
-                    }
-                }
+                generateLegalKingMovesOptimized(position, kingSquare, sideToMove, opponentSide, moves)
             } else {
                 // Single check: can block or capture
                 val attacker = attackers[0]
                 val blockOrCaptureMask = calculateBlockOrCaptureMask(kingSquare, attacker, position)
 
-                for ((pos, piece) in position.getPiecesBySide(sideToMove)) {
-                    if (piece.type == PieceType.KING) {
-                        // King can move out of check
-                        moves.addAll(generateLegalKingMoves(pos, piece, position, opponentSide))
-                    } else {
-                        // Other pieces can only block or capture the attacker
-                        // BUT: pinned pieces can't move off their pin ray
-                        val pinRay = pinnedPieces[pos]
-                        val pseudoMoves = generatePseudoLegalMoves(pos, piece, position)
+                // King moves
+                generateLegalKingMovesOptimized(position, kingSquare, sideToMove, opponentSide, moves)
 
-                        if (pinRay != null) {
-                            // Pinned piece: must stay on pin ray AND block/capture
-                            moves.addAll(pseudoMoves.filter { move ->
-                                val destBit = 1L shl ChessPosition.positionToIndex(move.to)
-                                (blockOrCaptureMask and destBit) != 0L && (pinRay and destBit) != 0L
-                            })
-                        } else {
-                            // Non-pinned piece: just need to block/capture
-                            moves.addAll(pseudoMoves.filter { move ->
-                                val destBit = 1L shl ChessPosition.positionToIndex(move.to)
-                                (blockOrCaptureMask and destBit) != 0L
-                            })
-                        }
-                    }
-                }
+                // Other pieces: iterate directly over bitboards
+                generateLegalMovesInCheck(position, sideToMove, blockOrCaptureMask, pinnedPieces, moves)
             }
         } else {
             // Not in check: normal move generation with pin detection
             val pinnedPieces = detectPinnedPieces(position, kingSquare, sideToMove, opponentSide)
 
-            for ((pos, piece) in position.getPiecesBySide(sideToMove)) {
-                if (piece.type == PieceType.KING) {
-                    // King moves: exclude attacked squares
-                    moves.addAll(generateLegalKingMoves(pos, piece, position, opponentSide))
-                } else {
-                    // Check if this piece is pinned
-                    val pinRay = pinnedPieces[pos]
-                    if (pinRay != null) {
-                        // Pinned piece: only moves along the pin ray are legal
-                        val pseudoMoves = generatePseudoLegalMoves(pos, piece, position)
-                        moves.addAll(pseudoMoves.filter { move ->
-                            val destBit = 1L shl ChessPosition.positionToIndex(move.to)
-                            (pinRay and destBit) != 0L
-                        })
-                    } else {
-                        // Non-pinned piece: all pseudo-legal moves are legal
-                        moves.addAll(generatePseudoLegalMoves(pos, piece, position))
-                    }
-                }
-            }
+            // King moves
+            generateLegalKingMovesOptimized(position, kingSquare, sideToMove, opponentSide, moves)
+
+            // Other pieces: iterate directly over bitboards
+            generateLegalMovesNormal(position, sideToMove, pinnedPieces, moves)
         }
 
         return moves
@@ -1009,6 +970,167 @@ class StandardChessRules : ChessRules {
             // Piece is pinned, check if it moves along the pin line
             val newPosition = board.movePiece(move.from, move.to, move.promotion)
             return isInCheck(newPosition, board.sideToMove)
+        }
+    }
+
+    /**
+     * Optimized king move generation that adds moves directly to the list.
+     * Avoids intermediate list allocations.
+     */
+    private fun generateLegalKingMovesOptimized(
+        board: ChessPosition,
+        kingSquare: Int,
+        ourSide: PlayerSide,
+        opponentSide: PlayerSide,
+        moves: MutableList<Move>
+    ) {
+        val kingPos = ChessPosition.indexToPosition(kingSquare)
+        val ownPieces = board.occupiedBySide(ourSide)
+
+        // Get king attack pattern
+        var destinations = AttackTables.KING_ATTACKS[kingSquare] and ownPieces.inv()
+
+        // Remove king from board for attack detection
+        val boardWithoutKing = board.setPiece(kingPos, null)
+
+        // Check each destination
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            val toPos = ChessPosition.indexToPosition(toIndex)
+
+            // Also remove any captured piece
+            val boardForCheck = boardWithoutKing.setPiece(toPos, null)
+
+            // Check if destination is attacked
+            if (!isSquareAttacked(boardForCheck, toIndex, opponentSide)) {
+                moves.add(Move(kingPos, toPos))
+            }
+
+            destinations = destinations xor (1L shl toIndex)
+        }
+
+        // Add castling moves
+        val piece = Piece(PieceType.KING, ourSide)
+        val castlingMoves = generateCastlingMoves(kingPos, piece, board)
+        for (castlingMove in castlingMoves) {
+            moves.add(castlingMove)
+        }
+    }
+
+    /**
+     * Optimized move generation for normal case (no check).
+     * Iterates directly over bitboards without creating intermediate collections.
+     */
+    private fun generateLegalMovesNormal(
+        board: ChessPosition,
+        ourSide: PlayerSide,
+        pinnedPieces: Map<Position, Long>,
+        moves: MutableList<Move>
+    ) {
+        // Get all bitboards for our side
+        val (pawns, knights, bishops, rooks, queens, _) = getBitboardsForSide(board, ourSide)
+
+        // Process each piece type
+        generateMovesForPieceType(board, pawns, PieceType.PAWN, ourSide, pinnedPieces, 0L, moves)
+        generateMovesForPieceType(board, knights, PieceType.KNIGHT, ourSide, pinnedPieces, 0L, moves)
+        generateMovesForPieceType(board, bishops, PieceType.BISHOP, ourSide, pinnedPieces, 0L, moves)
+        generateMovesForPieceType(board, rooks, PieceType.ROOK, ourSide, pinnedPieces, 0L, moves)
+        generateMovesForPieceType(board, queens, PieceType.QUEEN, ourSide, pinnedPieces, 0L, moves)
+    }
+
+    /**
+     * Optimized move generation for single check case.
+     * Only generates moves that block or capture the attacker.
+     */
+    private fun generateLegalMovesInCheck(
+        board: ChessPosition,
+        ourSide: PlayerSide,
+        blockOrCaptureMask: Long,
+        pinnedPieces: Map<Position, Long>,
+        moves: MutableList<Move>
+    ) {
+        // Get all bitboards for our side
+        val (pawns, knights, bishops, rooks, queens, _) = getBitboardsForSide(board, ourSide)
+
+        // Process each piece type with block/capture mask
+        generateMovesForPieceType(board, pawns, PieceType.PAWN, ourSide, pinnedPieces, blockOrCaptureMask, moves)
+        generateMovesForPieceType(board, knights, PieceType.KNIGHT, ourSide, pinnedPieces, blockOrCaptureMask, moves)
+        generateMovesForPieceType(board, bishops, PieceType.BISHOP, ourSide, pinnedPieces, blockOrCaptureMask, moves)
+        generateMovesForPieceType(board, rooks, PieceType.ROOK, ourSide, pinnedPieces, blockOrCaptureMask, moves)
+        generateMovesForPieceType(board, queens, PieceType.QUEEN, ourSide, pinnedPieces, blockOrCaptureMask, moves)
+    }
+
+    /**
+     * Helper to get all bitboards for a side as a tuple.
+     */
+    private fun getBitboardsForSide(
+        board: ChessPosition,
+        side: PlayerSide
+    ): BitboardSet {
+        return if (side == PlayerSide.WHITE) {
+            BitboardSet(board.whitePawns, board.whiteKnights, board.whiteBishops,
+                       board.whiteRooks, board.whiteQueens, board.whiteKings)
+        } else {
+            BitboardSet(board.blackPawns, board.blackKnights, board.blackBishops,
+                       board.blackRooks, board.blackQueens, board.blackKings)
+        }
+    }
+
+    /**
+     * Data class to hold bitboards for all piece types.
+     */
+    private data class BitboardSet(
+        val pawns: Long,
+        val knights: Long,
+        val bishops: Long,
+        val rooks: Long,
+        val queens: Long,
+        val kings: Long
+    )
+
+    /**
+     * Generates moves for all pieces of a given type.
+     * Applies pin constraints and optional block/capture mask.
+     *
+     * @param blockOrCaptureMask If non-zero, only moves to these squares are legal (for check evasion)
+     */
+    private fun generateMovesForPieceType(
+        board: ChessPosition,
+        bitboard: Long,
+        pieceType: PieceType,
+        ourSide: PlayerSide,
+        pinnedPieces: Map<Position, Long>,
+        blockOrCaptureMask: Long,
+        moves: MutableList<Move>
+    ) {
+        var pieces = bitboard
+
+        while (pieces != 0L) {
+            val fromIndex = pieces.countTrailingZeroBits()
+            val fromPos = ChessPosition.indexToPosition(fromIndex)
+
+            // Get pin ray for this piece (0L if not pinned)
+            val pinRay = pinnedPieces[fromPos] ?: 0L
+
+            // Generate moves for this piece
+            val pseudoMoves = generatePseudoLegalMoves(fromPos, Piece(pieceType, ourSide), board)
+
+            // Filter and add moves based on constraints
+            for (move in pseudoMoves) {
+                val destBit = 1L shl ChessPosition.positionToIndex(move.to)
+
+                // Check pin constraint
+                val satisfiesPinConstraint = pinRay == 0L || (pinRay and destBit) != 0L
+
+                // Check block/capture constraint (if in check)
+                val satisfiesCheckConstraint = blockOrCaptureMask == 0L || (blockOrCaptureMask and destBit) != 0L
+
+                if (satisfiesPinConstraint && satisfiesCheckConstraint) {
+                    moves.add(move)
+                }
+            }
+
+            pieces = pieces xor (1L shl fromIndex)
         }
     }
 }

@@ -40,7 +40,8 @@ class MinimaxBotService : BotService {
         position: ChessPosition,
         difficulty: BotDifficulty
     ): Result<MoveEvaluation> = withContext(Dispatchers.Default) {
-        var bestEvaluation : MoveEvaluation
+        lateinit var bestEvaluation : MoveEvaluation
+
         val totalTime = measureTime {
             nodesSearched = 0L
             legalMoveTime = 0.seconds
@@ -56,48 +57,61 @@ class MinimaxBotService : BotService {
                 return@withContext Result.failure(Exception("No legal moves available"))
             }
 
-            // Order moves for better alpha-beta efficiency (captures and promotions first)
-            val orderedMoves = orderMoves(position, legalMoves)
-
-            // Search each move to the configured depth with alpha-beta pruning
+            // Iterative deepening: search at increasing depths for better move ordering
             val searchDepth = difficulty.searchDepth
-            val evaluations = mutableListOf<MoveEvaluation>()
+            var bestMoveFromPreviousIteration: Move? = null
 
-            // Alpha-beta window: alpha is the best score we can guarantee, beta is the opponent's best
-            var alpha = Int.MIN_VALUE
-            val beta = Int.MAX_VALUE
+            // Start with depth 1 and progressively increase to searchDepth
+            for (currentDepth in 1..searchDepth) {
+                val evaluations = mutableListOf<MoveEvaluation>()
 
-            for (move in orderedMoves) {
-                val newPosition = position.movePiece(move.from, move.to, move.promotion)
-
-                // Alpha-beta search from opponent's perspective (negamax variant)
-                val score = -alphaBeta(newPosition, searchDepth - 1, -beta, -alpha, searchDepth)
-
-                evaluations.add(MoveEvaluation(move, score, searchDepth))
-
-                // Update alpha (our best guaranteed score)
-                if (score > alpha) {
-                    alpha = score
+                // Order moves, putting the best move from previous iteration first (PV move)
+                val orderedMoves = if (bestMoveFromPreviousIteration != null) {
+                    orderMovesWithPV(position, legalMoves, bestMoveFromPreviousIteration)
+                } else {
+                    orderMoves(position, legalMoves)
                 }
-            }
 
-            // Ensure we have at least one evaluation
-            if (evaluations.isEmpty()) {
-                // Timeout before evaluating any move, use first legal move
-                val firstMove = legalMoves.first()
-                val newPosition = position.movePiece(firstMove.from, firstMove.to, firstMove.promotion)
-                var score = 0
-                evaluationTime += measureTime {
-                    score = -newPosition.value
+                // Alpha-beta window: alpha is the best score we can guarantee, beta is the opponent's best
+                // Use safe values to avoid overflow when negating (-Int.MIN_VALUE overflows!)
+                var alpha = -1_000_000
+                val beta = 1_000_000
+
+                for (move in orderedMoves) {
+                    val newPosition = position.movePiece(move.from, move.to, move.promotion)
+
+                    // Alpha-beta search from opponent's perspective (negamax variant)
+                    val (scoreNeg, positionResult) = alphaBeta(newPosition, currentDepth - 1, -beta, -alpha, currentDepth)
+                    val score = -scoreNeg
+
+                    evaluations.add(MoveEvaluation(move, score, currentDepth, positionResult))
+
+                    // Update alpha (our best guaranteed score)
+                    if (score > alpha) {
+                        alpha = score
+                    }
                 }
-                return@withContext Result.success(MoveEvaluation(firstMove, score, 1))
-            }
 
-            // Select the move with the best score
-            bestEvaluation = evaluations.maxByOrNull { it.score }!!
+                // Ensure we have at least one evaluation
+                if (evaluations.isEmpty()) {
+                    // Timeout before evaluating any move, use first legal move
+                    val firstMove = legalMoves.first()
+                    val newPosition = position.movePiece(firstMove.from, firstMove.to, firstMove.promotion)
+                    var score = 0
+                    evaluationTime += measureTime {
+                        score = -newPosition.value
+                    }
+                    return@withContext Result.success(MoveEvaluation(firstMove, score, 1, newPosition))
+                }
+
+                // Select the move with the best score for this depth
+                bestEvaluation = evaluations.maxByOrNull { it.score }!!
+                bestMoveFromPreviousIteration = bestEvaluation.move
+            }
         }
         val nps = if (totalTime < 1.seconds) 0 else nodesSearched / totalTime.inWholeSeconds
         logger.info("looking for moves : $legalMoveTime | evaluating positions : $evaluationTime | positions reviewed : $nodesSearched | total time : $totalTime | nps : $nps")
+        logger.info("best position : ${bestEvaluation.bestPosition?.toFen() ?: "Non trouvée"} | score : ${bestEvaluation.score}")
 
         Result.success(bestEvaluation)
     }
@@ -123,7 +137,7 @@ class MinimaxBotService : BotService {
      * @param initialDepth Initial search depth (for tracking max depth reached)
      * @return Best evaluation score from this position
      */
-    private fun alphaBeta(position: ChessPosition, depth: Int, alpha: Int, beta: Int, initialDepth: Int): Int {
+    private fun alphaBeta(position: ChessPosition, depth: Int, alpha: Int, beta: Int, initialDepth: Int): Pair<Int, ChessPosition?> {
         // IMPORTANT: Check for terminal positions (mate/stalemate) BEFORE depth check
         // This ensures mate detection even at depth=0 (critical for shallow searches)
         var legalMoves = listOf<Move>()
@@ -137,7 +151,7 @@ class MinimaxBotService : BotService {
             // TODO: detect checkmate vs stalemate for accurate scoring
             // For now, return a very negative score (losing position)
             // Multiply by depth to prefer shorter mates
-            return -100000 - depth
+            return -100000 - depth to null
         }
 
         // Base case: leaf node (max depth reached)
@@ -146,23 +160,27 @@ class MinimaxBotService : BotService {
             evaluationTime += measureTime {
                 result = position.value
             }
-            return result
+            return result to position
         }
 
         // Order moves for maximum alpha-beta efficiency
         val orderedMoves = orderMoves(position, legalMoves)
 
         var currentAlpha = alpha
-        var bestScore = Int.MIN_VALUE
+        var bestScore = -1_000_000  // Use safe value instead of Int.MIN_VALUE
+        var bestPosition : ChessPosition? = null
 
         for (move in orderedMoves) {
             val newPosition = position.movePiece(move.from, move.to, move.promotion)
 
             // Recursive alpha-beta search with negated window (negamax pattern)
-            val score = -alphaBeta(newPosition, depth - 1, -beta, -currentAlpha, initialDepth)
+
+            val (scoreNeg, positionResult) = alphaBeta(newPosition, depth - 1, -beta, -currentAlpha, initialDepth)
+            val score = - scoreNeg
 
             if (score > bestScore) {
                 bestScore = score
+                bestPosition = positionResult
             }
 
             // Update alpha (our best guaranteed score)
@@ -179,7 +197,7 @@ class MinimaxBotService : BotService {
             }
         }
 
-        return bestScore
+        return bestScore to bestPosition
     }
 
     /**
@@ -239,5 +257,32 @@ class MinimaxBotService : BotService {
 
             score
         }
+    }
+
+    /**
+     * Orders moves with PV (Principal Variation) move first for better alpha-beta efficiency.
+     *
+     * The PV move is the best move from the previous iteration of iterative deepening.
+     * Placing it first dramatically improves alpha-beta cutoffs.
+     *
+     * @param position Current position
+     * @param moves List of legal moves to order
+     * @param pvMove Best move from previous iteration
+     * @return Ordered list with PV move first, followed by other moves in order
+     */
+    private fun orderMovesWithPV(position: ChessPosition, moves: List<Move>, pvMove: Move): List<Move> {
+        // First, order moves normally
+        val orderedMoves = orderMoves(position, moves).toMutableList()
+
+        // Find the PV move in the list
+        val pvIndex = orderedMoves.indexOfFirst { it == pvMove }
+
+        // If found and not already first, move it to the front
+        if (pvIndex > 0) {
+            val pv = orderedMoves.removeAt(pvIndex)
+            orderedMoves.add(0, pv)
+        }
+
+        return orderedMoves
     }
 }

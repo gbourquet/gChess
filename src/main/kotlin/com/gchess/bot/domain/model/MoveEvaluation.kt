@@ -21,6 +21,7 @@
  */
 package com.gchess.bot.domain.model
 
+import com.gchess.chess.domain.model.ChessPosition
 import com.gchess.chess.domain.model.Move
 
 /**
@@ -33,5 +34,6 @@ import com.gchess.chess.domain.model.Move
 data class MoveEvaluation(
     val move: Move,
     val score: Int,
-    val depth: Int
+    val depth: Int,
+    val bestPosition: ChessPosition?
 )
