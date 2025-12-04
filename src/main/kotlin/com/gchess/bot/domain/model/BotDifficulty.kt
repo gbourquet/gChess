@@ -7,8 +7,8 @@ package com.gchess.bot.domain.model
  * Alpha-beta reduces search complexity from O(b^d) to ~O(b^(d/2)) with good move ordering.
  */
 enum class BotDifficulty(val searchDepth: Int) {
-    BEGINNER(1),
-    INTERMEDIATE(2),
-    ADVANCED(3),
+    BEGINNER(2),
+    INTERMEDIATE(4),
+    ADVANCED(5),
     MASTER(7)
 }

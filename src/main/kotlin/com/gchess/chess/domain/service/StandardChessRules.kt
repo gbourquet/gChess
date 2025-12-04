@@ -1089,6 +1089,288 @@ class StandardChessRules : ChessRules {
     )
 
     /**
+     * Generates knight moves directly with constraints applied at bitboard level.
+     * No intermediate list allocation.
+     */
+    private fun generateKnightMovesDirectly(
+        board: ChessPosition,
+        fromIndex: Int,
+        ownPieces: Long,
+        pinRay: Long,
+        blockOrCaptureMask: Long,
+        moves: MutableList<Move>
+    ) {
+        // Knights can't move if pinned (they can't stay on pin ray)
+        if (pinRay != 0L) return
+
+        val fromPos = ChessPosition.indexToPosition(fromIndex)
+
+        // Get all knight destinations
+        var destinations = AttackTables.KNIGHT_ATTACKS[fromIndex]
+
+        // Remove our own pieces
+        destinations = destinations and ownPieces.inv()
+
+        // Apply block/capture constraint if in check
+        if (blockOrCaptureMask != 0L) {
+            destinations = destinations and blockOrCaptureMask
+        }
+
+        // Generate moves for each destination
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(fromPos, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
+        }
+    }
+
+    /**
+     * Generates bishop moves directly with constraints applied at bitboard level.
+     */
+    private fun generateBishopMovesDirectly(
+        board: ChessPosition,
+        fromIndex: Int,
+        ownPieces: Long,
+        occupied: Long,
+        pinRay: Long,
+        blockOrCaptureMask: Long,
+        moves: MutableList<Move>
+    ) {
+        val fromPos = ChessPosition.indexToPosition(fromIndex)
+
+        // Get all bishop destinations using sliding attack generation
+        var destinations = AttackTables.generateSliderAttacks(
+            fromIndex,
+            occupied,
+            AttackTables.BISHOP_DIRECTIONS
+        )
+
+        // Remove our own pieces
+        destinations = destinations and ownPieces.inv()
+
+        // Apply pin constraint
+        if (pinRay != 0L) {
+            destinations = destinations and pinRay
+        }
+
+        // Apply block/capture constraint if in check
+        if (blockOrCaptureMask != 0L) {
+            destinations = destinations and blockOrCaptureMask
+        }
+
+        // Generate moves
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(fromPos, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
+        }
+    }
+
+    /**
+     * Generates rook moves directly with constraints applied at bitboard level.
+     */
+    private fun generateRookMovesDirectly(
+        board: ChessPosition,
+        fromIndex: Int,
+        ownPieces: Long,
+        occupied: Long,
+        pinRay: Long,
+        blockOrCaptureMask: Long,
+        moves: MutableList<Move>
+    ) {
+        val fromPos = ChessPosition.indexToPosition(fromIndex)
+
+        var destinations = AttackTables.generateSliderAttacks(
+            fromIndex,
+            occupied,
+            AttackTables.ROOK_DIRECTIONS
+        )
+
+        destinations = destinations and ownPieces.inv()
+
+        if (pinRay != 0L) {
+            destinations = destinations and pinRay
+        }
+
+        if (blockOrCaptureMask != 0L) {
+            destinations = destinations and blockOrCaptureMask
+        }
+
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(fromPos, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
+        }
+    }
+
+    /**
+     * Generates queen moves directly with constraints applied at bitboard level.
+     */
+    private fun generateQueenMovesDirectly(
+        board: ChessPosition,
+        fromIndex: Int,
+        ownPieces: Long,
+        occupied: Long,
+        pinRay: Long,
+        blockOrCaptureMask: Long,
+        moves: MutableList<Move>
+    ) {
+        val fromPos = ChessPosition.indexToPosition(fromIndex)
+
+        var destinations = AttackTables.generateSliderAttacks(
+            fromIndex,
+            occupied,
+            AttackTables.QUEEN_DIRECTIONS
+        )
+
+        destinations = destinations and ownPieces.inv()
+
+        if (pinRay != 0L) {
+            destinations = destinations and pinRay
+        }
+
+        if (blockOrCaptureMask != 0L) {
+            destinations = destinations and blockOrCaptureMask
+        }
+
+        while (destinations != 0L) {
+            val toIndex = destinations.countTrailingZeroBits()
+            moves.add(Move(fromPos, ChessPosition.indexToPosition(toIndex)))
+            destinations = destinations xor (1L shl toIndex)
+        }
+    }
+
+    /**
+     * Generates pawn moves directly with constraints applied.
+     * Handles forward moves, captures, promotions, and en passant.
+     */
+    private fun generatePawnMovesDirectly(
+        board: ChessPosition,
+        fromIndex: Int,
+        ourSide: PlayerSide,
+        ownPieces: Long,
+        opponentPieces: Long,
+        pinRay: Long,
+        blockOrCaptureMask: Long,
+        moves: MutableList<Move>
+    ) {
+        val fromPos = ChessPosition.indexToPosition(fromIndex)
+        val direction = if (ourSide == PlayerSide.WHITE) 1 else -1
+        val startRank = if (ourSide == PlayerSide.WHITE) 1 else 6
+        val promotionRank = if (ourSide == PlayerSide.WHITE) 7 else 0
+
+        val file = fromPos.file
+        val rank = fromPos.rank
+        val targetRank = rank + direction
+
+        // Forward move (1 square)
+        if (targetRank in 0..7) {
+            val forwardPos = Position(file, targetRank)
+            val forwardIndex = ChessPosition.positionToIndex(forwardPos)
+            val forwardBit = 1L shl forwardIndex
+
+            // Check if square is empty
+            if ((board.occupiedSquares() and forwardBit) == 0L) {
+                // Check constraints
+                val satisfiesPin = pinRay == 0L || (pinRay and forwardBit) != 0L
+                val satisfiesCheck = blockOrCaptureMask == 0L || (blockOrCaptureMask and forwardBit) != 0L
+
+                if (satisfiesPin && satisfiesCheck) {
+                    if (targetRank == promotionRank) {
+                        // Promotion
+                        moves.add(Move(fromPos, forwardPos, PieceType.QUEEN))
+                        moves.add(Move(fromPos, forwardPos, PieceType.ROOK))
+                        moves.add(Move(fromPos, forwardPos, PieceType.BISHOP))
+                        moves.add(Move(fromPos, forwardPos, PieceType.KNIGHT))
+                    } else {
+                        moves.add(Move(fromPos, forwardPos))
+
+                        // Double push from starting rank
+                        if (rank == startRank) {
+                            val doublePushRank = rank + 2 * direction
+                            val doublePushPos = Position(file, doublePushRank)
+                            val doublePushIndex = ChessPosition.positionToIndex(doublePushPos)
+                            val doublePushBit = 1L shl doublePushIndex
+
+                            if ((board.occupiedSquares() and doublePushBit) == 0L) {
+                                val satisfiesPinDouble = pinRay == 0L || (pinRay and doublePushBit) != 0L
+                                val satisfiesCheckDouble = blockOrCaptureMask == 0L || (blockOrCaptureMask and doublePushBit) != 0L
+
+                                if (satisfiesPinDouble && satisfiesCheckDouble) {
+                                    moves.add(Move(fromPos, doublePushPos))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Captures - left diagonal
+        if (file > 0 && targetRank in 0..7) {
+            val capturePos = Position(file - 1, targetRank)
+            val captureIndex = ChessPosition.positionToIndex(capturePos)
+            val captureBit = 1L shl captureIndex
+
+            if ((opponentPieces and captureBit) != 0L) {
+                val satisfiesPin = pinRay == 0L || (pinRay and captureBit) != 0L
+                val satisfiesCheck = blockOrCaptureMask == 0L || (blockOrCaptureMask and captureBit) != 0L
+
+                if (satisfiesPin && satisfiesCheck) {
+                    if (targetRank == promotionRank) {
+                        moves.add(Move(fromPos, capturePos, PieceType.QUEEN))
+                        moves.add(Move(fromPos, capturePos, PieceType.ROOK))
+                        moves.add(Move(fromPos, capturePos, PieceType.BISHOP))
+                        moves.add(Move(fromPos, capturePos, PieceType.KNIGHT))
+                    } else {
+                        moves.add(Move(fromPos, capturePos))
+                    }
+                }
+            }
+        }
+
+        // Captures - right diagonal
+        if (file < 7 && targetRank in 0..7) {
+            val capturePos = Position(file + 1, targetRank)
+            val captureIndex = ChessPosition.positionToIndex(capturePos)
+            val captureBit = 1L shl captureIndex
+
+            if ((opponentPieces and captureBit) != 0L) {
+                val satisfiesPin = pinRay == 0L || (pinRay and captureBit) != 0L
+                val satisfiesCheck = blockOrCaptureMask == 0L || (blockOrCaptureMask and captureBit) != 0L
+
+                if (satisfiesPin && satisfiesCheck) {
+                    if (targetRank == promotionRank) {
+                        moves.add(Move(fromPos, capturePos, PieceType.QUEEN))
+                        moves.add(Move(fromPos, capturePos, PieceType.ROOK))
+                        moves.add(Move(fromPos, capturePos, PieceType.BISHOP))
+                        moves.add(Move(fromPos, capturePos, PieceType.KNIGHT))
+                    } else {
+                        moves.add(Move(fromPos, capturePos))
+                    }
+                }
+            }
+        }
+
+        // En passant
+        board.enPassantSquare?.let { epSquare ->
+            val epPos = Position.fromAlgebraic(epSquare)
+            val epFile = epPos.file
+
+            // Check if we can capture en passant
+            if (kotlin.math.abs(file - epFile) == 1 && epPos.rank == targetRank) {
+                val epBit = 1L shl ChessPosition.positionToIndex(epPos)
+                val satisfiesPin = pinRay == 0L || (pinRay and epBit) != 0L
+                val satisfiesCheck = blockOrCaptureMask == 0L || (blockOrCaptureMask and epBit) != 0L
+
+                if (satisfiesPin && satisfiesCheck) {
+                    moves.add(Move(fromPos, epPos))
+                }
+            }
+        }
+    }
+
+    /**
      * Generates moves for all pieces of a given type.
      * Applies pin constraints and optional block/capture mask.
      *
@@ -1103,6 +1385,11 @@ class StandardChessRules : ChessRules {
         blockOrCaptureMask: Long,
         moves: MutableList<Move>
     ) {
+        // Pre-compute bitboards once for all pieces
+        val ownPieces = board.occupiedBySide(ourSide)
+        val opponentPieces = board.occupiedBySide(ourSide.opposite())
+        val occupied = board.occupiedSquares()
+
         var pieces = bitboard
 
         while (pieces != 0L) {
@@ -1112,21 +1399,25 @@ class StandardChessRules : ChessRules {
             // Get pin ray for this piece (0L if not pinned)
             val pinRay = pinnedPieces[fromPos] ?: 0L
 
-            // Generate moves for this piece
-            val pseudoMoves = generatePseudoLegalMoves(fromPos, Piece(pieceType, ourSide), board)
-
-            // Filter and add moves based on constraints
-            for (move in pseudoMoves) {
-                val destBit = 1L shl ChessPosition.positionToIndex(move.to)
-
-                // Check pin constraint
-                val satisfiesPinConstraint = pinRay == 0L || (pinRay and destBit) != 0L
-
-                // Check block/capture constraint (if in check)
-                val satisfiesCheckConstraint = blockOrCaptureMask == 0L || (blockOrCaptureMask and destBit) != 0L
-
-                if (satisfiesPinConstraint && satisfiesCheckConstraint) {
-                    moves.add(move)
+            // Generate moves directly based on piece type
+            when (pieceType) {
+                PieceType.KNIGHT -> generateKnightMovesDirectly(
+                    board, fromIndex, ownPieces, pinRay, blockOrCaptureMask, moves
+                )
+                PieceType.BISHOP -> generateBishopMovesDirectly(
+                    board, fromIndex, ownPieces, occupied, pinRay, blockOrCaptureMask, moves
+                )
+                PieceType.ROOK -> generateRookMovesDirectly(
+                    board, fromIndex, ownPieces, occupied, pinRay, blockOrCaptureMask, moves
+                )
+                PieceType.QUEEN -> generateQueenMovesDirectly(
+                    board, fromIndex, ownPieces, occupied, pinRay, blockOrCaptureMask, moves
+                )
+                PieceType.PAWN -> generatePawnMovesDirectly(
+                    board, fromIndex, ourSide, ownPieces, opponentPieces, pinRay, blockOrCaptureMask, moves
+                )
+                PieceType.KING -> {
+                    // King moves are handled separately
                 }
             }
 
