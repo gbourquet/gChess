@@ -8,8 +8,11 @@ import com.gchess.chess.domain.model.PieceSquareTables
 import com.gchess.chess.domain.model.PieceType
 import com.gchess.shared.domain.model.PlayerSide
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
@@ -36,84 +39,148 @@ class MinimaxBotService : BotService {
     private var legalMoveTime: Duration = 0.seconds
     private var evaluationTime: Duration = 0.seconds
 
+    // Transposition Table for caching evaluated positions (256 MB)
+    private val transpositionTable = TranspositionTable(256)
+
     override suspend fun calculateBestMove(
         position: ChessPosition,
         difficulty: BotDifficulty
     ): Result<MoveEvaluation> = withContext(Dispatchers.Default) {
-        lateinit var bestEvaluation : MoveEvaluation
+        // Lazy SMP: Launch multiple parallel search coroutines sharing the same Transposition Table
+        // Coroutines are lightweight (~KB each), so we can launch many more than CPU cores
+        val numWorkers = difficulty.numWorkers
+        logger.info("Launching Lazy SMP with $numWorkers worker coroutines")
+
+        // Shared atomic counters for statistics (thread-safe)
+        val sharedNodesSearched = AtomicLong(0)
+        val sharedLegalMoveTimeNs = AtomicLong(0)
+        val sharedEvaluationTimeNs = AtomicLong(0)
+
+        lateinit var bestEvaluation: MoveEvaluation
 
         val totalTime = measureTime {
+            // Reset counters
             nodesSearched = 0L
             legalMoveTime = 0.seconds
             evaluationTime = 0.seconds
 
-            var legalMoves: List<Move> = emptyList()
-            legalMoveTime += measureTime {
-                legalMoves = position.getLegalMoves()
-                nodesSearched += legalMoves.size
-            }
+            // Clear TT for new search
+            transpositionTable.clear()
 
+            // Check for legal moves first
+            val legalMoves = position.getLegalMoves()
             if (legalMoves.isEmpty()) {
                 return@withContext Result.failure(Exception("No legal moves available"))
             }
 
-            // Iterative deepening: search at increasing depths for better move ordering
-            val searchDepth = difficulty.searchDepth
-            var bestMoveFromPreviousIteration: Move? = null
-
-            // Start with depth 1 and progressively increase to searchDepth
-            for (currentDepth in 1..searchDepth) {
-                val evaluations = mutableListOf<MoveEvaluation>()
-
-                // Order moves, putting the best move from previous iteration first (PV move)
-                val orderedMoves = if (bestMoveFromPreviousIteration != null) {
-                    orderMovesWithPV(position, legalMoves, bestMoveFromPreviousIteration)
-                } else {
-                    orderMoves(position, legalMoves)
+            // Launch parallel search workers
+            val workerResults = (1..numWorkers).map { workerID ->
+                async(Dispatchers.Default) {
+                    searchWorker(
+                        workerID = workerID,
+                        position = position,
+                        legalMoves = legalMoves,
+                        searchDepth = difficulty.searchDepth,
+                        sharedNodesSearched = sharedNodesSearched,
+                        sharedLegalMoveTimeNs = sharedLegalMoveTimeNs,
+                        sharedEvaluationTimeNs = sharedEvaluationTimeNs
+                    )
                 }
+            }.awaitAll()
 
-                // Alpha-beta window: alpha is the best score we can guarantee, beta is the opponent's best
-                // Use safe values to avoid overflow when negating (-Int.MIN_VALUE overflows!)
-                var alpha = -1_000_000
-                val beta = 1_000_000
+            // Select best result from all workers
+            bestEvaluation = workerResults.maxByOrNull { it.score }!!
 
-                for (move in orderedMoves) {
-                    val newPosition = position.movePiece(move.from, move.to, move.promotion)
-
-                    // Alpha-beta search from opponent's perspective (negamax variant)
-                    val (scoreNeg, positionResult) = alphaBeta(newPosition, currentDepth - 1, -beta, -alpha, currentDepth)
-                    val score = -scoreNeg
-
-                    evaluations.add(MoveEvaluation(move, score, currentDepth, positionResult))
-
-                    // Update alpha (our best guaranteed score)
-                    if (score > alpha) {
-                        alpha = score
-                    }
-                }
-
-                // Ensure we have at least one evaluation
-                if (evaluations.isEmpty()) {
-                    // Timeout before evaluating any move, use first legal move
-                    val firstMove = legalMoves.first()
-                    val newPosition = position.movePiece(firstMove.from, firstMove.to, firstMove.promotion)
-                    var score = 0
-                    evaluationTime += measureTime {
-                        score = -newPosition.value
-                    }
-                    return@withContext Result.success(MoveEvaluation(firstMove, score, 1, newPosition))
-                }
-
-                // Select the move with the best score for this depth
-                bestEvaluation = evaluations.maxByOrNull { it.score }!!
-                bestMoveFromPreviousIteration = bestEvaluation.move
-            }
+            // Aggregate statistics
+            nodesSearched = sharedNodesSearched.get()
+            legalMoveTime = Duration.parse("${sharedLegalMoveTimeNs.get()}ns")
+            evaluationTime = Duration.parse("${sharedEvaluationTimeNs.get()}ns")
         }
+
         val nps = if (totalTime < 1.seconds) 0 else nodesSearched / totalTime.inWholeSeconds
+        logger.info("Lazy SMP Results: $numWorkers workers | TT size: ${transpositionTable.size()} | Fill ratio: ${"%.2f".format(transpositionTable.fillRatio() * 100)}%")
         logger.info("looking for moves : $legalMoveTime | evaluating positions : $evaluationTime | positions reviewed : $nodesSearched | total time : $totalTime | nps : $nps")
         logger.info("best position : ${bestEvaluation.bestPosition?.toFen() ?: "Non trouvée"} | score : ${bestEvaluation.score}")
 
         Result.success(bestEvaluation)
+    }
+
+    /**
+     * Search worker for Lazy SMP parallel search.
+     * Each worker performs independent iterative deepening search,
+     * sharing results via the Transposition Table.
+     */
+    private fun searchWorker(
+        workerID: Int,
+        position: ChessPosition,
+        legalMoves: List<Move>,
+        searchDepth: Int,
+        sharedNodesSearched: AtomicLong,
+        sharedLegalMoveTimeNs: AtomicLong,
+        sharedEvaluationTimeNs: AtomicLong
+    ): MoveEvaluation {
+        var bestEvaluation: MoveEvaluation? = null
+        var bestMoveFromPreviousIteration: Move? = null
+
+        // Local counters for this worker
+        var localNodesSearched = 0L
+        var localLegalMoveTimeNs = 0L
+        var localEvaluationTimeNs = 0L
+
+        // Iterative deepening: search at increasing depths
+        for (currentDepth in 1..searchDepth) {
+            val evaluations = mutableListOf<MoveEvaluation>()
+
+            // Order moves, putting the best move from previous iteration first (PV move)
+            // Also use TT best move for move ordering
+            val ttBestMove = transpositionTable.getBestMove(position.zobristHash)
+            val pvMove = bestMoveFromPreviousIteration ?: ttBestMove
+            val orderedMoves = if (pvMove != null) {
+                orderMovesWithPV(position, legalMoves, pvMove)
+            } else {
+                orderMoves(position, legalMoves)
+            }
+
+            // Alpha-beta window
+            var alpha = -1_000_000
+            val beta = 1_000_000
+
+            for (move in orderedMoves) {
+                val newPosition = position.movePiece(move.from, move.to, move.promotion)
+
+                // Track legal move time
+                val moveStartTime = System.nanoTime()
+                localNodesSearched += 1
+
+                // Alpha-beta search
+                val evalStartTime = System.nanoTime()
+                val (scoreNeg, positionResult) = alphaBeta(newPosition, currentDepth - 1, -beta, -alpha, currentDepth)
+                val score = -scoreNeg
+                localEvaluationTimeNs += System.nanoTime() - evalStartTime
+
+                localLegalMoveTimeNs += System.nanoTime() - moveStartTime
+
+                evaluations.add(MoveEvaluation(move, score, currentDepth, positionResult))
+
+                // Update alpha
+                if (score > alpha) {
+                    alpha = score
+                }
+            }
+
+            // Ensure we have at least one evaluation
+            if (evaluations.isNotEmpty()) {
+                bestEvaluation = evaluations.maxByOrNull { it.score }!!
+                bestMoveFromPreviousIteration = bestEvaluation.move
+            }
+        }
+
+        // Update shared counters
+        sharedNodesSearched.addAndGet(localNodesSearched)
+        sharedLegalMoveTimeNs.addAndGet(localLegalMoveTimeNs)
+        sharedEvaluationTimeNs.addAndGet(localEvaluationTimeNs)
+
+        return bestEvaluation ?: MoveEvaluation(legalMoves.first(), 0, 1, position)
     }
 
     /**
@@ -138,6 +205,19 @@ class MinimaxBotService : BotService {
      * @return Best evaluation score from this position
      */
     private fun alphaBeta(position: ChessPosition, depth: Int, alpha: Int, beta: Int, initialDepth: Int): Pair<Int, ChessPosition?> {
+        // Probe Transposition Table
+        val ttResult = transpositionTable.probe(position.zobristHash, depth, alpha, beta)
+        if (ttResult != null) {
+            // TT hit with usable score
+            val (score, bestMove) = ttResult
+            val resultPosition = if (bestMove != null) {
+                position.movePiece(bestMove.from, bestMove.to, bestMove.promotion)
+            } else {
+                null
+            }
+            return score to resultPosition
+        }
+
         // IMPORTANT: Check for terminal positions (mate/stalemate) BEFORE depth check
         // This ensures mate detection even at depth=0 (critical for shallow searches)
         var legalMoves = listOf<Move>()
@@ -164,11 +244,14 @@ class MinimaxBotService : BotService {
         }
 
         // Order moves for maximum alpha-beta efficiency
-        val orderedMoves = orderMoves(position, legalMoves)
+        // Get best move from TT for move ordering
+        val ttBestMove = transpositionTable.getBestMove(position.zobristHash)
+        val orderedMoves = orderMoves(position, legalMoves, ttBestMove)
 
         var currentAlpha = alpha
         var bestScore = -1_000_000  // Use safe value instead of Int.MIN_VALUE
         var bestPosition : ChessPosition? = null
+        var bestMove: Move? = null
 
         for (move in orderedMoves) {
             val newPosition = position.movePiece(move.from, move.to, move.promotion)
@@ -181,6 +264,7 @@ class MinimaxBotService : BotService {
             if (score > bestScore) {
                 bestScore = score
                 bestPosition = positionResult
+                bestMove = move
             }
 
             // Update alpha (our best guaranteed score)
@@ -193,9 +277,21 @@ class MinimaxBotService : BotService {
             if (currentAlpha >= beta) {
                 // This is called a "beta cutoff" or "fail-high"
                 // The opponent has a better option elsewhere, so they won't let us reach this position
-                break
+
+                // Store in TT as LOWERBOUND (beta cutoff)
+                transpositionTable.store(position.zobristHash, depth, bestScore, bestMove, TTNodeType.LOWERBOUND)
+                return bestScore to bestPosition
             }
         }
+
+        // Determine node type for TT
+        val nodeType = when {
+            bestScore <= alpha -> TTNodeType.UPPERBOUND  // Failed low (alpha cutoff)
+            else -> TTNodeType.EXACT  // Exact score (PV node)
+        }
+
+        // Store in Transposition Table
+        transpositionTable.store(position.zobristHash, depth, bestScore, bestMove, nodeType)
 
         return bestScore to bestPosition
     }
@@ -212,10 +308,16 @@ class MinimaxBotService : BotService {
      *
      * @param position Current position
      * @param moves List of legal moves to order
+     * @param ttBestMove Best move from Transposition Table (highest priority)
      * @return Ordered list (best moves first)
      */
-    private fun orderMoves(position: ChessPosition, moves: List<Move>): List<Move> {
-        return moves.sortedByDescending { move ->
+    private fun orderMoves(position: ChessPosition, moves: List<Move>, ttBestMove: Move? = null): List<Move> {
+        val sorted = moves.sortedByDescending { move ->
+            // Highest priority: TT best move
+            if (ttBestMove != null && move == ttBestMove) {
+                return@sortedByDescending 1000000
+            }
+
             var score = 0
 
             // Prioritize promotions (highest priority)
@@ -257,6 +359,7 @@ class MinimaxBotService : BotService {
 
             score
         }
+        return sorted
     }
 
     /**

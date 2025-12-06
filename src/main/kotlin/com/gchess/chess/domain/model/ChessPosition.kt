@@ -72,6 +72,12 @@ data class ChessPosition(
         whitePiecesBoard or blackPiecesBoard
 
     /**
+     * Zobrist hash of this position (computed once at construction).
+     * Used for fast position lookup in Transposition Table.
+     */
+    val zobristHash: Long = ZobristHash.compute(this)
+
+    /**
      * Returns a bitboard with all white pieces
      */
     fun whitePieces(): Long = whitePiecesBoard

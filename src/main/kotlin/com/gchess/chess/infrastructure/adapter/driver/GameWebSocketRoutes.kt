@@ -151,6 +151,22 @@ fun Application.configureGameWebSocketRoutes() {
             )
             gameManager.send(playerId, stateSyncMsg)
 
+            // Check if it's a bot's turn to play (e.g., bot has white and game just started)
+            val currentPlayer = game.currentPlayer
+            val currentUser = getUserUseCase.execute(currentPlayer.userId)
+
+            if (currentUser != null && currentUser.username.startsWith("bot_")) {
+                // Launch bot move asynchronously on connection if it's the bot's turn
+                launch(Dispatchers.Default) {
+                    try {
+                        executeBotMoveUseCase.execute(game.id, currentPlayer)
+                        logger.info("Initial bot move executed for game ${game.id}")
+                    } catch (e: Exception) {
+                        logger.error("Error executing initial bot move for game ${game.id}", e)
+                    }
+                }
+            }
+
             try {
                 // Listen for incoming messages
                 for (frame in incoming) {
