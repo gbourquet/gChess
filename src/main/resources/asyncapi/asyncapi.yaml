@@ -109,6 +109,22 @@ channels:
         $ref: '#/components/messages/PlayerDisconnected'
       PlayerReconnected:
         $ref: '#/components/messages/PlayerReconnected'
+      Resign:
+        $ref: '#/components/messages/Resign'
+      GameResigned:
+        $ref: '#/components/messages/GameResigned'
+      OfferDraw:
+        $ref: '#/components/messages/OfferDraw'
+      DrawOffered:
+        $ref: '#/components/messages/DrawOffered'
+      AcceptDraw:
+        $ref: '#/components/messages/AcceptDraw'
+      DrawAccepted:
+        $ref: '#/components/messages/DrawAccepted'
+      RejectDraw:
+        $ref: '#/components/messages/RejectDraw'
+      DrawRejected:
+        $ref: '#/components/messages/DrawRejected'
       Error:
         $ref: '#/components/messages/Error'
 
@@ -138,6 +154,10 @@ channels:
         $ref: '#/components/messages/PlayerDisconnected'
       PlayerReconnected:
         $ref: '#/components/messages/PlayerReconnected'
+      GameResigned:
+        $ref: '#/components/messages/GameResigned'
+      DrawAccepted:
+        $ref: '#/components/messages/DrawAccepted'
 
 components:
   messages:
@@ -327,7 +347,7 @@ components:
           gameStatus:
             type: string
             description: Current game status
-            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW]
+            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED]
             example: 'IN_PROGRESS'
           currentSide:
             type: string
@@ -386,7 +406,7 @@ components:
           gameStatus:
             type: string
             description: Current game status
-            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW]
+            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED]
             example: 'IN_PROGRESS'
           currentSide:
             type: string
@@ -430,6 +450,137 @@ components:
           playerId:
             type: string
             description: PlayerId of the reconnected player (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    # ========== Resignation and Draw Messages ==========
+    Resign:
+      summary: Player resigns from the game
+      description: |
+        Client → Server. Player resigns, ending the game immediately.
+        The resigning player loses the game.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: Resign
+
+    GameResigned:
+      summary: A player has resigned
+      description: |
+        Server → Client. A player resigned from the game.
+        Broadcast to both players and all spectators.
+        The game ends immediately with RESIGNED status.
+      payload:
+        type: object
+        required: [type, resignedPlayerId, gameStatus]
+        properties:
+          type:
+            type: string
+            const: GameResigned
+          resignedPlayerId:
+            type: string
+            description: PlayerId of the player who resigned (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          gameStatus:
+            type: string
+            const: RESIGNED
+            description: Game status after resignation
+
+    OfferDraw:
+      summary: Offer a draw
+      description: |
+        Client → Server. Player offers a draw to their opponent.
+        Only one draw offer can be pending at a time.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: OfferDraw
+
+    DrawOffered:
+      summary: Draw offer received
+      description: |
+        Server → Client. Sent to the opponent when a draw is offered.
+        The opponent can respond with AcceptDraw or RejectDraw.
+      payload:
+        type: object
+        required: [type, offeredByPlayerId]
+        properties:
+          type:
+            type: string
+            const: DrawOffered
+          offeredByPlayerId:
+            type: string
+            description: PlayerId of the player who offered the draw (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    AcceptDraw:
+      summary: Accept a draw offer
+      description: |
+        Client → Server. Player accepts a pending draw offer.
+        The game ends immediately in a draw.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: AcceptDraw
+
+    DrawAccepted:
+      summary: Draw offer accepted
+      description: |
+        Server → Client. A draw offer has been accepted.
+        Broadcast to both players and all spectators.
+        The game ends immediately with DRAW status.
+      payload:
+        type: object
+        required: [type, acceptedByPlayerId, gameStatus]
+        properties:
+          type:
+            type: string
+            const: DrawAccepted
+          acceptedByPlayerId:
+            type: string
+            description: PlayerId of the player who accepted the draw (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          gameStatus:
+            type: string
+            const: DRAW
+            description: Game status after accepting the draw
+
+    RejectDraw:
+      summary: Reject a draw offer
+      description: |
+        Client → Server. Player rejects a pending draw offer.
+        The game continues normally.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: RejectDraw
+
+    DrawRejected:
+      summary: Draw offer rejected
+      description: |
+        Server → Client. Sent to the player who offered the draw.
+        The draw offer has been rejected and the game continues.
+      payload:
+        type: object
+        required: [type, rejectedByPlayerId]
+        properties:
+          type:
+            type: string
+            const: DrawRejected
+          rejectedByPlayerId:
+            type: string
+            description: PlayerId of the player who rejected the draw (ULID)
             example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
 
     # ========== Common Messages ==========

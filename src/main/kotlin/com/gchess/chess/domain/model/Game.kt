@@ -45,7 +45,8 @@ data class Game(
     val board: ChessPosition = ChessPosition.initial(),
     val currentSide: PlayerSide = PlayerSide.WHITE,
     val status: GameStatus = GameStatus.IN_PROGRESS,
-    val moveHistory: List<Move> = emptyList()
+    val moveHistory: List<Move> = emptyList(),
+    val drawOfferedBy: PlayerSide? = null
 ) {
     init {
         require(whitePlayer.side == PlayerSide.WHITE) {
@@ -98,11 +99,12 @@ data class Game(
     /**
      * Checks if the game is finished.
      *
-     * @return true if the game status is CHECKMATE, STALEMATE, or DRAW
+     * @return true if the game status is CHECKMATE, STALEMATE, DRAW, or RESIGNED
      */
     fun isFinished(): Boolean = status in listOf(
         GameStatus.CHECKMATE,
         GameStatus.STALEMATE,
-        GameStatus.DRAW
+        GameStatus.DRAW,
+        GameStatus.RESIGNED
     )
 }

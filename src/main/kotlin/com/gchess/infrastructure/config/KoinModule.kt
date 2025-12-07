@@ -26,6 +26,10 @@ import com.gchess.bot.domain.service.MinimaxBotService
 import com.gchess.chess.application.usecase.CreateGameUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
+import com.gchess.chess.application.usecase.ResignGameUseCase
+import com.gchess.chess.application.usecase.OfferDrawUseCase
+import com.gchess.chess.application.usecase.AcceptDrawUseCase
+import com.gchess.chess.application.usecase.RejectDrawUseCase
 import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.service.ChessRules
@@ -86,7 +90,11 @@ val appModule = module {
     // Note: CreateGameUseCase is only called from Matchmaking context (via ACL)
     single { CreateGameUseCase(get()) }
     single { GetGameUseCase(get()) }
-    single { MakeMoveUseCase(get(), get(), get()) }  // Added gameEventNotifier
+    single { MakeMoveUseCase(get(), get(), get()) }  // gameRepository, chessRules, gameEventNotifier
+    single { ResignGameUseCase(get(), get()) }  // gameRepository, gameEventNotifier
+    single { OfferDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
+    single { AcceptDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
+    single { RejectDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
 
     // ========== User Context ==========
 

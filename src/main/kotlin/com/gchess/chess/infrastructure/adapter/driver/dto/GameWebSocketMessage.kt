@@ -159,3 +159,95 @@ data class GameAuthFailedMessage(
     override val type: String = "AuthFailed",
     val reason: String
 ) : GameWebSocketMessage()
+
+// ========== Resign and Draw Messages ==========
+
+/**
+ * Client → Server: Player resigns from the game
+ */
+@Serializable
+@SerialName("Resign")
+data class ResignMessage(
+    @SerialName("myType")
+    override val type: String = "Resign"
+) : GameWebSocketMessage()
+
+/**
+ * Server → Client: A player has resigned
+ * Broadcast to both players and spectators
+ */
+@Serializable
+@SerialName("GameResigned")
+data class GameResignedMessage(
+    @SerialName("myType")
+    override val type: String = "GameResigned",
+    val resignedPlayerId: String,
+    val gameStatus: String
+) : GameWebSocketMessage()
+
+/**
+ * Client → Server: Player offers a draw
+ */
+@Serializable
+@SerialName("OfferDraw")
+data class OfferDrawMessage(
+    @SerialName("myType")
+    override val type: String = "OfferDraw"
+) : GameWebSocketMessage()
+
+/**
+ * Server → Client: A draw has been offered
+ * Sent to the opponent
+ */
+@Serializable
+@SerialName("DrawOffered")
+data class DrawOfferedMessage(
+    @SerialName("myType")
+    override val type: String = "DrawOffered",
+    val offeredByPlayerId: String
+) : GameWebSocketMessage()
+
+/**
+ * Client → Server: Player accepts a draw offer
+ */
+@Serializable
+@SerialName("AcceptDraw")
+data class AcceptDrawMessage(
+    @SerialName("myType")
+    override val type: String = "AcceptDraw"
+) : GameWebSocketMessage()
+
+/**
+ * Server → Client: A draw offer has been accepted
+ * Broadcast to both players and spectators
+ */
+@Serializable
+@SerialName("DrawAccepted")
+data class DrawAcceptedMessage(
+    @SerialName("myType")
+    override val type: String = "DrawAccepted",
+    val acceptedByPlayerId: String,
+    val gameStatus: String
+) : GameWebSocketMessage()
+
+/**
+ * Client → Server: Player rejects a draw offer
+ */
+@Serializable
+@SerialName("RejectDraw")
+data class RejectDrawMessage(
+    @SerialName("myType")
+    override val type: String = "RejectDraw"
+) : GameWebSocketMessage()
+
+/**
+ * Server → Client: A draw offer has been rejected
+ * Sent to the player who offered the draw
+ */
+@Serializable
+@SerialName("DrawRejected")
+data class DrawRejectedMessage(
+    @SerialName("myType")
+    override val type: String = "DrawRejected",
+    val rejectedByPlayerId: String
+) : GameWebSocketMessage()

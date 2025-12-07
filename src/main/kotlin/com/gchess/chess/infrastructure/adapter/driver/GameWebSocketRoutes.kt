@@ -24,6 +24,10 @@ package com.gchess.chess.infrastructure.adapter.driver
 import com.gchess.bot.application.usecase.ExecuteBotMoveUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
+import com.gchess.chess.application.usecase.ResignGameUseCase
+import com.gchess.chess.application.usecase.OfferDrawUseCase
+import com.gchess.chess.application.usecase.AcceptDrawUseCase
+import com.gchess.chess.application.usecase.RejectDrawUseCase
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.model.Position
 import com.gchess.chess.infrastructure.adapter.driver.dto.GameAuthFailedMessage
@@ -34,6 +38,10 @@ import com.gchess.chess.infrastructure.adapter.driver.dto.GameWebSocketMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveAttemptMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveDto
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveRejectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.ResignMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.OfferDrawMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.AcceptDrawMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.RejectDrawMessage
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.infrastructure.websocket.WebSocketJwtAuth
 import com.gchess.user.application.usecase.GetUserUseCase
@@ -66,6 +74,10 @@ fun Application.configureGameWebSocketRoutes() {
     // Inject use cases
     val getGameUseCase by inject<GetGameUseCase>()
     val makeMoveUseCase by inject<MakeMoveUseCase>()
+    val resignGameUseCase by inject<ResignGameUseCase>()
+    val offerDrawUseCase by inject<OfferDrawUseCase>()
+    val acceptDrawUseCase by inject<AcceptDrawUseCase>()
+    val rejectDrawUseCase by inject<RejectDrawUseCase>()
     val getUserUseCase by inject<GetUserUseCase>()
     val executeBotMoveUseCase by inject<ExecuteBotMoveUseCase>()
 
@@ -220,6 +232,74 @@ fun Application.configureGameWebSocketRoutes() {
                                                 }
                                             }
                                         }
+                                    }
+                                }
+
+                                is ResignMessage -> {
+                                    logger.info("Player $playerId resigning from game $gameId")
+                                    val result = resignGameUseCase.execute(gameId, player)
+
+                                    if (result.isFailure) {
+                                        val error = result.exceptionOrNull()!!
+                                        val errorMsg = GameErrorMessage(
+                                            code = "RESIGN_FAILED",
+                                            message = error.message ?: "Failed to resign"
+                                        )
+                                        gameManager.send(playerId, errorMsg)
+                                        logger.warn("Resignation failed for player $playerId: ${error.message}")
+                                    } else {
+                                        logger.info("Player $playerId successfully resigned from game $gameId")
+                                    }
+                                }
+
+                                is OfferDrawMessage -> {
+                                    logger.info("Player $playerId offering draw in game $gameId")
+                                    val result = offerDrawUseCase.execute(gameId, player)
+
+                                    if (result.isFailure) {
+                                        val error = result.exceptionOrNull()!!
+                                        val errorMsg = GameErrorMessage(
+                                            code = "OFFER_DRAW_FAILED",
+                                            message = error.message ?: "Failed to offer draw"
+                                        )
+                                        gameManager.send(playerId, errorMsg)
+                                        logger.warn("Draw offer failed for player $playerId: ${error.message}")
+                                    } else {
+                                        logger.info("Player $playerId successfully offered draw in game $gameId")
+                                    }
+                                }
+
+                                is AcceptDrawMessage -> {
+                                    logger.info("Player $playerId accepting draw in game $gameId")
+                                    val result = acceptDrawUseCase.execute(gameId, player)
+
+                                    if (result.isFailure) {
+                                        val error = result.exceptionOrNull()!!
+                                        val errorMsg = GameErrorMessage(
+                                            code = "ACCEPT_DRAW_FAILED",
+                                            message = error.message ?: "Failed to accept draw"
+                                        )
+                                        gameManager.send(playerId, errorMsg)
+                                        logger.warn("Draw acceptance failed for player $playerId: ${error.message}")
+                                    } else {
+                                        logger.info("Player $playerId successfully accepted draw in game $gameId")
+                                    }
+                                }
+
+                                is RejectDrawMessage -> {
+                                    logger.info("Player $playerId rejecting draw in game $gameId")
+                                    val result = rejectDrawUseCase.execute(gameId, player)
+
+                                    if (result.isFailure) {
+                                        val error = result.exceptionOrNull()!!
+                                        val errorMsg = GameErrorMessage(
+                                            code = "REJECT_DRAW_FAILED",
+                                            message = error.message ?: "Failed to reject draw"
+                                        )
+                                        gameManager.send(playerId, errorMsg)
+                                        logger.warn("Draw rejection failed for player $playerId: ${error.message}")
+                                    } else {
+                                        logger.info("Player $playerId successfully rejected draw in game $gameId")
                                     }
                                 }
 

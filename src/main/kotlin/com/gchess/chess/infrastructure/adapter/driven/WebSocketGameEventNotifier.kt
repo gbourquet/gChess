@@ -30,8 +30,13 @@ import com.gchess.chess.infrastructure.adapter.driver.dto.MoveExecutedMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveRejectedMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.PlayerDisconnectedMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.PlayerReconnectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.GameResignedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.DrawOfferedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.DrawAcceptedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.DrawRejectedMessage
 import com.gchess.chess.infrastructure.adapter.driver.GameConnectionManager
 import com.gchess.chess.infrastructure.adapter.driver.SpectatorConnectionManager
+import com.gchess.shared.domain.model.Player
 import com.gchess.shared.domain.model.PlayerId
 import org.slf4j.LoggerFactory
 
@@ -107,7 +112,8 @@ class WebSocketGameEventNotifier(
     private fun isGameFinished(status: GameStatus): Boolean {
         return status == GameStatus.CHECKMATE ||
                 status == GameStatus.STALEMATE ||
-                status == GameStatus.DRAW
+                status == GameStatus.DRAW ||
+                status == GameStatus.RESIGNED
     }
 
     override suspend fun notifyMoveRejected(playerId: PlayerId, reason: String) {
@@ -170,6 +176,108 @@ class WebSocketGameEventNotifier(
             )
         } catch (e: Exception) {
             logger.error("Error sending player reconnected notification for game ${game.id}", e)
+        }
+    }
+
+    override suspend fun notifyGameResigned(game: Game, player: Player) {
+        try {
+            val message = GameResignedMessage(
+                resignedPlayerId = player.id.toString(),
+                gameStatus = game.status.toString()
+            )
+
+            // Broadcast to both players
+            val (whiteSent, blackSent) = gameConnectionManager.broadcastToGame(game, message)
+
+            // Broadcast to all spectators
+            val spectatorCount = spectatorConnectionManager.broadcastToSpectators(game.id, message)
+
+            logger.info(
+                "Game resigned notification sent for game ${game.id}: " +
+                        "white=$whiteSent, black=$blackSent, spectators=$spectatorCount"
+            )
+
+            // Close WebSocket connections after resignation
+            logger.info("Game ${game.id} finished by resignation, closing WebSocket connections")
+            kotlinx.coroutines.delay(1000)
+
+            val (whiteClosed, blackClosed) = gameConnectionManager.closeGameConnections(game)
+            val spectatorsClosed = spectatorConnectionManager.closeGameSpectators(game.id)
+
+            logger.info(
+                "Closed WebSocket connections for resigned game ${game.id}: " +
+                        "white=$whiteClosed, black=$blackClosed, spectators=$spectatorsClosed"
+            )
+        } catch (e: Exception) {
+            logger.error("Error sending game resigned notification for game ${game.id}", e)
+        }
+    }
+
+    override suspend fun notifyDrawOffered(game: Game, player: Player) {
+        try {
+            val message = DrawOfferedMessage(offeredByPlayerId = player.id.toString())
+
+            // Send to the opponent
+            val opponent = game.getOpponent(player)
+            val sent = gameConnectionManager.send(opponent.id, message)
+
+            logger.info(
+                "Draw offer notification sent for game ${game.id}: " +
+                        "offered by ${player.id}, sent to opponent=$sent"
+            )
+        } catch (e: Exception) {
+            logger.error("Error sending draw offered notification for game ${game.id}", e)
+        }
+    }
+
+    override suspend fun notifyDrawAccepted(game: Game, player: Player) {
+        try {
+            val message = DrawAcceptedMessage(
+                acceptedByPlayerId = player.id.toString(),
+                gameStatus = game.status.toString()
+            )
+
+            // Broadcast to both players
+            val (whiteSent, blackSent) = gameConnectionManager.broadcastToGame(game, message)
+
+            // Broadcast to all spectators
+            val spectatorCount = spectatorConnectionManager.broadcastToSpectators(game.id, message)
+
+            logger.info(
+                "Draw accepted notification sent for game ${game.id}: " +
+                        "white=$whiteSent, black=$blackSent, spectators=$spectatorCount"
+            )
+
+            // Close WebSocket connections after draw
+            logger.info("Game ${game.id} finished by draw, closing WebSocket connections")
+            kotlinx.coroutines.delay(1000)
+
+            val (whiteClosed, blackClosed) = gameConnectionManager.closeGameConnections(game)
+            val spectatorsClosed = spectatorConnectionManager.closeGameSpectators(game.id)
+
+            logger.info(
+                "Closed WebSocket connections for drawn game ${game.id}: " +
+                        "white=$whiteClosed, black=$blackClosed, spectators=$spectatorsClosed"
+            )
+        } catch (e: Exception) {
+            logger.error("Error sending draw accepted notification for game ${game.id}", e)
+        }
+    }
+
+    override suspend fun notifyDrawRejected(game: Game, player: Player) {
+        try {
+            val message = DrawRejectedMessage(rejectedByPlayerId = player.id.toString())
+
+            // Send to the player who offered the draw
+            val opponent = game.getOpponent(player)
+            val sent = gameConnectionManager.send(opponent.id, message)
+
+            logger.info(
+                "Draw rejected notification sent for game ${game.id}: " +
+                        "rejected by ${player.id}, sent to opponent=$sent"
+            )
+        } catch (e: Exception) {
+            logger.error("Error sending draw rejected notification for game ${game.id}", e)
         }
     }
 }

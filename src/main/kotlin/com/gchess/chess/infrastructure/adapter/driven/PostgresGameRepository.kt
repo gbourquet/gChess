@@ -67,6 +67,7 @@ class PostgresGameRepository(
                 .set(GAMES.BOARD_FEN, game.board.toFen())
                 .set(GAMES.CURRENT_SIDE, game.currentSide.name)
                 .set(GAMES.STATUS, game.status.name)
+                .set(GAMES.DRAW_OFFERED_BY, game.drawOfferedBy?.name)
                 .set(GAMES.CREATED_AT, now)
                 .set(GAMES.UPDATED_AT, now)
                 .onConflict(GAMES.ID)
@@ -74,6 +75,7 @@ class PostgresGameRepository(
                 .set(GAMES.BOARD_FEN, game.board.toFen())
                 .set(GAMES.CURRENT_SIDE, game.currentSide.name)
                 .set(GAMES.STATUS, game.status.name)
+                .set(GAMES.DRAW_OFFERED_BY, game.drawOfferedBy?.name)
                 .set(GAMES.UPDATED_AT, now)
                 .execute()
 
@@ -108,7 +110,8 @@ class PostgresGameRepository(
                 GAMES.BLACK_USER_ID,
                 GAMES.BOARD_FEN,
                 GAMES.CURRENT_SIDE,
-                GAMES.STATUS
+                GAMES.STATUS,
+                GAMES.DRAW_OFFERED_BY
             )
             .from(GAMES)
             .where(GAMES.ID.eq(id.value))
@@ -145,7 +148,8 @@ class PostgresGameRepository(
             board = gameRecord.value6()!!.toChessPosition(),
             currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
             status = GameStatus.valueOf(gameRecord.value8()!!),
-            moveHistory = moves
+            moveHistory = moves,
+            drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) }
         )
     }
 
@@ -166,7 +170,8 @@ class PostgresGameRepository(
                 GAMES.BLACK_USER_ID,
                 GAMES.BOARD_FEN,
                 GAMES.CURRENT_SIDE,
-                GAMES.STATUS
+                GAMES.STATUS,
+                GAMES.DRAW_OFFERED_BY
             )
             .from(GAMES)
             .fetch()
@@ -204,7 +209,8 @@ class PostgresGameRepository(
                 board = gameRecord.value6()!!.toChessPosition(),
                 currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
                 status = GameStatus.valueOf(gameRecord.value8()!!),
-                moveHistory = moves
+                moveHistory = moves,
+                drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) }
             )
         }
     }

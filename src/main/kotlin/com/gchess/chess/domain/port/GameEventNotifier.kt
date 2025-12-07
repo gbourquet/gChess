@@ -23,6 +23,7 @@ package com.gchess.chess.domain.port
 
 import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.model.Move
+import com.gchess.shared.domain.model.Player
 import com.gchess.shared.domain.model.PlayerId
 
 /**
@@ -72,4 +73,40 @@ interface GameEventNotifier {
      * @param playerId The player who reconnected
      */
     suspend fun notifyPlayerReconnected(game: Game, playerId: PlayerId)
+
+    /**
+     * Notify that a player has resigned from the game.
+     * This should be broadcast to both players and all spectators.
+     *
+     * @param game The game state after resignation
+     * @param player The player who resigned
+     */
+    suspend fun notifyGameResigned(game: Game, player: Player)
+
+    /**
+     * Notify that a player has offered a draw.
+     * This should be sent to the opponent.
+     *
+     * @param game The current game state
+     * @param player The player offering the draw
+     */
+    suspend fun notifyDrawOffered(game: Game, player: Player)
+
+    /**
+     * Notify that a draw offer has been accepted.
+     * This should be broadcast to both players and all spectators.
+     *
+     * @param game The game state after accepting the draw
+     * @param player The player who accepted the draw
+     */
+    suspend fun notifyDrawAccepted(game: Game, player: Player)
+
+    /**
+     * Notify that a draw offer has been rejected.
+     * This should be sent to the player who offered the draw.
+     *
+     * @param game The current game state
+     * @param player The player who rejected the draw
+     */
+    suspend fun notifyDrawRejected(game: Game, player: Player)
 }

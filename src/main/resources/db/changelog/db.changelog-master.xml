@@ -15,4 +15,7 @@
     <!-- Bot context: default bots seed data -->
     <include file="db/changelog/changes/20251128-insert-default-bots.xml"/>
 
+    <!-- Chess context: add draw offer column -->
+    <include file="db/changelog/changes/20251207-add-draw-offer-column.xml"/>
+
 </databaseChangeLog>

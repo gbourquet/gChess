@@ -39,8 +39,12 @@
 - **Move validation** with complete chess rules
 - **Game state persistence** with FEN notation
 - **Move history tracking** with algebraic notation
+- **Game resignation** - players can resign at any time
+- **Draw offers** - propose, accept, or reject draw offers
 - **Spectator mode** (read-only WebSocket connections)
 - **Multi-device support** (play multiple games simultaneously)
+- **Bot opponents** - play against AI with 4 difficulty levels (Beginner, Intermediate, Advanced, Master)
+- **Minimax chess engine** with Lazy SMP parallelization and transposition tables
 
 ### 🎲 Matchmaking System
 - **Real-time FIFO matchmaking queue**
@@ -218,14 +222,23 @@ The project includes automated architecture validation:
 
 ## 📡 API Reference
 
-### REST API (Synchronous - Authentication Only)
+### REST API (Synchronous)
 
-gChess uses a **hybrid architecture**: REST for authentication, WebSocket for all real-time operations (matchmaking, gameplay).
+gChess uses a **hybrid architecture**: REST for authentication and bot information, WebSocket for all real-time operations (matchmaking, gameplay).
+
+#### Authentication Endpoints
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/auth/register` | POST | ❌ | Register new user |
 | `/api/auth/login` | POST | ❌ | Login and get JWT token |
+
+#### Bot Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/bots` | GET | ❌ | List all available bot opponents |
+| `/api/bots/{id}` | GET | ❌ | Get specific bot details by ID |
 
 **Example: Register**
 ```bash
@@ -267,6 +280,43 @@ Content-Type: application/json
 }
 ```
 
+**Example: List Bots**
+```bash
+GET /api/bots
+
+# Response: 200 OK
+[
+  {
+    "id": "01HQZN4A5B6C7D8E9F0G1H2J3K",
+    "name": "Beginner Bot",
+    "difficulty": "BEGINNER",
+    "description": "Perfect for learning. Search depth: 2 plies",
+    "engineType": "MINIMAX"
+  },
+  {
+    "id": "01HQZN4B6C7D8E9F0G1H2J3K4L",
+    "name": "Advanced Bot",
+    "difficulty": "ADVANCED",
+    "description": "Challenging opponent. Search depth: 5 plies",
+    "engineType": "MINIMAX"
+  }
+]
+```
+
+**Example: Get Bot by ID**
+```bash
+GET /api/bots/01HQZN4A5B6C7D8E9F0G1H2J3K
+
+# Response: 200 OK
+{
+  "id": "01HQZN4A5B6C7D8E9F0G1H2J3K",
+  "name": "Beginner Bot",
+  "difficulty": "BEGINNER",
+  "description": "Perfect for learning. Search depth: 2 plies",
+  "engineType": "MINIMAX"
+}
+```
+
 **Important**: After authentication, all game operations (matchmaking, moves, spectating) are done via WebSocket (see below).
 
 ---
@@ -285,11 +335,28 @@ ws://localhost:8080/ws/<endpoint>?token=<JWT_TOKEN>
 **Purpose**: Join matchmaking queue and receive instant match notifications
 
 **Client → Server Messages**:
+
+1. **Join Queue (Human vs Human)**
 ```json
 {
   "type": "JoinQueue"
 }
 ```
+
+2. **Join Queue (Play vs Bot)**
+```json
+{
+  "type": "JoinQueue",
+  "bot": true,
+  "botId": "01HQZN4A5B6C7D8E9F0G1H2J3K",
+  "playerColor": "WHITE"
+}
+```
+
+**Parameters:**
+- `bot` (boolean): If `true`, match with a bot instead of a human (default: `false`)
+- `botId` (string, optional): Specific bot ID to play against (default: random bot)
+- `playerColor` (string, optional): Preferred color - `"WHITE"` or `"BLACK"` (default: random)
 
 **Server → Client Messages**:
 
@@ -420,6 +487,68 @@ For pawn promotion:
   "type": "PlayerReconnected",
   "playerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
   "side": "BLACK"
+}
+```
+
+6. **Resign** (client → server)
+```json
+{
+  "type": "Resign"
+}
+```
+
+7. **Game Resigned** (server → both players)
+```json
+{
+  "type": "GameResigned",
+  "resignedPlayerId": "01HQZN3B5C6D7E8F9G0H1J2K3L",
+  "gameStatus": "RESIGNED"
+}
+```
+
+8. **Offer Draw** (client → server)
+```json
+{
+  "type": "OfferDraw"
+}
+```
+
+9. **Draw Offered** (server → opponent)
+```json
+{
+  "type": "DrawOffered",
+  "offeredByPlayerId": "01HQZN3B5C6D7E8F9G0H1J2K3L"
+}
+```
+
+10. **Accept Draw** (client → server)
+```json
+{
+  "type": "AcceptDraw"
+}
+```
+
+11. **Draw Accepted** (server → both players)
+```json
+{
+  "type": "DrawAccepted",
+  "acceptedByPlayerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
+  "gameStatus": "DRAW"
+}
+```
+
+12. **Reject Draw** (client → server)
+```json
+{
+  "type": "RejectDraw"
+}
+```
+
+13. **Draw Rejected** (server → player who offered)
+```json
+{
+  "type": "DrawRejected",
+  "rejectedByPlayerId": "01HQZN3C6D7E8F9G0H1J2K3L4M"
 }
 ```
 
@@ -754,7 +883,6 @@ The project has **100+ tests** organized into three categories:
 - ❌ No JWT refresh mechanism (tokens expire after 24 hours)
 - ❌ Matchmaking queue is in-memory (lost on restart; games persist)
 - ❌ No ELO/rating system (simple FIFO matchmaking)
-- ❌ No mutual draw agreement endpoint
 - ❌ No game clocks/time controls
 - ❌ No manual reconnection recovery (must reconnect manually)
 - ❌ No rate limiting on API endpoints
@@ -767,14 +895,13 @@ The project has **100+ tests** organized into three categories:
 - [ ] JWT refresh tokens
 - [ ] Persistent matchmaking queue (database-backed)
 - [ ] ELO rating system
-- [ ] Draw by mutual agreement
 - [ ] Game clocks with time controls
 - [ ] Move history with algebraic notation (e.g., "Nf3", "O-O")
 - [ ] Game replay and analysis
-- [ ] Opening book integration
+- [ ] Opening book integration for bot
 - [ ] Rate limiting and throttling
 - [ ] Mobile app (Kotlin Multiplatform)
-- [ ] AI opponent (chess engine integration)
+- [ ] Stronger bot engines (neural network-based)
 
 ---
 
