@@ -155,6 +155,11 @@ val appModule = module {
     single { LeaveMatchmakingUseCase(get()) }
     single { JoinMatchmakingUseCase(get(), get(), get(), get(), get()) }  // queue, gameCreator, userChecker, botSelector, notifier
 
+    // ========== Infrastructure: Health Checks ==========
+
+    // Health check service for monitoring application health
+    single { com.gchess.infrastructure.health.HealthCheckService(get(), get()) }  // dslContext, matchmakingQueue
+
     // ========== Infrastructure: WebSocket Connection Managers ==========
 
     // Connection managers for WebSocket real-time communication

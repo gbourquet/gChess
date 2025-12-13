@@ -25,8 +25,27 @@ bin/
 # Logs
 *.log
 
-# Environment
+# Environment files (secrets)
 .env
+.env.*
+!.env.*.example
+
+# Generated secrets (for deployment)
+jwt_secret.txt
+db_password.txt
+*_secret.txt
+*_password.txt
+
+# Deployment packages
+deploy-package.tar.gz
+
+# SSL/TLS certificates
+docker/ssl/*.pem
+docker/ssl/*.key
+docker/ssl/*.crt
+*.pem
+*.key
+*.crt
 
 # Auto-generated OpenAPI configuration
 src/main/kotlin/com/gchess/infrastructure/config/OpenApiConfig.kt
