@@ -1,0 +1,367 @@
+# ============================================================
+# CD Pipeline - Deploy to Production
+# ============================================================
+#
+# Workflow:
+#   1. Pre-deployment validation
+#   2. SSH to production server
+#   3. Pull Docker image from GHCR
+#   4. Run database migrations
+#   5. Deploy with zero-downtime
+#   6. Health checks validation
+#   7. Rollback on failure
+#
+# Environment: https://gchess.sur-le-web.fr
+#
+# Triggers:
+#   - Git tags matching v*.*.* (e.g., v1.0.0)
+#   - Manual workflow dispatch
+#
+# Required Secrets:
+#   - PROD_SSH_HOST: Production server hostname/IP
+#   - PROD_SSH_USER: SSH username
+#   - PROD_SSH_KEY: SSH private key
+#   - PROD_ENV_FILE: .env.prod content (base64 encoded)
+#
+# ============================================================
+
+name: CD - Deploy Production
+
+on:
+  # Deploy on version tags (e.g., v1.0.0, v1.2.3)
+  push:
+    tags:
+      - 'v*.*.*'
+
+  # Manual deployment with version input
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v1.0.0 or sha-abc123)'
+        required: true
+        type: string
+
+# Only allow one production deployment at a time
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PROD_URL: https://gchess.sur-le-web.fr
+
+jobs:
+  # ============================================================
+  # Job 1: Pre-deployment Validation
+  # ============================================================
+  validate:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate version tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+
+          echo "Deploying version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Validate semantic versioning format (if tag)
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "✅ Valid semantic version: $VERSION"
+          elif [[ "$VERSION" =~ ^sha- ]]; then
+            echo "✅ Valid commit SHA: $VERSION"
+          else
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected: v*.*.* or sha-*"
+            exit 1
+          fi
+
+      - name: Check Docker image exists
+        run: |
+          echo "Checking if Docker image exists in GHCR..."
+
+          # Login to GHCR
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # Try to pull the image
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+
+          if docker pull "$IMAGE_TAG"; then
+            echo "✅ Docker image found: $IMAGE_TAG"
+          else
+            echo "❌ Docker image not found: $IMAGE_TAG"
+            echo "Please build and push the image first using CI workflow"
+            exit 1
+          fi
+
+  # ============================================================
+  # Job 2: Deploy to Production
+  # ============================================================
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: production
+      url: ${{ env.PROD_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.PROD_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Prepare deployment files
+        run: |
+          # Decode and save .env.prod
+          echo "${{ secrets.PROD_ENV_FILE }}" | base64 -d > .env.prod
+
+          # Package deployment files
+          tar czf deploy-package.tar.gz \
+            docker-compose.prod.yml \
+            nginx/nginx-prod.conf \
+            scripts/deploy.sh \
+            scripts/rollback.sh \
+            scripts/health-check.sh \
+            .env.prod
+
+      - name: Upload deployment package
+        run: |
+          scp -i ~/.ssh/id_rsa deploy-package.tar.gz \
+            ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:/tmp/
+
+      - name: Extract package on server
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/gchess
+            tar xzf /tmp/deploy-package.tar.gz
+            rm /tmp/deploy-package.tar.gz
+            chmod +x scripts/*.sh
+            echo "✅ Deployment package extracted"
+          EOF
+
+      - name: Pull Docker image
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} << EOF
+            set -e
+            echo "Pulling Docker image..."
+
+            # Login to GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull new image
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+
+            # Tag as prod
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} gchess:prod
+
+            echo "✅ Docker image pulled and tagged"
+          EOF
+
+      - name: Run database migrations
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/gchess
+
+            echo "Running database migrations..."
+
+            # Migrations are run automatically by the application on startup
+            # But we can add a manual migration step here if needed
+
+            echo "✅ Migrations ready"
+          EOF
+
+      - name: Deploy application
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/gchess
+
+            echo "Deploying application..."
+
+            # Use the deploy script
+            ./scripts/deploy.sh prod
+
+            echo "✅ Application deployed"
+          EOF
+
+      - name: Wait for application startup
+        run: |
+          echo "Waiting 60 seconds for application to start..."
+          sleep 60
+
+  # ============================================================
+  # Job 3: Health Checks
+  # ============================================================
+  health-check:
+    name: Production Health Checks
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Wait for service to be ready
+        run: |
+          echo "Checking if service is ready..."
+          MAX_RETRIES=30
+          RETRY_DELAY=5
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES..."
+
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.PROD_URL }}/health" || echo "000")
+
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Service is ready (HTTP $HTTP_STATUS)"
+              exit 0
+            fi
+
+            if [ $i -eq $MAX_RETRIES ]; then
+              echo "❌ Service not ready after $((MAX_RETRIES * RETRY_DELAY)) seconds"
+              exit 1
+            fi
+
+            sleep $RETRY_DELAY
+          done
+
+      - name: Comprehensive health checks
+        run: |
+          echo "Running comprehensive health checks..."
+
+          # Basic health
+          HEALTH=$(curl -s "${{ env.PROD_URL }}/health")
+          echo "Health: $HEALTH"
+
+          STATUS=$(echo "$HEALTH" | jq -r '.status')
+          if [ "$STATUS" != "UP" ]; then
+            echo "❌ Health check failed"
+            exit 1
+          fi
+
+          # Actuator health
+          ACTUATOR=$(curl -s "${{ env.PROD_URL }}/actuator/health")
+          echo "Actuator Health: $ACTUATOR"
+
+          ACTUATOR_STATUS=$(echo "$ACTUATOR" | jq -r '.status')
+          DB_STATUS=$(echo "$ACTUATOR" | jq -r '.checks.database.status')
+
+          if [ "$ACTUATOR_STATUS" != "UP" ]; then
+            echo "❌ Actuator health check failed"
+            exit 1
+          fi
+
+          if [ "$DB_STATUS" != "UP" ]; then
+            echo "❌ Database health check failed"
+            exit 1
+          fi
+
+          echo "✅ All health checks passed"
+
+  # ============================================================
+  # Job 4: Rollback on Failure
+  # ============================================================
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, health-check]
+    if: failure()
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.PROD_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Execute rollback
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/gchess
+
+            echo "⚠️  Deployment failed - executing rollback..."
+
+            # Use the rollback script
+            ./scripts/rollback.sh prod
+
+            echo "✅ Rollback completed"
+          EOF
+
+      - name: Verify rollback
+        run: |
+          echo "Verifying rollback..."
+          sleep 30
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.PROD_URL }}/health")
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Rollback successful - service is healthy"
+          else
+            echo "❌ Rollback verification failed"
+            exit 1
+          fi
+
+  # ============================================================
+  # Job 5: Summary
+  # ============================================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [validate, deploy, health-check]
+    if: always()
+
+    steps:
+      - name: Generate deployment summary
+        run: |
+          echo "## 🚀 Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: Production" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: ${{ env.PROD_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: \`${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.validate.result }}" == "success" ]; then
+            echo "✅ Validation: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Validation: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Deployment: **SUCCESS**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Deployment: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.health-check.result }}" == "success" ]; then
+            echo "✅ Health Checks: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Health Checks: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Application](${{ env.PROD_URL }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Health Check](${{ env.PROD_URL }}/health)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Actuator Health](${{ env.PROD_URL }}/actuator/health)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Production deployment failed! Emergency rollback may have been triggered."
