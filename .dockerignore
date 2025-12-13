@@ -1,0 +1,83 @@
+# Dockerignore file for gChess
+# Excludes unnecessary files from Docker build context to speed up builds
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.idea
+.vscode
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build output - KEEP JAR but exclude Gradle cache
+# The JAR must be pre-compiled with ./gradlew build before docker build
+build/classes/
+build/generated/
+build/generated-src/
+build/jooq-config/
+build/kotlin/
+build/resources/
+build/tmp/
+!build/libs/*.jar
+.gradle/
+.kotlin/
+out/
+
+# Test output
+*.log
+*.class
+
+# Environment files (secrets should not be in image)
+.env
+.env.*
+!.env.*.example
+
+# Docker files
+docker/
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Documentation
+README.md
+CLAUDE.md
+CONTEXT_MAP.md
+deployment_plan.md
+*.md
+docs/
+
+# Scripts (not needed in runtime)
+scripts/
+
+# CI/CD
+.github/
+
+# nginx configuration (handled separately)
+nginx/
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database files (managed externally)
+*.db
+*.sql
+data/
+
+# Test resources
+src/integrationTest/
+src/unitTest/
+src/architectureTest/
+src/docGen/

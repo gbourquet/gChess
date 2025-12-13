@@ -23,9 +23,11 @@ package com.gchess
 
 import com.gchess.bot.infrastructure.adapter.driver.configureBotRoutes
 import com.gchess.chess.infrastructure.adapter.driver.configureGameWebSocketRoutes
+import com.gchess.infrastructure.config.EnvironmentConfig
 import com.gchess.infrastructure.config.JwtConfig
 import com.gchess.infrastructure.config.OpenApiConfig
 import com.gchess.infrastructure.config.appModule
+import com.gchess.infrastructure.health.configureHealthRoutes
 import com.gchess.matchmaking.infrastructure.adapter.driver.configureMatchmakingWebSocketRoutes
 import com.gchess.user.infrastructure.adapter.driver.configureAuthRoutes
 import io.bkbn.kompendium.core.plugin.NotarizedApplication
@@ -52,7 +54,12 @@ import java.net.URI
 import kotlin.time.Duration.Companion.seconds
 
 fun main() {
-    embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
+    val port = EnvironmentConfig.port
+    val environment = EnvironmentConfig.environment
+
+    println("🚀 Starting gChess backend on port $port (environment: $environment)")
+
+    embeddedServer(Netty, port = port, host = "0.0.0.0") {
         module()
     }.start(wait = true)
 }
@@ -73,17 +80,13 @@ fun Application.module() {
         })
     }
 
-    // CORS configuration for frontend development
+    // CORS configuration (environment-aware)
     install(CORS) {
-        // Allow localhost origins on common development ports
-        allowHost("localhost:3000")
-        allowHost("localhost:4200")  // Angular default
-        allowHost("localhost:5173")  // Vite default
-        allowHost("localhost:8080")  // Same origin
-        allowHost("127.0.0.1:3000")
-        allowHost("127.0.0.1:4200")
-        allowHost("127.0.0.1:5173")
-        allowHost("127.0.0.1:8080")
+        // Allow origins based on environment configuration
+        EnvironmentConfig.corsOrigins.forEach { origin ->
+            val uri = URI(origin)
+            allowHost(uri.host + (if (uri.port > 0) ":${uri.port}" else ""), schemes = listOf(uri.scheme))
+        }
 
         // Allow common HTTP methods
         allowMethod(HttpMethod.Get)
@@ -158,6 +161,7 @@ fun Application.module() {
     }
 
     // Configure routes
+    configureHealthRoutes()     // Health check endpoints for monitoring and orchestration
     configureAuthRoutes()       // User context auth routes (register, login) - public
     configureBotRoutes()        // Bot context routes (GET /api/bots) - public, read-only
     configureMatchmakingWebSocketRoutes()  // Matchmaking webSocket routes for real-time communication

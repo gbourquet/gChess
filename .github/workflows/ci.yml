@@ -1,0 +1,205 @@
+# ============================================================
+# CI Pipeline - Build, Test & Publish
+# ============================================================
+#
+# Workflow "Write Once, Run Anywhere":
+#   1. Build Gradle → JAR (avec tests complets)
+#   2. Build Docker → Image (copie JAR)
+#   3. Push GHCR → Registry
+#
+# Testcontainers fonctionne nativement en GitHub Actions
+# (pas de problème Docker-in-Docker contrairement au build local)
+#
+# ============================================================
+
+name: CI - Build & Test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+# Permissions pour GitHub Container Registry
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  JAVA_VERSION: '21'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  # ============================================================
+  # Job 1: Build Gradle & Tests
+  # ============================================================
+  build-and-test:
+    name: Build JAR & Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup Java 21 (Temurin distribution)
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      # Make gradlew executable
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # Build with Gradle
+      # This step:
+      # - Generates jOOQ code (Testcontainers works in CI)
+      # - Runs unit tests
+      # - Runs architecture tests
+      # - Runs integration tests (Testcontainers PostgreSQL)
+      # - Compiles Kotlin
+      # - Creates fat JAR with Shadow plugin
+      - name: Build with Gradle
+        run: ./gradlew clean shadowJar --no-daemon --stacktrace
+        env:
+          # Testcontainers needs Docker
+          TESTCONTAINERS_RYUK_DISABLED: false
+
+      # Run all tests (separate step for better visibility)
+      - name: Run tests
+        run: ./gradlew check --no-daemon --stacktrace
+
+      # Upload test reports (if tests fail)
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/
+            build/test-results/
+          retention-days: 7
+
+      # Upload JAR artifact for Docker job
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gchess-jar
+          path: build/libs/gChess-*-all.jar
+          retention-days: 1
+
+  # ============================================================
+  # Job 2: Docker Build & Push
+  # ============================================================
+  docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    # Only run on push to main or tags (skip on PRs and feature branches)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+
+    steps:
+      # Checkout code (needed for Dockerfile)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Download JAR from previous job
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gchess-jar
+          path: build/libs/
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata for Docker tags
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag with commit SHA (e.g., sha-1234567)
+            type=sha,prefix=sha-,format=short
+            # Tag with 'latest' on master branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Tag with 'test' on master branch (for Render.com)
+            type=raw,value=test,enable={{is_default_branch}}
+            # Tag with version on git tags (e.g., v1.0.0)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      # Optional: Security scan with Trivy
+      - name: Run Trivy security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      # Upload Trivy results to GitHub Security tab
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  # ============================================================
+  # Job 3: Summary
+  # ============================================================
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-test, docker]
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.build-and-test.result }}" == "success" ]; then
+            echo "✅ Build & Tests: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Build & Tests: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.docker.result }}" == "success" ]; then
+            echo "✅ Docker Build: **PASSED**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Image**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.docker.result }}" == "skipped" ]; then
+            echo "⏭️  Docker Build: **SKIPPED** (PR or feature branch)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Docker Build: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi

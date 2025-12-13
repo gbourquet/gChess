@@ -1,0 +1,100 @@
+# ============================================================
+# Docker Compose - Test Environment
+# ============================================================
+#
+# Test environment stack for local validation before deploying to Render.com.
+# Simulates the test environment configuration.
+#
+# Usage:
+#   1. Build app: ./gradlew build
+#   2. Build Docker image: docker build -t gchess:test .
+#   3. Start stack: docker-compose -f docker-compose.test.yml up
+#   4. Access: http://localhost:8081
+#
+# Note: This is for LOCAL testing of test configuration.
+#       Actual test environment is deployed on Render.com.
+#
+# ============================================================
+
+services:
+  # PostgreSQL Database (ephemeral for testing)
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: gchess-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gchess_test
+      POSTGRES_USER: gchess_test
+      POSTGRES_PASSWORD: gchess_test
+    networks:
+      - gchess-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gchess_test -d gchess_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # No volumes = data is ephemeral (lost on container removal)
+
+  # gChess Backend Application
+  gchess-app-test:
+    image: gchess:test
+    container_name: gchess-app-test
+    restart: unless-stopped
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      # Application config
+      ENVIRONMENT: test
+      PORT: 8080
+
+      # Database config
+      DATABASE_URL: jdbc:postgresql://postgres-test:5432/gchess_test
+      DATABASE_USER: gchess_test
+      DATABASE_PASSWORD: gchess_test
+      DATABASE_POOL_SIZE: 5
+
+      # JWT config (test secret - generate with: openssl rand -base64 32)
+      JWT_SECRET: ${JWT_SECRET:-test-secret-REPLACE-ME}
+      JWT_VALIDITY_MS: 86400000
+
+      # CORS config
+      CORS_ORIGINS: https://gchess-test.sur-le-web.fr,http://localhost:8081
+
+      # Logging
+      LOG_LEVEL: INFO
+    networks:
+      - gchess-test-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # nginx Reverse Proxy
+  nginx-test:
+    image: nginx:1.27-alpine
+    container_name: gchess-nginx-test
+    restart: unless-stopped
+    depends_on:
+      - gchess-app-test
+    ports:
+      - "8081:80"  # Port 8081 to avoid conflict with local dev
+    volumes:
+      - ./nginx/nginx-test.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - gchess-test-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  gchess-test-network:
+    driver: bridge
+
+# No volumes = all data is ephemeral for testing

@@ -1,0 +1,112 @@
+# ============================================================
+# Docker Compose - Local Development
+# ============================================================
+#
+# Complete local development stack with:
+# - PostgreSQL database
+# - gChess backend application
+# - nginx reverse proxy
+#
+# Usage:
+#   1. Build app locally first: ./gradlew build
+#   2. Build Docker image: docker build -t gchess:local .
+#   3. Start stack: docker-compose up
+#   4. Access: http://localhost
+#
+# Services:
+#   - postgres: PostgreSQL 16 database
+#   - gchess-app: Backend application (port 8080 internal)
+#   - nginx: Reverse proxy (port 80 external)
+#
+# ============================================================
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: gchess-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gchess_dev
+      POSTGRES_USER: gchess
+      POSTGRES_PASSWORD: gchess
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistent data storage
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gchess-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gchess -d gchess_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # gChess Backend Application
+  gchess-app:
+    image: gchess:local
+    container_name: gchess-app-local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Application config
+      ENVIRONMENT: local
+      PORT: 8080
+
+      # Database config (connect to postgres service)
+      DATABASE_URL: jdbc:postgresql://postgres:5432/gchess_dev
+      DATABASE_USER: gchess
+      DATABASE_PASSWORD: gchess
+      DATABASE_POOL_SIZE: 10
+
+      # JWT config (dev secret - NEVER use in production!)
+      JWT_SECRET: dev-secret-DO-NOT-USE-IN-PRODUCTION
+      JWT_VALIDITY_MS: 86400000
+
+      # CORS config (allow all for local dev)
+      CORS_ORIGINS: http://localhost:3000,http://localhost:4200,http://localhost:5173,http://localhost
+
+      # Logging
+      LOG_LEVEL: DEBUG
+    networks:
+      - gchess-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # nginx Reverse Proxy
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gchess-nginx-local
+    restart: unless-stopped
+    depends_on:
+      - gchess-app
+    ports:
+      - "80:80"
+    volumes:
+      # nginx configuration
+      - ./nginx/nginx-local.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - gchess-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  gchess-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

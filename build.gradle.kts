@@ -3,6 +3,7 @@ plugins {
     kotlin("plugin.serialization") version "2.2.21"
     application
     idea
+    id("com.gradleup.shadow") version "8.3.6"
 }
 
 group = "com.gchess"
@@ -226,6 +227,22 @@ tasks.named("test") {
 
 kotlin {
     jvmToolchain(21)
+}
+
+// ============================================
+// Shadow JAR Configuration
+// ============================================
+// Configure Shadow plugin to create fat JAR for Docker deployment
+tasks.shadowJar {
+    archiveBaseName.set("gChess")
+    archiveClassifier.set("all")
+    archiveVersion.set(project.version.toString())
+    mergeServiceFiles()
+}
+
+// Make build depend on shadowJar instead of jar
+tasks.named("build") {
+    dependsOn(tasks.shadowJar)
 }
 
 // ============================================

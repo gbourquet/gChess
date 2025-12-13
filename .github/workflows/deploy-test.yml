@@ -1,0 +1,217 @@
+# ============================================================
+# CD Pipeline - Deploy to Test Environment (Render.com)
+# ============================================================
+#
+# Workflow:
+#   1. Wait for CI to complete successfully
+#   2. Trigger Render.com deploy hook
+#   3. Wait for deployment to complete
+#   4. Run health checks
+#   5. Notify on failure
+#
+# Environment: https://gchess-test.sur-le-web.fr
+#
+# Required Secrets:
+#   - RENDER_DEPLOY_HOOK_URL: Render.com deploy hook URL
+#   - RENDER_API_KEY: Render.com API key (optional, for status checks)
+#
+# ============================================================
+
+name: CD - Deploy Test
+
+on:
+  # Auto-deploy on push to master (after CI passes)
+  push:
+    branches: [master]
+
+  # Manual deployment trigger
+  workflow_dispatch:
+
+# Only allow one deployment at a time
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+env:
+  TEST_URL: https://gchess-test.sur-le-web.fr
+
+jobs:
+  # ============================================================
+  # Job 1: Wait for CI
+  # ============================================================
+  wait-for-ci:
+    name: Wait for CI Success
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for CI workflow to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'Build JAR & Run Tests'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+  # ============================================================
+  # Job 2: Deploy to Render.com
+  # ============================================================
+  deploy:
+    name: Deploy to Render.com
+    runs-on: ubuntu-latest
+    needs: wait-for-ci
+
+    steps:
+      - name: Trigger Render.com deployment
+        id: deploy
+        run: |
+          echo "Triggering Render.com deployment..."
+
+          RESPONSE=$(curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}" \
+            -s)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "❌ Deployment trigger failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "✅ Deployment triggered successfully"
+          echo "deployment_id=$(echo $BODY | jq -r '.id // "unknown"')" >> $GITHUB_OUTPUT
+
+      - name: Wait for deployment to start
+        run: |
+          echo "Waiting 30 seconds for deployment to start..."
+          sleep 30
+
+  # ============================================================
+  # Job 3: Health Checks
+  # ============================================================
+  health-check:
+    name: Health Checks
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Wait for service to be ready
+        run: |
+          echo "Waiting for service to be ready (max 5 minutes)..."
+          MAX_RETRIES=60
+          RETRY_DELAY=5
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES..."
+
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.TEST_URL }}/health" || echo "000")
+
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Service is ready (HTTP $HTTP_STATUS)"
+              exit 0
+            fi
+
+            if [ $i -eq $MAX_RETRIES ]; then
+              echo "❌ Service not ready after $((MAX_RETRIES * RETRY_DELAY)) seconds (HTTP $HTTP_STATUS)"
+              exit 1
+            fi
+
+            sleep $RETRY_DELAY
+          done
+
+      - name: Check basic health endpoint
+        run: |
+          echo "Checking /health endpoint..."
+
+          RESPONSE=$(curl -s "${{ env.TEST_URL }}/health")
+          echo "Response: $RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | jq -r '.status // "UNKNOWN"')
+
+          if [ "$STATUS" != "UP" ]; then
+            echo "❌ Health check failed: status = $STATUS"
+            exit 1
+          fi
+
+          echo "✅ Basic health check passed"
+
+      - name: Check actuator health endpoint
+        run: |
+          echo "Checking /actuator/health endpoint..."
+
+          RESPONSE=$(curl -s "${{ env.TEST_URL }}/actuator/health")
+          echo "Response: $RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | jq -r '.status // "UNKNOWN"')
+          DB_STATUS=$(echo "$RESPONSE" | jq -r '.checks.database.status // "UNKNOWN"')
+
+          if [ "$STATUS" != "UP" ]; then
+            echo "❌ Actuator health check failed: status = $STATUS"
+            exit 1
+          fi
+
+          if [ "$DB_STATUS" != "UP" ]; then
+            echo "⚠️  Database health check: status = $DB_STATUS"
+          fi
+
+          echo "✅ Actuator health check passed"
+
+      - name: Smoke test - Root endpoint
+        run: |
+          echo "Testing root endpoint..."
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.TEST_URL }}/")
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ Root endpoint failed (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+
+          echo "✅ Root endpoint accessible"
+
+  # ============================================================
+  # Job 4: Summary
+  # ============================================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [deploy, health-check]
+    if: always()
+
+    steps:
+      - name: Generate deployment summary
+        run: |
+          echo "## 🚀 Test Environment Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: Test" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: ${{ env.TEST_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Deployment: **SUCCESS**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Deployment: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.health-check.result }}" == "success" ]; then
+            echo "✅ Health Checks: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Health Checks: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Application](${{ env.TEST_URL }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Health Check](${{ env.TEST_URL }}/health)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Actuator Health](${{ env.TEST_URL }}/actuator/health)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment to test environment failed! Check logs for details."

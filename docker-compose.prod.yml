@@ -1,0 +1,195 @@
+# ============================================================
+# Docker Compose - Production
+# ============================================================
+#
+# Production deployment stack with full security and monitoring.
+#
+# Prerequisites:
+#   1. Server with Docker and Docker Compose
+#   2. Domain DNS configured (gchess.sur-le-web.fr)
+#   3. SSL certificates (Let's Encrypt certbot)
+#   4. .env.prod file with secrets
+#
+# SSL Setup (run once on server):
+#   sudo certbot certonly --standalone \
+#     -d gchess.sur-le-web.fr \
+#     --email your@email.com \
+#     --agree-tos
+#
+# Usage:
+#   1. Copy .env.prod.example to .env.prod
+#   2. Fill in production secrets in .env.prod
+#   3. Pull Docker image: docker pull ghcr.io/USERNAME/gchess:VERSION
+#   4. Tag as prod: docker tag ghcr.io/USERNAME/gchess:VERSION gchess:prod
+#   5. Start stack: docker-compose -f docker-compose.prod.yml up -d
+#   6. Access: https://gchess.sur-le-web.fr
+#
+# ============================================================
+
+services:
+  # PostgreSQL Database
+  postgres-prod:
+    image: postgres:16-alpine
+    container_name: gchess-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-gchess_prod}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      # Persistent data storage
+      - postgres_prod_data:/var/lib/postgresql/data
+      # Optional: PostgreSQL config tuning
+      # - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    networks:
+      - gchess-prod-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME:-gchess_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # gChess Backend Application
+  gchess-app-prod:
+    image: gchess:prod
+    container_name: gchess-app-prod
+    restart: always
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+    environment:
+      # Application config
+      ENVIRONMENT: prod
+      PORT: 8080
+
+      # Database config
+      DATABASE_URL: jdbc:postgresql://postgres-prod:5432/${DATABASE_NAME:-gchess_prod}
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_POOL_SIZE: 20
+
+      # JWT config (MUST be set in .env.prod)
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_VALIDITY_MS: 86400000
+
+      # CORS config
+      CORS_ORIGINS: https://gchess.sur-le-web.fr
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-WARN}
+    networks:
+      - gchess-prod-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # nginx Reverse Proxy with SSL
+  nginx-prod:
+    image: nginx:1.27-alpine
+    container_name: gchess-nginx-prod
+    restart: always
+    depends_on:
+      - gchess-app-prod
+    ports:
+      - "80:80"    # HTTP (redirects to HTTPS)
+      - "443:443"  # HTTPS
+    volumes:
+      # nginx configuration
+      - ./nginx/nginx-prod.conf:/etc/nginx/nginx.conf:ro
+
+      # SSL certificates (Let's Encrypt)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+      # Let's Encrypt webroot for renewals
+      - /var/www/certbot:/var/www/certbot:ro
+    networks:
+      - gchess-prod-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Certbot for SSL certificate renewal (optional sidecar)
+  # Run manually or via cron: docker-compose -f docker-compose.prod.yml run certbot renew
+  certbot:
+    image: certbot/certbot:latest
+    container_name: gchess-certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
+networks:
+  gchess-prod-network:
+    driver: bridge
+
+volumes:
+  postgres_prod_data:
+    driver: local
+
+# ============================================================
+# Production Checklist:
+# ============================================================
+# [ ] .env.prod configured with strong secrets
+# [ ] SSL certificates obtained (certbot)
+# [ ] Database backups configured
+# [ ] Monitoring configured (Prometheus, Grafana, or cloud)
+# [ ] Firewall rules configured (ports 80, 443, 5432)
+# [ ] Domain DNS pointing to server IP
+# [ ] Log rotation configured
+# [ ] Automated SSL renewal tested
+# ============================================================
