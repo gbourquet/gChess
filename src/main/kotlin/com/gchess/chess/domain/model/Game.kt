@@ -107,4 +107,18 @@ data class Game(
         GameStatus.DRAW,
         GameStatus.RESIGNED
     )
+
+    /**
+     * Reconstructs the position history by replaying all moves from the initial position.
+     * Used for threefold repetition detection.
+     *
+     * @return List of all positions that occurred in the game (excluding the current position)
+     */
+    fun getPositionHistory(): List<ChessPosition> {
+        return moveHistory
+            .dropLast(1)
+            .scan(ChessPosition.initial()) { position, move ->
+                position.movePiece(move.from, move.to, move.promotion)
+            }
+    }
 }
