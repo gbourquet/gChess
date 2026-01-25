@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-gChess is a Kotlin chess application using Domain-Driven Design with bounded contexts (Chess, User, Matchmaking), Hexagonal Architecture, Ktor web framework, JWT authentication, PostgreSQL, and jOOQ.
+gChess is a Kotlin chess application using Domain-Driven Design with bounded contexts (Chess, User, Matchmaking, Bot), Hexagonal Architecture, Ktor web framework, JWT authentication, PostgreSQL, and jOOQ.
 
 ## Technology Stack
 
@@ -50,7 +50,7 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
     - Chess use cases NEVER manipulate UserId - only Player objects
 - **Ports**: `GameRepository`, `GameEventNotifier`
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
-- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`
+- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`
 - **Infrastructure**: `GameRoutes` (REST), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
 
 #### User Context (`com.gchess.user`)
@@ -60,12 +60,20 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 - **Infrastructure**: `AuthRoutes`, `UserRoutes`, `PostgresUserRepository`, `BcryptPasswordHasher`
 
 #### Matchmaking Context (`com.gchess.matchmaking`)
-- **Domain**: `QueueEntry`, `Match` (with 5min TTL), `MatchmakingStatus`, `MatchmakingResult`
-- **Ports**: `MatchmakingQueue`, `MatchRepository`, `MatchmakingNotifier`
+- **Domain**: `QueueEntry`, `Match` (with 5min TTL), `MatchmakingStatus`, `MatchmakingResult`, `BotMatchRequest`
+- **Ports**: `MatchmakingQueue`, `MatchRepository`, `MatchmakingNotifier`, `BotSelector`
   - **ACL Ports**: `GameCreator` (→ Chess), `UserExistenceChecker` (→ User)
 - **Use Cases**: `JoinMatchmakingUseCase`, `GetMatchStatusUseCase`, `LeaveMatchmakingUseCase`, `CreateGameFromMatchUseCase`
 - **Infrastructure**: `MatchmakingRoutes`, `InMemoryMatchmakingQueue` (thread-safe), `PostgresMatchRepository`
   - **ACL Adapters**: `ChessContextGameCreator`, `UserContextUserChecker`
+
+#### Bot Context (`com.gchess.bot`)
+- **Domain**: `Bot`, `BotId`, `BotDifficulty` (EASY/MEDIUM/HARD), `MoveEvaluation`
+- **Ports**: `BotRepository`, `MoveExecutor`
+- **Services**: `BotService` interface, `MinimaxBotService` (alpha-beta pruning), `TranspositionTable`
+- **Use Cases**: `ExecuteBotMoveUseCase`, `GetBotUseCase`, `ListBotsUseCase`
+- **Infrastructure**: `BotRoutes` (REST), `PostgresBotRepository` (jOOQ)
+  - **ACL Adapters**: `ChessContextMoveExecutor` (→ Chess), `MatchmakingContextBotSelector` (→ Matchmaking)
 
 #### Shared Kernel (`com.gchess.shared`)
 - **UserId**: Permanent user identity (ULID) - used by User, Matchmaking, Chess infrastructure
@@ -77,7 +85,9 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 - **Anti-Corruption Layer (ACL)**: Protects context boundaries
   - Matchmaking → Chess: `GameCreator` creates game with Player objects
   - Matchmaking → User: `UserExistenceChecker` validates users
-  - Chess is fully isolated (no dependencies on User/Matchmaking)
+  - Bot → Chess: `MoveExecutor` executes bot moves
+  - Bot → Matchmaking: `BotSelector` selects bot for matchmaking
+  - Chess is fully isolated (no dependencies on User/Matchmaking/Bot)
 - **Player Object Pattern**: Separates User (permanent) from Player (game participation)
   - Player creation: Matchmaking creates Players, GameRoutes creates Players from JWT
   - Chess uses only Player objects, never UserId directly
@@ -97,7 +107,8 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory
 - `Player`: id (PlayerId), userId, side (WHITE/BLACK) - created via `Player.create(userId, side)`
 - `ChessPosition`: Bitboard-based (12 bitboards: 6 types × 2 colors), FEN support
-- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW
+- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED
+- `Game.pendingDrawOffer`: Optional PlayerSide indicating who offered a draw
 
 ### User
 - `User`: id (UserId), username (min 3), email, passwordHash (BCrypt)
@@ -106,6 +117,11 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `QueueEntry`: userId, joinedAt (FIFO)
 - `Match`: whiteUserId, blackUserId, gameId, matchedAt, expiresAt (5min TTL)
 - `MatchmakingResult`: NotFound | Waiting(queuePosition) | Matched(gameId, yourColor)
+
+### Bot
+- `Bot`: id (BotId), name, difficulty (EASY/MEDIUM/HARD), description
+- `BotDifficulty`: Enum controlling search depth and evaluation complexity
+- `MoveEvaluation`: score, bestMove - result of minimax search
 
 ## Chess Rules Implementation
 
@@ -130,11 +146,22 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `POST /api/games` - Create game (**JWT required**)
 - `GET /api/games/{id}` - Get game state (Public)
 - `POST /api/games/{id}/moves` - Make move (**JWT required**, body: `{"from": "e2", "to": "e4"}`)
+- `POST /api/games/{id}/resign` - Resign game (**JWT required**)
+- `POST /api/games/{id}/draw/offer` - Offer draw (**JWT required**)
+- `POST /api/games/{id}/draw/accept` - Accept draw offer (**JWT required**)
+- `POST /api/games/{id}/draw/reject` - Reject draw offer (**JWT required**)
 
 ### Matchmaking (**All require JWT**)
 - `POST /api/matchmaking/queue` - Join queue (returns WAITING or MATCHED)
 - `GET /api/matchmaking/status` - Poll status (poll every 2-3s)
 - `DELETE /api/matchmaking/queue` - Leave queue
+
+### Bot Operations
+- `GET /api/bots` - List all available bots (Public)
+- `GET /api/bots/{id}` - Get bot details (Public)
+
+### Health Check (Public)
+- `GET /api/health` - Application health status (database connectivity, uptime)
 
 ## WebSocket API
 
@@ -185,7 +212,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Matchmaking queue is in-memory (lost on restart; games/users persist)
 - No JWT refresh mechanism
 - Simple FIFO matchmaking (no ELO)
-- No mutual draw agreement, no game clocks
+- No game clocks (time control)
 - WebSocket reconnection is manual (no auto-recovery)
 
 ## Architecture Testing (ArchUnit)
@@ -196,10 +223,11 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Application depends ONLY on domain
 - Naming: UseCases end with `UseCase`, Repositories with `Repository`
 
-### Bounded Context Isolation Tests (29 tests)
-- Chess domain/application CANNOT depend on User/Matchmaking
-- User domain/application CANNOT depend on Chess/Matchmaking
-- Matchmaking domain/application CANNOT depend on Chess/User (except shared ports)
+### Bounded Context Isolation Tests (29+ tests)
+- Chess domain/application CANNOT depend on User/Matchmaking/Bot
+- User domain/application CANNOT depend on Chess/Matchmaking/Bot
+- Matchmaking domain/application CANNOT depend on Chess/User/Bot (except shared ports)
+- Bot domain/application CANNOT depend on Chess/User/Matchmaking (except shared ports)
 - Only infrastructure can cross context boundaries (via ACL adapters)
 - Shared Kernel: value objects only, no framework dependencies
 
@@ -212,12 +240,38 @@ Run: `./gradlew architectureTest`
 - **Coverage**: Full stack (REST → Use Cases → Domain → Repository), JWT auth, matchmaking flow, DTOs, HTTP status codes, ACL
 - Run: `./gradlew integrationTest`
 
+## Deployment
+
+### Docker Compose Variants
+- `docker-compose.yml` - Local development (PostgreSQL only)
+- `docker-compose.test.yml` - Test environment
+- `docker-compose.prod.yml` - Production deployment
+- `docker-compose.oci.yml` - Oracle Cloud Infrastructure
+
+### Deployment Scripts (`scripts/`)
+- `deploy.sh`, `rollback.sh` - Standard deployment and rollback
+- `deploy-oci-initial.sh`, `deploy-oci-update.sh` - Oracle Cloud deployment
+- `setup-oci-instance.sh` - OCI instance provisioning
+- `backup-oci-db.sh` - Database backup
+- `migrate-data-from-render.sh` - Data migration from Render
+- `health-check.sh` - Health verification
+
+### Environment Files
+- `.env.example` - Development template
+- `.env.test.example` - Test environment template
+- `.env.prod.example` - Production template
+- `.env.oci.example` - Oracle Cloud template
+
+### Nginx Configuration (`nginx/`)
+- Multiple nginx configs for reverse proxy and HTTPS termination
+
 ## Development Notes
 
 - **Entry Point**: `com.gchess.Application.kt`
 - **DI Wiring**: `KoinModule.kt` (all contexts + ACL adapters)
 - **Database Config**: `DatabaseConfig.kt` (HikariCP, Liquibase, jOOQ DSLContext)
 - **JWT Config**: `JwtConfig.kt` (HMAC256, 24h validity, env vars: JWT_SECRET, JWT_VALIDITY_MS)
+- **Health Check**: `HealthCheckService.kt`, `HealthRoutes.kt` - Application health monitoring
 - **Bitboard Engine**: 64-bit Longs, bit 0 = a1, bit 63 = h8, FEN import/export
 - **Context Map**: See `CONTEXT_MAP.md` for detailed context relationships
 - **Immutability**: Domain models are immutable data classes

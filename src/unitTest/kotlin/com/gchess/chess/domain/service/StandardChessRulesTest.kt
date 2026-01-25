@@ -1491,4 +1491,44 @@ class StandardChessRulesTest : StringSpec({
         // Act & Assert: Sufficient material - two knights can potentially checkmate
         rules.isInsufficientMaterial(position) shouldBe false
     }
+
+    "should detect threefold repetition - knights returning to initial position 3 times" {
+        // Arrange: Simulation d'une partie réelle où l'historique est construit au fur et à mesure
+        // Séquence : position initiale -> Nf3 Nf6 -> Ng1 Ng8 (retour position initiale)
+        //            -> Nf3 Nf6 -> Ng1 Ng8 (retour position initiale = 3ème occurrence)
+        var positionHistory = emptyList<ChessPosition>()
+        var currentPosition = ChessPosition.initial()
+
+        // Position initiale (occurrence 1)
+        positionHistory += currentPosition
+
+        // Premier cycle: Nf3 Nf6 Ng1 Ng8
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("g1"), Position.fromAlgebraic("f3"))
+        positionHistory += currentPosition
+
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("g8"), Position.fromAlgebraic("f6"))
+        positionHistory += currentPosition
+
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("f3"), Position.fromAlgebraic("g1"))
+        positionHistory += currentPosition
+
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("f6"), Position.fromAlgebraic("g8"))
+        positionHistory += currentPosition
+
+        // Deuxième cycle: Nf3 Nf6 Ng1 Ng8
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("g1"), Position.fromAlgebraic("f3"))
+        positionHistory += currentPosition
+
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("g8"), Position.fromAlgebraic("f6"))
+        positionHistory += currentPosition
+
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("f3"), Position.fromAlgebraic("g1"))
+        positionHistory += currentPosition
+
+        currentPosition = currentPosition.movePiece(Position.fromAlgebraic("f6"), Position.fromAlgebraic("g8"))
+        positionHistory += currentPosition
+
+        // Act & Assert: La position initiale apparaît 3 fois au total (2 fois dans positionHistory + currentPosition)
+        rules.isThreefoldRepetition(currentPosition, positionHistory) shouldBe true
+    }
 })
