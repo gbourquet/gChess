@@ -237,6 +237,5 @@ Run: `./gradlew architectureTest`
 - **JWT Config**: `JwtConfig.kt` (HMAC256, 24h validity, env vars: JWT_SECRET, JWT_VALIDITY_MS)
 - **Health Check**: `HealthCheckService.kt`, `HealthRoutes.kt` - Application health monitoring
 - **Bitboard Engine**: 64-bit Longs, bit 0 = a1, bit 63 = h8, FEN import/export
-- **Context Map**: See `CONTEXT_MAP.md` for detailed context relationships
 - **Immutability**: Domain models are immutable data classes
 - **Coroutines**: jOOQ calls wrapped in `withContext(Dispatchers.IO)`
