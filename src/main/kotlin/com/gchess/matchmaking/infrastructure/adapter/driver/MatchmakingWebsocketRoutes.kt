@@ -96,35 +96,10 @@ fun Application.configureMatchmakingWebSocketRoutes() {
                             // Parse message
                             when (val message = json.decodeFromString<MatchmakingMessage>(text)) {
                                 is JoinQueueMessage -> {
-                                    logger.info("User $userId joining matchmaking queue (bot: ${message.bot})")
-
-                                    // Build BotMatchRequest if bot match requested
-                                    val botRequest = if (message.bot) {
-                                        try {
-                                            com.gchess.matchmaking.domain.model.BotMatchRequest(
-                                                botId = message.botId?.let { com.gchess.bot.domain.model.BotId.fromString(it) },
-                                                playerColor = message.playerColor?.let { com.gchess.shared.domain.model.PlayerSide.valueOf(it) }
-                                            )
-                                        } catch (e: Exception) {
-                                            logger.warn("Invalid bot request parameters from user $userId: ${e.message}")
-                                            val errorMsg = MatchmakingErrorMessage(
-                                                code = "INVALID_BOT_REQUEST",
-                                                message = "Invalid bot ID or color: ${e.message}"
-                                            )
-                                            matchmakingManager.send(userId, errorMsg)
-                                            null
-                                        }
-                                    } else {
-                                        null
-                                    }
-
-                                    // Skip if bot request parsing failed
-                                    if (message.bot && botRequest == null) {
-                                        return@webSocket
-                                    }
+                                    logger.info("User $userId joining matchmaking queue")
 
                                     // Call the use case
-                                    val result = joinMatchmakingUseCase.execute(userId, botRequest)
+                                    val result = joinMatchmakingUseCase.execute(userId)
 
                                     if (result.isFailure) {
                                         // Send error notification
@@ -137,7 +112,7 @@ fun Application.configureMatchmakingWebSocketRoutes() {
                                         logger.warn("Matchmaking failed for user $userId: ${error.message}")
                                     } else {
                                         // Success - notifications already sent by the use case
-                                        logger.info("Matchmaking request processed for user $userId (bot: ${message.bot})")
+                                        logger.info("Matchmaking request processed for user $userId")
                                     }
                                 }
 

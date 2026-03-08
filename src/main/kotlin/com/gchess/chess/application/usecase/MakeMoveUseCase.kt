@@ -108,18 +108,19 @@ class MakeMoveUseCase(
      * 1. Checkmate - opponent king in check with no legal moves
      * 2. Stalemate - opponent not in check but has no legal moves
      * 3. Fifty-move rule - 50 moves without capture or pawn move
-     * 4. Insufficient material - impossible to checkmate
-     * 5. Otherwise - game continues (IN_PROGRESS)
-     *
-     * Note: Threefold repetition is not yet implemented (requires position history tracking)
+     * 4. Threefold repetition - same position occurred 3 times
+     * 5. Insufficient material - impossible to checkmate
+     * 6. Otherwise - game continues (IN_PROGRESS)
      */
     private fun updateGameStatus(game: Game): Game {
         val position = game.board
+        val positionHistory = game.getPositionHistory()
 
         val newStatus = when {
             chessRules.isCheckmate(position) -> GameStatus.CHECKMATE
             chessRules.isStalemate(position) -> GameStatus.STALEMATE
             chessRules.isFiftyMoveRule(position) -> GameStatus.DRAW
+            chessRules.isThreefoldRepetition(position, positionHistory) -> GameStatus.DRAW
             chessRules.isInsufficientMaterial(position) -> GameStatus.DRAW
             else -> GameStatus.IN_PROGRESS
         }

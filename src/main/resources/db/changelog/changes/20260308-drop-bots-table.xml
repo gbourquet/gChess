@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="20260308-drop-bots-table" author="gchess">
+        <!-- Collect bot system user IDs before dropping the table -->
+        <sql>CREATE TEMP TABLE bot_user_ids AS SELECT system_user_id FROM bots</sql>
+
+        <!-- Drop the bots table (removes the FK constraint on users) -->
+        <dropTable tableName="bots"/>
+
+        <!-- Remove bot system users (FK constraint is now gone) -->
+        <sql>DELETE FROM users WHERE id IN (SELECT system_user_id FROM bot_user_ids)</sql>
+
+        <!-- Clean up temp table -->
+        <sql>DROP TABLE bot_user_ids</sql>
+    </changeSet>
+
+</databaseChangeLog>
