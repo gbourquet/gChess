@@ -36,6 +36,8 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 ./gradlew integrationTest          # Integration tests (Testcontainers)
 ./gradlew check                    # All tests
 ./gradlew generateJooq             # Regenerate jOOQ classes from schema
+./gradlew generateOpenApiSpec      # Generate OpenAPI JSON spec
+./gradlew shadowJar                # Build fat JAR for Docker deployment
 ```
 
 ## Architecture
@@ -68,9 +70,9 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
   - **ACL Adapters**: `ChessContextGameCreator`, `UserContextUserChecker`
 
 #### Bot Context (`com.gchess.bot`)
-- **Domain**: `Bot`, `BotId`, `BotDifficulty` (EASY/MEDIUM/HARD), `MoveEvaluation`
+- **Domain**: `Bot`, `BotId`, `BotDifficulty` (BEGINNER/INTERMEDIATE/ADVANCED/MASTER), `MoveEvaluation`
 - **Ports**: `BotRepository`, `MoveExecutor`
-- **Services**: `BotService` interface, `MinimaxBotService` (alpha-beta pruning), `TranspositionTable`
+- **Services**: `BotService` interface, `MinimaxBotService` (alpha-beta pruning, Lazy SMP parallel coroutines), `TranspositionTable`
 - **Use Cases**: `ExecuteBotMoveUseCase`, `GetBotUseCase`, `ListBotsUseCase`
 - **Infrastructure**: `BotRoutes` (REST), `PostgresBotRepository` (jOOQ)
   - **ACL Adapters**: `ChessContextMoveExecutor` (→ Chess), `MatchmakingContextBotSelector` (→ Matchmaking)
@@ -119,8 +121,8 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `MatchmakingResult`: NotFound | Waiting(queuePosition) | Matched(gameId, yourColor)
 
 ### Bot
-- `Bot`: id (BotId), name, difficulty (EASY/MEDIUM/HARD), description
-- `BotDifficulty`: Enum controlling search depth and evaluation complexity
+- `Bot`: id (BotId), name, difficulty (BEGINNER/INTERMEDIATE/ADVANCED/MASTER), description, systemUserId
+- `BotDifficulty`: BEGINNER (2 ply, 4 workers), INTERMEDIATE (4 ply, 8 workers), ADVANCED (5 ply, 16 workers), MASTER (7 ply, 128 workers)
 - `MoveEvaluation`: score, bestMove - result of minimax search
 
 ## Chess Rules Implementation
@@ -161,7 +163,10 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `GET /api/bots/{id}` - Get bot details (Public)
 
 ### Health Check (Public)
-- `GET /api/health` - Application health status (database connectivity, uptime)
+- `GET /health` - Simple health status (database connectivity, uptime)
+- `GET /actuator/health` - Detailed health with component checks (database, matchmaking queue)
+- `GET /ready` - Readiness probe (HTTP 200 or 503)
+- `GET /alive` - Liveness probe
 
 ## WebSocket API
 
@@ -172,14 +177,19 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 
 **Matchmaking**: `ws://localhost:8080/ws/matchmaking?token=<JWT>`
 - Connection indexed by UserId (permanent)
-- Client → Server: `{"type": "JoinQueue"}`
-- Server → Client: `QueuePositionUpdate`, `MatchFound`, `MatchmakingError`
+- Client → Server:
+  - `{"type": "JoinQueue", "bot": false}` - human vs human
+  - `{"type": "JoinQueue", "bot": true, "botId": "...", "playerColor": "WHITE"}` - human vs bot
+- Server → Client: `AuthSuccess`, `AuthFailed`, `QueuePositionUpdate`, `MatchFound`, `MatchmakingError`
 - Auto-removal from queue on disconnect
 
 **Game**: `ws://localhost:8080/ws/game/{gameId}?token=<JWT>`
 - Connection indexed by PlayerId (ephemeral per-game)
-- Client → Server: `{"type": "MoveAttempt", "from": "e2", "to": "e4"}`
-- Server → Client: `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `PlayerDisconnected`, `PlayerReconnected`
+- Client → Server:
+  - `{"type": "MoveAttempt", "from": "e2", "to": "e4", "promotion": "QUEEN"}`
+  - `{"type": "Resign"}`
+  - `{"type": "OfferDraw"}`, `{"type": "AcceptDraw"}`, `{"type": "RejectDraw"}`
+- Server → Client: `GameAuthSuccess`, `GameAuthFailed`, `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `GameError`, `PlayerDisconnected`, `PlayerReconnected`
 - Multi-device support (same UserId can connect to multiple games)
 
 **Spectator**: `ws://localhost:8080/ws/game/{gameId}/spectate?token=<JWT>`
@@ -239,31 +249,6 @@ Run: `./gradlew architectureTest`
 - **Database**: Testcontainers PostgreSQL 16 (singleton, auto-migrations, cleanup between tests)
 - **Coverage**: Full stack (REST → Use Cases → Domain → Repository), JWT auth, matchmaking flow, DTOs, HTTP status codes, ACL
 - Run: `./gradlew integrationTest`
-
-## Deployment
-
-### Docker Compose Variants
-- `docker-compose.yml` - Local development (PostgreSQL only)
-- `docker-compose.test.yml` - Test environment
-- `docker-compose.prod.yml` - Production deployment
-- `docker-compose.oci.yml` - Oracle Cloud Infrastructure
-
-### Deployment Scripts (`scripts/`)
-- `deploy.sh`, `rollback.sh` - Standard deployment and rollback
-- `deploy-oci-initial.sh`, `deploy-oci-update.sh` - Oracle Cloud deployment
-- `setup-oci-instance.sh` - OCI instance provisioning
-- `backup-oci-db.sh` - Database backup
-- `migrate-data-from-render.sh` - Data migration from Render
-- `health-check.sh` - Health verification
-
-### Environment Files
-- `.env.example` - Development template
-- `.env.test.example` - Test environment template
-- `.env.prod.example` - Production template
-- `.env.oci.example` - Oracle Cloud template
-
-### Nginx Configuration (`nginx/`)
-- Multiple nginx configs for reverse proxy and HTTPS termination
 
 ## Development Notes
 
