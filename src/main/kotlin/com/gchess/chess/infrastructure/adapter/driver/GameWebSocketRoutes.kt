@@ -21,7 +21,6 @@
  */
 package com.gchess.chess.infrastructure.adapter.driver
 
-import com.gchess.bot.application.usecase.ExecuteBotMoveUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.application.usecase.ResignGameUseCase
@@ -44,13 +43,10 @@ import com.gchess.chess.infrastructure.adapter.driver.dto.AcceptDrawMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.RejectDrawMessage
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.infrastructure.websocket.WebSocketJwtAuth
-import com.gchess.user.application.usecase.GetUserUseCase
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -78,8 +74,6 @@ fun Application.configureGameWebSocketRoutes() {
     val offerDrawUseCase by inject<OfferDrawUseCase>()
     val acceptDrawUseCase by inject<AcceptDrawUseCase>()
     val rejectDrawUseCase by inject<RejectDrawUseCase>()
-    val getUserUseCase by inject<GetUserUseCase>()
-    val executeBotMoveUseCase by inject<ExecuteBotMoveUseCase>()
 
     routing {
         // ========== Game WebSocket ==========
@@ -163,22 +157,6 @@ fun Application.configureGameWebSocketRoutes() {
             )
             gameManager.send(playerId, stateSyncMsg)
 
-            // Check if it's a bot's turn to play (e.g., bot has white and game just started)
-            val currentPlayer = game.currentPlayer
-            val currentUser = getUserUseCase.execute(currentPlayer.userId)
-
-            if (currentUser != null && currentUser.username.startsWith("bot_")) {
-                // Launch bot move asynchronously on connection if it's the bot's turn
-                launch(Dispatchers.Default) {
-                    try {
-                        executeBotMoveUseCase.execute(game.id, currentPlayer)
-                        logger.info("Initial bot move executed for game ${game.id}")
-                    } catch (e: Exception) {
-                        logger.error("Error executing initial bot move for game ${game.id}", e)
-                    }
-                }
-            }
-
             try {
                 // Listen for incoming messages
                 for (frame in incoming) {
@@ -214,24 +192,7 @@ fun Application.configureGameWebSocketRoutes() {
                                         logger.warn("Move rejected for player $playerId: ${error.message}")
                                     } else {
                                         // Success - notification already sent by the use case via GameEventNotifier
-                                        val updatedGame = result.getOrThrow()
                                         logger.info("Move executed for player $playerId in game $gameId")
-
-                                        // Check if the next player is a bot
-                                        val nextPlayer = updatedGame.currentPlayer
-                                        val nextUser = getUserUseCase.execute(nextPlayer.userId)
-
-                                        if (nextUser != null && nextUser.username.startsWith("bot_")) {
-                                            // Launch bot move asynchronously
-                                            launch(Dispatchers.Default) {
-                                                try {
-                                                    executeBotMoveUseCase.execute(updatedGame.id, nextPlayer)
-                                                    logger.info("Bot move executed for game ${updatedGame.id}")
-                                                } catch (e: Exception) {
-                                                    logger.error("Error executing bot move for game ${updatedGame.id}", e)
-                                                }
-                                            }
-                                        }
                                     }
                                 }
 

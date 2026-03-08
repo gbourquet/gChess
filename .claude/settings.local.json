@@ -15,7 +15,10 @@
       "Bash(find:*)",
       "Bash(wc:*)",
       "Bash(ls:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git stash:*)"
     ]
   },
   "outputStyle": "default"
