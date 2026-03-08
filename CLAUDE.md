@@ -36,6 +36,8 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 ./gradlew integrationTest          # Integration tests (Testcontainers)
 ./gradlew check                    # All tests
 ./gradlew generateJooq             # Regenerate jOOQ classes from schema
+./gradlew generateOpenApiSpec      # Generate OpenAPI JSON spec
+./gradlew shadowJar                # Build fat JAR for Docker deployment
 ```
 
 ## Architecture
@@ -50,7 +52,7 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
     - Chess use cases NEVER manipulate UserId - only Player objects
 - **Ports**: `GameRepository`, `GameEventNotifier`
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
-- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`
+- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`
 - **Infrastructure**: `GameRoutes` (REST), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
 
 #### User Context (`com.gchess.user`)
@@ -97,7 +99,8 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory
 - `Player`: id (PlayerId), userId, side (WHITE/BLACK) - created via `Player.create(userId, side)`
 - `ChessPosition`: Bitboard-based (12 bitboards: 6 types × 2 colors), FEN support
-- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW
+- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED
+- `Game.pendingDrawOffer`: Optional PlayerSide indicating who offered a draw
 
 ### User
 - `User`: id (UserId), username (min 3), email, passwordHash (BCrypt)
@@ -130,11 +133,21 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `POST /api/games` - Create game (**JWT required**)
 - `GET /api/games/{id}` - Get game state (Public)
 - `POST /api/games/{id}/moves` - Make move (**JWT required**, body: `{"from": "e2", "to": "e4"}`)
+- `POST /api/games/{id}/resign` - Resign game (**JWT required**)
+- `POST /api/games/{id}/draw/offer` - Offer draw (**JWT required**)
+- `POST /api/games/{id}/draw/accept` - Accept draw offer (**JWT required**)
+- `POST /api/games/{id}/draw/reject` - Reject draw offer (**JWT required**)
 
 ### Matchmaking (**All require JWT**)
 - `POST /api/matchmaking/queue` - Join queue (returns WAITING or MATCHED)
 - `GET /api/matchmaking/status` - Poll status (poll every 2-3s)
 - `DELETE /api/matchmaking/queue` - Leave queue
+
+### Health Check (Public)
+- `GET /health` - Simple health status (database connectivity, uptime)
+- `GET /actuator/health` - Detailed health with component checks (database, matchmaking queue)
+- `GET /ready` - Readiness probe (HTTP 200 or 503)
+- `GET /alive` - Liveness probe
 
 ## WebSocket API
 
@@ -145,14 +158,18 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 
 **Matchmaking**: `ws://localhost:8080/ws/matchmaking?token=<JWT>`
 - Connection indexed by UserId (permanent)
-- Client → Server: `{"type": "JoinQueue"}`
-- Server → Client: `QueuePositionUpdate`, `MatchFound`, `MatchmakingError`
+- Client → Server:
+  - `{"type": "JoinQueue"}` - join human vs human matchmaking
+- Server → Client: `AuthSuccess`, `AuthFailed`, `QueuePositionUpdate`, `MatchFound`, `MatchmakingError`
 - Auto-removal from queue on disconnect
 
 **Game**: `ws://localhost:8080/ws/game/{gameId}?token=<JWT>`
 - Connection indexed by PlayerId (ephemeral per-game)
-- Client → Server: `{"type": "MoveAttempt", "from": "e2", "to": "e4"}`
-- Server → Client: `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `PlayerDisconnected`, `PlayerReconnected`
+- Client → Server:
+  - `{"type": "MoveAttempt", "from": "e2", "to": "e4", "promotion": "QUEEN"}`
+  - `{"type": "Resign"}`
+  - `{"type": "OfferDraw"}`, `{"type": "AcceptDraw"}`, `{"type": "RejectDraw"}`
+- Server → Client: `GameAuthSuccess`, `GameAuthFailed`, `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `GameError`, `PlayerDisconnected`, `PlayerReconnected`
 - Multi-device support (same UserId can connect to multiple games)
 
 **Spectator**: `ws://localhost:8080/ws/game/{gameId}/spectate?token=<JWT>`
@@ -185,7 +202,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Matchmaking queue is in-memory (lost on restart; games/users persist)
 - No JWT refresh mechanism
 - Simple FIFO matchmaking (no ELO)
-- No mutual draw agreement, no game clocks
+- No game clocks (time control)
 - WebSocket reconnection is manual (no auto-recovery)
 
 ## Architecture Testing (ArchUnit)
@@ -196,7 +213,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Application depends ONLY on domain
 - Naming: UseCases end with `UseCase`, Repositories with `Repository`
 
-### Bounded Context Isolation Tests (29 tests)
+### Bounded Context Isolation Tests
 - Chess domain/application CANNOT depend on User/Matchmaking
 - User domain/application CANNOT depend on Chess/Matchmaking
 - Matchmaking domain/application CANNOT depend on Chess/User (except shared ports)
@@ -218,6 +235,7 @@ Run: `./gradlew architectureTest`
 - **DI Wiring**: `KoinModule.kt` (all contexts + ACL adapters)
 - **Database Config**: `DatabaseConfig.kt` (HikariCP, Liquibase, jOOQ DSLContext)
 - **JWT Config**: `JwtConfig.kt` (HMAC256, 24h validity, env vars: JWT_SECRET, JWT_VALIDITY_MS)
+- **Health Check**: `HealthCheckService.kt`, `HealthRoutes.kt` - Application health monitoring
 - **Bitboard Engine**: 64-bit Longs, bit 0 = a1, bit 63 = h8, FEN import/export
 - **Context Map**: See `CONTEXT_MAP.md` for detailed context relationships
 - **Immutability**: Domain models are immutable data classes

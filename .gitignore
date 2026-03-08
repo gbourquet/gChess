@@ -50,3 +50,10 @@ docker/ssl/*.crt
 # Auto-generated OpenAPI configuration
 src/main/kotlin/com/gchess/infrastructure/config/OpenApiConfig.kt
 /.claude/commands/commit.md
+
+# Oracle Cloud Deployment
+backups/*.sql
+backups/*.sql.gz
+*.backup
+oci_key
+oci_key.pub

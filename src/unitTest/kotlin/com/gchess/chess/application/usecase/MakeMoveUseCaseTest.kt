@@ -25,11 +25,13 @@ import com.gchess.chess.domain.model.*
 import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.service.ChessRules
+import com.gchess.chess.domain.service.StandardChessRules
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.Player
 import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.shared.domain.model.UserId
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.equals.shouldBeEqual
 import io.kotest.matchers.shouldBe
 import io.mockk.*
 
@@ -439,5 +441,42 @@ class MakeMoveUseCaseTest : FunSpec({
         verify { chessRules.isStalemate(any()) }
         coVerify { gameRepository.save(match { it.status == GameStatus.STALEMATE }) }
         coVerify { gameEventNotifier.notifyMoveExecuted(match { it.status == GameStatus.STALEMATE }, stalemateMove) }
+    }
+
+    test("threefold repetition is detected and game end in draw") {
+        // Given
+        val gameRepository = mockk<GameRepository>()
+        val chessRules = mockk<ChessRules>()
+        val gameEventNotifier = mockk<GameEventNotifier>()
+
+        val useCase = MakeMoveUseCase(gameRepository, chessRules, gameEventNotifier)
+
+        val gameId = GameId.generate()
+        val whitePlayer = Player.create(UserId.generate(), PlayerSide.WHITE)
+        val blackPlayer = Player.create(UserId.generate(), PlayerSide.BLACK)
+
+        // Simuler une séquence qui répète la position initiale 3 fois: Nf3 Nf6 Ng1 Ng8 (×2)
+        var currentGame = Game(
+            id = gameId,
+            whitePlayer = whitePlayer,
+            blackPlayer = blackPlayer,
+            board = ChessPosition.initial(),
+            currentSide = PlayerSide.WHITE,
+            status = GameStatus.IN_PROGRESS,
+            moveHistory = emptyList()
+        )
+
+        coEvery { gameRepository.findById(any()) } answers { currentGame }
+        coEvery { gameRepository.save(any()) } answers { firstArg() }
+        coEvery { gameEventNotifier.notifyMoveExecuted(any(), any()) } returns Unit
+        coEvery { chessRules.isMoveLegal(any(), any()) } returns true
+        coEvery { chessRules.isCheckmate(any()) } returns false
+        coEvery { chessRules.isStalemate(any()) } returns false
+        coEvery { chessRules.isFiftyMoveRule(any()) } returns false
+        coEvery { chessRules.isThreefoldRepetition(any(), any())} returns true
+
+        val result = useCase.execute(currentGame.id, whitePlayer, Move(Position.fromAlgebraic("g1"), Position.fromAlgebraic("f3")))
+
+        result.getOrNull()?.status shouldBe GameStatus.DRAW
     }
 })
