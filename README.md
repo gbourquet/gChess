@@ -43,8 +43,6 @@
 - **Draw offers** - propose, accept, or reject draw offers
 - **Spectator mode** (read-only WebSocket connections)
 - **Multi-device support** (play multiple games simultaneously)
-- **Bot opponents** - play against AI with 4 difficulty levels (Beginner, Intermediate, Advanced, Master)
-- **Minimax chess engine** with Lazy SMP parallelization and transposition tables
 
 ### 🎲 Matchmaking System
 - **Real-time FIFO matchmaking queue**
@@ -224,7 +222,7 @@ The project includes automated architecture validation:
 
 ### REST API (Synchronous)
 
-gChess uses a **hybrid architecture**: REST for authentication and bot information, WebSocket for all real-time operations (matchmaking, gameplay).
+gChess uses a **hybrid architecture**: REST for authentication and user management, WebSocket for all real-time operations (matchmaking, gameplay).
 
 #### Authentication Endpoints
 
@@ -232,13 +230,6 @@ gChess uses a **hybrid architecture**: REST for authentication and bot informati
 |----------|--------|------|-------------|
 | `/api/auth/register` | POST | ❌ | Register new user |
 | `/api/auth/login` | POST | ❌ | Login and get JWT token |
-
-#### Bot Endpoints
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/bots` | GET | ❌ | List all available bot opponents |
-| `/api/bots/{id}` | GET | ❌ | Get specific bot details by ID |
 
 **Example: Register**
 ```bash
@@ -280,43 +271,6 @@ Content-Type: application/json
 }
 ```
 
-**Example: List Bots**
-```bash
-GET /api/bots
-
-# Response: 200 OK
-[
-  {
-    "id": "01HQZN4A5B6C7D8E9F0G1H2J3K",
-    "name": "Beginner Bot",
-    "difficulty": "BEGINNER",
-    "description": "Perfect for learning. Search depth: 2 plies",
-    "engineType": "MINIMAX"
-  },
-  {
-    "id": "01HQZN4B6C7D8E9F0G1H2J3K4L",
-    "name": "Advanced Bot",
-    "difficulty": "ADVANCED",
-    "description": "Challenging opponent. Search depth: 5 plies",
-    "engineType": "MINIMAX"
-  }
-]
-```
-
-**Example: Get Bot by ID**
-```bash
-GET /api/bots/01HQZN4A5B6C7D8E9F0G1H2J3K
-
-# Response: 200 OK
-{
-  "id": "01HQZN4A5B6C7D8E9F0G1H2J3K",
-  "name": "Beginner Bot",
-  "difficulty": "BEGINNER",
-  "description": "Perfect for learning. Search depth: 2 plies",
-  "engineType": "MINIMAX"
-}
-```
-
 **Important**: After authentication, all game operations (matchmaking, moves, spectating) are done via WebSocket (see below).
 
 ---
@@ -336,27 +290,12 @@ ws://localhost:8080/ws/<endpoint>?token=<JWT_TOKEN>
 
 **Client → Server Messages**:
 
-1. **Join Queue (Human vs Human)**
+1. **Join Queue**
 ```json
 {
   "type": "JoinQueue"
 }
 ```
-
-2. **Join Queue (Play vs Bot)**
-```json
-{
-  "type": "JoinQueue",
-  "bot": true,
-  "botId": "01HQZN4A5B6C7D8E9F0G1H2J3K",
-  "playerColor": "WHITE"
-}
-```
-
-**Parameters:**
-- `bot` (boolean): If `true`, match with a bot instead of a human (default: `false`)
-- `botId` (string, optional): Specific bot ID to play against (default: random bot)
-- `playerColor` (string, optional): Preferred color - `"WHITE"` or `"BLACK"` (default: random)
 
 **Server → Client Messages**:
 
@@ -898,10 +837,8 @@ The project has **100+ tests** organized into three categories:
 - [ ] Game clocks with time controls
 - [ ] Move history with algebraic notation (e.g., "Nf3", "O-O")
 - [ ] Game replay and analysis
-- [ ] Opening book integration for bot
 - [ ] Rate limiting and throttling
 - [ ] Mobile app (Kotlin Multiplatform)
-- [ ] Stronger bot engines (neural network-based)
 
 ---
 
