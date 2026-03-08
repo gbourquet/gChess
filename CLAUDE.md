@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-gChess is a Kotlin chess application using Domain-Driven Design with bounded contexts (Chess, User, Matchmaking, Bot), Hexagonal Architecture, Ktor web framework, JWT authentication, PostgreSQL, and jOOQ.
+gChess is a Kotlin chess application using Domain-Driven Design with bounded contexts (Chess, User, Matchmaking), Hexagonal Architecture, Ktor web framework, JWT authentication, PostgreSQL, and jOOQ.
 
 ## Technology Stack
 
@@ -62,20 +62,12 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 - **Infrastructure**: `AuthRoutes`, `UserRoutes`, `PostgresUserRepository`, `BcryptPasswordHasher`
 
 #### Matchmaking Context (`com.gchess.matchmaking`)
-- **Domain**: `QueueEntry`, `Match` (with 5min TTL), `MatchmakingStatus`, `MatchmakingResult`, `BotMatchRequest`
-- **Ports**: `MatchmakingQueue`, `MatchRepository`, `MatchmakingNotifier`, `BotSelector`
+- **Domain**: `QueueEntry`, `Match` (with 5min TTL), `MatchmakingStatus`, `MatchmakingResult`
+- **Ports**: `MatchmakingQueue`, `MatchRepository`, `MatchmakingNotifier`
   - **ACL Ports**: `GameCreator` (→ Chess), `UserExistenceChecker` (→ User)
 - **Use Cases**: `JoinMatchmakingUseCase`, `GetMatchStatusUseCase`, `LeaveMatchmakingUseCase`, `CreateGameFromMatchUseCase`
 - **Infrastructure**: `MatchmakingRoutes`, `InMemoryMatchmakingQueue` (thread-safe), `PostgresMatchRepository`
   - **ACL Adapters**: `ChessContextGameCreator`, `UserContextUserChecker`
-
-#### Bot Context (`com.gchess.bot`)
-- **Domain**: `Bot`, `BotId`, `BotDifficulty` (BEGINNER/INTERMEDIATE/ADVANCED/MASTER), `MoveEvaluation`
-- **Ports**: `BotRepository`, `MoveExecutor`
-- **Services**: `BotService` interface, `MinimaxBotService` (alpha-beta pruning, Lazy SMP parallel coroutines), `TranspositionTable`
-- **Use Cases**: `ExecuteBotMoveUseCase`, `GetBotUseCase`, `ListBotsUseCase`
-- **Infrastructure**: `BotRoutes` (REST), `PostgresBotRepository` (jOOQ)
-  - **ACL Adapters**: `ChessContextMoveExecutor` (→ Chess), `MatchmakingContextBotSelector` (→ Matchmaking)
 
 #### Shared Kernel (`com.gchess.shared`)
 - **UserId**: Permanent user identity (ULID) - used by User, Matchmaking, Chess infrastructure
@@ -87,9 +79,7 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 - **Anti-Corruption Layer (ACL)**: Protects context boundaries
   - Matchmaking → Chess: `GameCreator` creates game with Player objects
   - Matchmaking → User: `UserExistenceChecker` validates users
-  - Bot → Chess: `MoveExecutor` executes bot moves
-  - Bot → Matchmaking: `BotSelector` selects bot for matchmaking
-  - Chess is fully isolated (no dependencies on User/Matchmaking/Bot)
+  - Chess is fully isolated (no dependencies on User/Matchmaking)
 - **Player Object Pattern**: Separates User (permanent) from Player (game participation)
   - Player creation: Matchmaking creates Players, GameRoutes creates Players from JWT
   - Chess uses only Player objects, never UserId directly
@@ -119,11 +109,6 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `QueueEntry`: userId, joinedAt (FIFO)
 - `Match`: whiteUserId, blackUserId, gameId, matchedAt, expiresAt (5min TTL)
 - `MatchmakingResult`: NotFound | Waiting(queuePosition) | Matched(gameId, yourColor)
-
-### Bot
-- `Bot`: id (BotId), name, difficulty (BEGINNER/INTERMEDIATE/ADVANCED/MASTER), description, systemUserId
-- `BotDifficulty`: BEGINNER (2 ply, 4 workers), INTERMEDIATE (4 ply, 8 workers), ADVANCED (5 ply, 16 workers), MASTER (7 ply, 128 workers)
-- `MoveEvaluation`: score, bestMove - result of minimax search
 
 ## Chess Rules Implementation
 
@@ -158,10 +143,6 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `GET /api/matchmaking/status` - Poll status (poll every 2-3s)
 - `DELETE /api/matchmaking/queue` - Leave queue
 
-### Bot Operations
-- `GET /api/bots` - List all available bots (Public)
-- `GET /api/bots/{id}` - Get bot details (Public)
-
 ### Health Check (Public)
 - `GET /health` - Simple health status (database connectivity, uptime)
 - `GET /actuator/health` - Detailed health with component checks (database, matchmaking queue)
@@ -178,8 +159,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 **Matchmaking**: `ws://localhost:8080/ws/matchmaking?token=<JWT>`
 - Connection indexed by UserId (permanent)
 - Client → Server:
-  - `{"type": "JoinQueue", "bot": false}` - human vs human
-  - `{"type": "JoinQueue", "bot": true, "botId": "...", "playerColor": "WHITE"}` - human vs bot
+  - `{"type": "JoinQueue"}` - join human vs human matchmaking
 - Server → Client: `AuthSuccess`, `AuthFailed`, `QueuePositionUpdate`, `MatchFound`, `MatchmakingError`
 - Auto-removal from queue on disconnect
 
@@ -233,11 +213,10 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Application depends ONLY on domain
 - Naming: UseCases end with `UseCase`, Repositories with `Repository`
 
-### Bounded Context Isolation Tests (29+ tests)
-- Chess domain/application CANNOT depend on User/Matchmaking/Bot
-- User domain/application CANNOT depend on Chess/Matchmaking/Bot
-- Matchmaking domain/application CANNOT depend on Chess/User/Bot (except shared ports)
-- Bot domain/application CANNOT depend on Chess/User/Matchmaking (except shared ports)
+### Bounded Context Isolation Tests
+- Chess domain/application CANNOT depend on User/Matchmaking
+- User domain/application CANNOT depend on Chess/Matchmaking
+- Matchmaking domain/application CANNOT depend on Chess/User (except shared ports)
 - Only infrastructure can cross context boundaries (via ACL adapters)
 - Shared Kernel: value objects only, no framework dependencies
 

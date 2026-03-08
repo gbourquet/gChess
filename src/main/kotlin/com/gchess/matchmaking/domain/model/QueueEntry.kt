@@ -30,10 +30,8 @@ import kotlin.time.Instant
  *
  * @property userId The unique identifier of the user
  * @property joinedAt The timestamp when the user joined the queue
- * @property botRequest Optional request to match with a bot instead of another human
  */
 data class QueueEntry @OptIn(ExperimentalTime::class) constructor(
     val userId: UserId,
-    val joinedAt: Instant,
-    val botRequest: BotMatchRequest? = null
+    val joinedAt: Instant
 )

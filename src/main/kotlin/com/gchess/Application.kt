@@ -21,7 +21,6 @@
  */
 package com.gchess
 
-import com.gchess.bot.infrastructure.adapter.driver.configureBotRoutes
 import com.gchess.chess.infrastructure.adapter.driver.configureGameWebSocketRoutes
 import com.gchess.infrastructure.config.EnvironmentConfig
 import com.gchess.infrastructure.config.JwtConfig
@@ -163,7 +162,6 @@ fun Application.module() {
     // Configure routes
     configureHealthRoutes()     // Health check endpoints for monitoring and orchestration
     configureAuthRoutes()       // User context auth routes (register, login) - public
-    configureBotRoutes()        // Bot context routes (GET /api/bots) - public, read-only
     configureMatchmakingWebSocketRoutes()  // Matchmaking webSocket routes for real-time communication
     configureGameWebSocketRoutes()  // Game webSocket routes for real-time communication (players and spectators)
 

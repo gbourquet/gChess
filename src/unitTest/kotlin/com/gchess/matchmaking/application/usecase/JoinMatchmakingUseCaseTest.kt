@@ -3,7 +3,6 @@ package com.gchess.matchmaking.application.usecase
 import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.matchmaking.domain.model.Match
 import com.gchess.matchmaking.domain.model.QueueEntry
-import com.gchess.matchmaking.domain.port.BotSelector
 import com.gchess.matchmaking.domain.port.GameCreator
 import com.gchess.matchmaking.domain.port.MatchmakingNotifier
 import com.gchess.matchmaking.domain.port.MatchmakingQueue
@@ -28,10 +27,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queue = mockk<MatchmakingQueue>()
         val gameCreator = mockk<GameCreator>()
         val userChecker = mockk<UserExistenceChecker>()
-        val botSelector = mockk<BotSelector>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, botSelector, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, notifier)
         val userId = UserId.generate()
         val queueEntry = QueueEntry(userId, Clock.System.now())
 
@@ -65,10 +63,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queue = mockk<MatchmakingQueue>()
         val gameCreator = mockk<GameCreator>()
         val userChecker = mockk<UserExistenceChecker>()
-        val botSelector = mockk<BotSelector>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, botSelector, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, notifier)
         val userId = UserId.generate()
 
         // Mock behavior
@@ -92,10 +89,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queue = mockk<MatchmakingQueue>()
         val gameCreator = mockk<GameCreator>()
         val userChecker = mockk<UserExistenceChecker>()
-        val botSelector = mockk<BotSelector>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, botSelector, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, notifier)
         val userId = UserId.generate()
 
         // Mock behavior
@@ -121,10 +117,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queue = mockk<MatchmakingQueue>()
         val gameCreator = mockk<GameCreator>()
         val userChecker = mockk<UserExistenceChecker>()
-        val botSelector = mockk<BotSelector>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, botSelector, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, notifier)
         val userId = UserId.generate()
 
         // Mock behavior
@@ -150,10 +145,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queue = mockk<MatchmakingQueue>()
         val gameCreator = mockk<GameCreator>()
         val userChecker = mockk<UserExistenceChecker>()
-        val botSelector = mockk<BotSelector>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, botSelector, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, notifier)
 
         val user1 = UserId.generate()
         val user2 = UserId.generate()
@@ -198,10 +192,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         val queue = mockk<MatchmakingQueue>()
         val gameCreator = mockk<GameCreator>()
         val userChecker = mockk<UserExistenceChecker>()
-        val botSelector = mockk<BotSelector>()
         val notifier = mockk<MatchmakingNotifier>()
 
-        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, botSelector, notifier)
+        val useCase = JoinMatchmakingUseCase(queue, gameCreator, userChecker, notifier)
 
         val user1 = UserId.generate()
         val user2 = UserId.generate()

@@ -9,19 +9,12 @@ sealed class MatchmakingMessage {
 }
 /**
  * Client → Server: User wants to join the matchmaking queue
- *
- * @param bot If true, match with a bot instead of a human player
- * @param botId Optional specific bot ID to match with (null = default bot)
- * @param playerColor Optional color preference ("WHITE" or "BLACK", null = random)
  */
 @Serializable
 @SerialName("JoinQueue")
 data class JoinQueueMessage(
     @SerialName("myType")
-    override val type: String = "JoinQueue",
-    val bot: Boolean = false,
-    val botId: String? = null,
-    val playerColor: String? = null
+    override val type: String = "JoinQueue"
 ) : MatchmakingMessage()
 
 /**
