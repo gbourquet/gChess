@@ -27,6 +27,7 @@ import com.gchess.chess.application.usecase.ResignGameUseCase
 import com.gchess.chess.application.usecase.OfferDrawUseCase
 import com.gchess.chess.application.usecase.AcceptDrawUseCase
 import com.gchess.chess.application.usecase.RejectDrawUseCase
+import com.gchess.user.domain.port.UserRepository
 import com.gchess.chess.domain.model.Move
 import com.gchess.chess.domain.model.Position
 import com.gchess.chess.infrastructure.adapter.driver.dto.GameAuthFailedMessage
@@ -66,6 +67,9 @@ fun Application.configureGameWebSocketRoutes() {
     // Inject connection managers
     val gameManager by inject<GameConnectionManager>()
     val spectatorManager by inject<SpectatorConnectionManager>()
+
+    // Inject repositories
+    val userRepository by inject<UserRepository>()
 
     // Inject use cases
     val getGameUseCase by inject<GetGameUseCase>()
@@ -140,6 +144,8 @@ fun Application.configureGameWebSocketRoutes() {
             logger.info("Player $playerId (user $userId) connected to game $gameId")
 
             // Send initial game state sync (Phase 3 will implement full state)
+            val whiteUser = userRepository.findById(game.whitePlayer.userId)
+            val blackUser = userRepository.findById(game.blackPlayer.userId)
             val stateSyncMsg = GameStateSyncMessage(
                 gameId = gameId.toString(),
                 positionFen = game.board.toFen(),
@@ -153,7 +159,9 @@ fun Application.configureGameWebSocketRoutes() {
                 gameStatus = game.status.toString(),
                 currentSide = game.currentSide.toString(),
                 whitePlayerId = game.whitePlayer.id.toString(),
-                blackPlayerId = game.blackPlayer.id.toString()
+                blackPlayerId = game.blackPlayer.id.toString(),
+                whiteUsername = whiteUser?.username ?: "White",
+                blackUsername = blackUser?.username ?: "Black"
             )
             gameManager.send(playerId, stateSyncMsg)
 
@@ -353,6 +361,8 @@ fun Application.configureGameWebSocketRoutes() {
             logger.info("User $userId joined as spectator for game $gameId")
 
             // Send initial game state sync
+            val whiteUser = userRepository.findById(game.whitePlayer.userId)
+            val blackUser = userRepository.findById(game.blackPlayer.userId)
             val stateSyncMsg = GameStateSyncMessage(
                 gameId = gameId.toString(),
                 positionFen = game.board.toFen(),
@@ -366,7 +376,9 @@ fun Application.configureGameWebSocketRoutes() {
                 gameStatus = game.status.toString(),
                 currentSide = game.currentSide.toString(),
                 whitePlayerId = game.whitePlayer.id.toString(),
-                blackPlayerId = game.blackPlayer.id.toString()
+                blackPlayerId = game.blackPlayer.id.toString(),
+                whiteUsername = whiteUser?.username ?: "White",
+                blackUsername = blackUser?.username ?: "Black"
             )
             spectatorManager.broadcastToSpectators(gameId, stateSyncMsg)
 
