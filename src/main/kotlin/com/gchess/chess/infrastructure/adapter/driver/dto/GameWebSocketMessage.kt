@@ -98,7 +98,9 @@ data class GameStateSyncMessage(
     val gameStatus: String,
     val currentSide: String,
     val whitePlayerId: String,
-    val blackPlayerId: String
+    val blackPlayerId: String,
+    val whiteUsername: String,
+    val blackUsername: String
 ) : GameWebSocketMessage()
 
 /**

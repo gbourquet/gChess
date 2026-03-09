@@ -12,7 +12,10 @@
         <!-- Drop the bots table (removes the FK constraint on users) -->
         <dropTable tableName="bots"/>
 
-        <!-- Remove bot system users (FK constraint is now gone) -->
+        <!-- Remove games involving bot users (game_moves deleted via CASCADE) -->
+        <sql>DELETE FROM games WHERE white_user_id IN (SELECT system_user_id FROM bot_user_ids) OR black_user_id IN (SELECT system_user_id FROM bot_user_ids)</sql>
+
+        <!-- Remove bot system users (FK constraints from games are now gone) -->
         <sql>DELETE FROM users WHERE id IN (SELECT system_user_id FROM bot_user_ids)</sql>
 
         <!-- Clean up temp table -->
