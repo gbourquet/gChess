@@ -15,16 +15,8 @@
 *~
 .DS_Store
 
-# Build output - KEEP JAR but exclude Gradle cache
-# The JAR must be pre-compiled with ./gradlew build before docker build
-build/classes/
-build/generated/
-build/generated-src/
-build/jooq-config/
-build/kotlin/
-build/resources/
-build/tmp/
-!build/libs/*.jar
+# Build output - tout exclure (le JAR est compilé dans le stage builder Docker)
+build/
 .gradle/
 .kotlin/
 out/

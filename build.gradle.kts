@@ -252,7 +252,7 @@ tasks.named("build") {
 // Créer la tâche de setup de la base de données pour jOOQ
 val setupJooqDatabase by tasks.registering(JooqTestcontainersTask::class) {
     inputs.files(fileTree("src/main/resources/db/changelog")) // surveille les migrations
-    outputs.dir(layout.buildDirectory.dir("generated-src/jooq/main")) // répertoire de sortie
+    outputs.dir("src/main/generated") // répertoire de sortie
 }
 
 // Tâche personnalisée pour générer le code jOOQ
@@ -280,24 +280,24 @@ val generateJooq by tasks.registering(JavaExec::class) {
 
     // S'assurer que le répertoire de sortie existe
     doFirst {
-        project.layout.buildDirectory.dir("generated-src/jooq/main").get().asFile.mkdirs()
+        project.file("src/main/generated").mkdirs()
     }
 
     inputs.files(fileTree("src/main/resources/db/changelog")) // surveille les migrations
     inputs.file(jooqConfigFile)                     // surveille le fichier jooq-config.xml
-    outputs.dir(layout.buildDirectory.dir("generated-src/jooq/main")) // répertoire de sortie
+    outputs.dir("src/main/generated") // répertoire de sortie
 
 }
 
 // Ajouter les sources générées au sourceSet principal
+// Les sources sont committées dans src/main/generated/ pour permettre le build sans Docker
 sourceSets.main {
-    java.srcDir(layout.buildDirectory.dir("generated-src/jooq/main"))
+    java.srcDir("src/main/generated")
 }
 
-// Faire en sorte que compileKotlin dépende de la génération jOOQ
-tasks.named("compileKotlin") {
-    dependsOn(generateJooq)
-}
+// compileKotlin ne dépend PAS de generateJooq :
+// - En dev : lancer ./gradlew generateJooq manuellement après chaque changement de schéma
+// - En CI/prod : les sources committées dans src/main/generated/ sont utilisées directement
 
 // ============================================
 // Documentation Tasks
