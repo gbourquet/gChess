@@ -83,8 +83,12 @@ fun Application.module() {
     install(CORS) {
         // Allow origins based on environment configuration
         EnvironmentConfig.corsOrigins.forEach { origin ->
-            val uri = URI(origin)
-            allowHost(uri.host + (if (uri.port > 0) ":${uri.port}" else ""), schemes = listOf(uri.scheme))
+            try {
+                val uri = URI(origin)
+                allowHost(uri.host + (if (uri.port > 0) ":${uri.port}" else ""), schemes = listOf(uri.scheme))
+            } catch (e: Exception) {
+                println("WARNING: Invalid CORS origin ignored: '$origin' (${e.message})")
+            }
         }
 
         // Allow common HTTP methods
