@@ -1,58 +1,76 @@
 # ============================================================
-# Single-Stage Dockerfile for gChess Backend
+# Multi-Stage Dockerfile for gChess Backend
 # ============================================================
 #
-# BUILD APPROACH: "Write Once, Run Anywhere"
+# Stage 1 (builder) : compile le fat JAR avec Gradle
+# Stage 2 (runtime) : image légère JRE pour l'exécution
 #
-# This Dockerfile expects a pre-compiled JAR file.
-# Build workflow (local, CI, production):
-#   1. ./gradlew build          (generates jOOQ + runs tests + creates JAR)
-#   2. docker build -t gchess . (packages JAR into Docker image)
-#   3. docker run gchess        (runs the application)
-#
-# WHY NOT MULTI-STAGE?
-# - Testcontainers (jOOQ generation) requires Docker-in-Docker
-# - Gradle cache is more efficient natively than in Docker layers
-# - Same workflow everywhere: dev, CI, production
-# - Easier debugging (build errors vs runtime errors are separated)
+# Les sources jOOQ sont committées dans src/main/generated/
+# et n'ont pas besoin d'être régénérées pendant le build.
+# Pour les régénérer en local : ./gradlew generateJooq
 #
 # ============================================================
 
+# ============================================================
+# Stage 1 : Builder
+# ============================================================
+FROM eclipse-temurin:21-jdk-alpine AS builder
+
+WORKDIR /build
+
+# Copier les fichiers Gradle en premier pour bénéficier du cache Docker
+COPY gradlew .
+COPY gradle/ gradle/
+COPY build.gradle.kts settings.gradle.kts gradle.properties ./
+COPY buildSrc/ buildSrc/
+
+# Télécharger les dépendances (layer mis en cache si build.gradle.kts ne change pas)
+RUN ./gradlew dependencies --no-daemon --quiet 2>/dev/null || true
+
+# Copier le code source (y compris src/main/generated/ avec les sources jOOQ committées)
+COPY src/ src/
+
+# Compiler et générer le fat JAR
+# - generateJooq et setupJooqDatabase sont exclus : les sources sont dans src/main/generated/
+# - Les tests sont exclus : ils sont exécutés en CI séparément
+RUN ./gradlew shadowJar --no-daemon \
+    -x generateJooq \
+    -x setupJooqDatabase \
+    -x test \
+    -x unitTest \
+    -x integrationTest \
+    -x architectureTest
+
+# ============================================================
+# Stage 2 : Runtime
+# ============================================================
 FROM eclipse-temurin:21-jre-alpine
 
-# Install wget for healthcheck
+# wget pour le healthcheck
 RUN apk add --no-cache wget
 
-# Create non-root user for security
+# Utilisateur non-root pour la sécurité
 RUN addgroup -S gchess && adduser -S gchess -G gchess
 
 WORKDIR /app
 
-# Copy pre-compiled fat JAR (must be built with ./gradlew build before docker build)
-# Shadow plugin creates gChess-VERSION-all.jar with all dependencies included
-COPY build/libs/gChess-*-all.jar /app/gchess.jar
+# Copier uniquement le JAR depuis le stage builder
+COPY --from=builder /build/build/libs/gChess-*-all.jar /app/gchess.jar
 
-# Change ownership to non-root user
 RUN chown -R gchess:gchess /app
-
-# Switch to non-root user
 USER gchess
 
-# Expose application port
 EXPOSE 8080
 
-# Health check for orchestration tools (Docker, Kubernetes, load balancers)
-# Checks /health endpoint every 30 seconds
-# Starts checking after 60 seconds (gives time for migrations)
-# Allows 3 retries with 10 second timeout
+# Healthcheck (délai de 60s pour laisser le temps aux migrations Liquibase)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --quiet --tries=1 --timeout=5 -O /dev/null http://localhost:8080/health || exit 1
 
-# JVM optimization flags:
-# -Xmx512m: Maximum heap size 512MB (adjust based on available memory)
-# -XX:+UseG1GC: Use G1 garbage collector (good for low-latency applications)
-# -XX:MaxGCPauseMillis=200: Target max GC pause time
-# -XX:+UseContainerSupport: Respect container memory limits
+# Options JVM :
+# -Xmx512m              : heap max 512 MB
+# -XX:+UseG1GC          : GC G1 (faible latence)
+# -XX:MaxGCPauseMillis=200 : cible de pause GC
+# -XX:+UseContainerSupport : respecte les limites mémoire du container
 ENTRYPOINT ["java", \
     "-Xmx512m", \
     "-XX:+UseG1GC", \
@@ -61,12 +79,12 @@ ENTRYPOINT ["java", \
     "-jar", \
     "/app/gchess.jar"]
 
-# Environment variables (can be overridden at runtime):
-# - PORT: Server port (default: 8080)
-# - ENVIRONMENT: local|test|prod (default: local)
-# - DATABASE_URL: JDBC connection string
-# - DATABASE_USER: Database username
-# - DATABASE_PASSWORD: Database password
-# - JWT_SECRET: JWT signing secret (REQUIRED in production)
-# - CORS_ORIGINS: Comma-separated list of allowed origins
-# - LOG_LEVEL: DEBUG|INFO|WARN|ERROR (default: INFO)
+# Variables d'environnement (à configurer dans Railway) :
+# - PORT             : port d'écoute (défaut : 8080, Railway injecte automatiquement)
+# - ENVIRONMENT      : local|test|prod (défaut : local)
+# - DATABASE_URL     : JDBC URL PostgreSQL (ex: jdbc:postgresql://host:5432/db)
+# - DATABASE_USER    : utilisateur PostgreSQL
+# - DATABASE_PASSWORD: mot de passe PostgreSQL
+# - JWT_SECRET       : secret HMAC256 pour signer les JWT (OBLIGATOIRE en prod)
+# - CORS_ORIGINS     : origines autorisées, séparées par des virgules
+# - LOG_LEVEL        : DEBUG|INFO|WARN|ERROR (défaut : INFO)
