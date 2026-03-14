@@ -19,6 +19,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.gchess.chess.application.usecase
 
 import com.gchess.chess.domain.model.Game

@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.gchess.matchmaking.application.usecase
 
 import com.gchess.shared.domain.model.PlayerSide
@@ -36,7 +38,7 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         // Mock behavior
         coEvery { userChecker.exists(userId) } returns true
         coEvery { queue.isPlayerInQueue(userId) } returns false
-        coEvery { queue.addPlayer(userId) } returns queueEntry
+        coEvery { queue.addPlayer(any(), any(), any()) } returns queueEntry
         coEvery { queue.getQueueSize() } returns 10
         coEvery { queue.findMatch() } returns null
         coEvery { notifier.notifyQueuePosition(userId, 10) } just Runs
@@ -51,7 +53,7 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         // Verify interactions
         coVerify { userChecker.exists(userId) }
         coVerify { queue.isPlayerInQueue(userId) }
-        coVerify { queue.addPlayer(userId) }
+        coVerify { queue.addPlayer(any(), any(), any()) }
         coVerify { queue.findMatch() }
         coVerify { queue.getQueueSize() }
         coVerify { notifier.notifyQueuePosition(userId, 10) }
@@ -160,11 +162,11 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         // Mock behavior for user1
         coEvery { userChecker.exists(user1) } returns true
         coEvery { queue.isPlayerInQueue(user1) } returns false
-        coEvery { queue.addPlayer(user1) } returns queueEntry1
+        coEvery { queue.addPlayer(any(), any(), any()) } returns queueEntry1
         coEvery { queue.findMatch() } returns Pair(queueEntry1,queueEntry2)
 
         // Mock gameCreator - accepts any two Players and returns gameId
-        coEvery { gameCreator.createGame(any(), any()) } returns Result.success(gameId)
+        coEvery { gameCreator.createGame(any(), any(), any(), any()) } returns Result.success(gameId)
 
         // Mock notifier - capture the match that's created
         val matchSlot = slot<Match>()
@@ -180,9 +182,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         matched.gameId shouldBe gameId
 
         // Verify interactions
-        coVerify { queue.addPlayer(user1) }
+        coVerify { queue.addPlayer(any(), any(), any()) }
         coVerify { queue.findMatch() }
-        coVerify { gameCreator.createGame(any(), any()) }
+        coVerify { gameCreator.createGame(any(), any(), any(), any()) }
         coVerify { notifier.notifyMatchFound(any()) } // Verify notification was sent
         coVerify(exactly = 0) { notifier.notifyQueuePosition(any(), any()) } // No queue position notification when matched
     }
@@ -206,9 +208,9 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         // Mock behavior
         coEvery { userChecker.exists(user1) } returns true
         coEvery { queue.isPlayerInQueue(user1) } returns false
-        coEvery { queue.addPlayer(user1) } returns QueueEntry(user1, now)
+        coEvery { queue.addPlayer(any(), any(), any()) } returns QueueEntry(user1, now)
         coEvery { queue.findMatch() } returns Pair(queueEntry1, queueEntry2)
-        coEvery { gameCreator.createGame(any(), any()) } returns Result.failure(Exception(errorMessage))
+        coEvery { gameCreator.createGame(any(), any(), any(), any()) } returns Result.failure(Exception(errorMessage))
         coEvery { queue.getQueueSize() } returns 10
 
         // When
@@ -219,7 +221,7 @@ class JoinMatchmakingUseCaseTest : FunSpec({
         result.exceptionOrNull()!!.message shouldBe errorMessage
 
         // Verify - no notifications should be sent on game creation failure
-        coVerify { gameCreator.createGame(any(), any()) }
+        coVerify { gameCreator.createGame(any(), any(), any(), any()) }
         coVerify(exactly = 0) { notifier.notifyMatchFound(any()) }
         coVerify(exactly = 0) { notifier.notifyQueuePosition(any(), any()) }
     }

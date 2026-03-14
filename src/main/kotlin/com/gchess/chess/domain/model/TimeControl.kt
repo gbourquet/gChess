@@ -19,21 +19,23 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.matchmaking.domain.model
-
-import com.gchess.shared.domain.model.UserId
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
+package com.gchess.chess.domain.model
 
 /**
- * Value object representing a user waiting in the matchmaking queue.
+ * Value object representing time control for a chess game (Fischer time control).
  *
- * @property userId The unique identifier of the user
- * @property joinedAt The timestamp when the user joined the queue
+ * @property totalTimeSeconds Total time per player in seconds (0 = unlimited)
+ * @property incrementSeconds Increment added after each move in seconds (0 = no increment)
  */
-data class QueueEntry @OptIn(ExperimentalTime::class) constructor(
-    val userId: UserId,
-    val joinedAt: Instant,
-    val totalTimeSeconds: Int = 0,
-    val incrementSeconds: Int = 0
-)
+data class TimeControl(val totalTimeSeconds: Int, val incrementSeconds: Int) {
+    init {
+        require(totalTimeSeconds >= 0) { "totalTimeSeconds must be >= 0" }
+        require(incrementSeconds >= 0) { "incrementSeconds must be >= 0" }
+    }
+
+    val isUntimed: Boolean get() = totalTimeSeconds == 0
+
+    companion object {
+        val UNLIMITED = TimeControl(0, 0)
+    }
+}

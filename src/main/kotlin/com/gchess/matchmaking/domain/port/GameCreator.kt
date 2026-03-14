@@ -44,9 +44,19 @@ interface GameCreator {
      * The Matchmaking context creates the Player objects (including PlayerId generation
      * and color assignment) before calling this method.
      *
+     * Time control parameters are passed as primitives (Int) to preserve bounded context isolation —
+     * the Chess domain's TimeControl value object must not leak into the Matchmaking domain.
+     *
      * @param whitePlayer The player who will control white pieces (must have PlayerSide.WHITE)
      * @param blackPlayer The player who will control black pieces (must have PlayerSide.BLACK)
+     * @param totalTimeSeconds Total time per player in seconds (0 = unlimited)
+     * @param incrementSeconds Increment added per move in seconds (0 = no increment)
      * @return Result containing the created GameId on success, or an error on failure
      */
-    suspend fun createGame(whitePlayer: Player, blackPlayer: Player): Result<GameId>
+    suspend fun createGame(
+        whitePlayer: Player,
+        blackPlayer: Player,
+        totalTimeSeconds: Int = 0,
+        incrementSeconds: Int = 0
+    ): Result<GameId>
 }

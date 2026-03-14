@@ -109,4 +109,14 @@ interface GameEventNotifier {
      * @param player The player who rejected the draw
      */
     suspend fun notifyDrawRejected(game: Game, player: Player)
+
+    /**
+     * Notify that a player has run out of time (timeout confirmed via ClaimTimeout).
+     * This should be broadcast to both players and all spectators.
+     * The current player at the time of timeout is the loser.
+     *
+     * @param game The game state after timeout (status = TIMEOUT)
+     * @param loser The player who ran out of time
+     */
+    suspend fun notifyTimeout(game: Game, loser: Player)
 }

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="20260310-add-time-control-columns" author="gbourquet">
+        <!-- Time control parameters on the game -->
+        <addColumn tableName="games">
+            <column name="time_control_total_seconds" type="INT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <addColumn tableName="games">
+            <column name="time_control_increment_seconds" type="INT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <!-- Clock snapshot (cache, recalculable from game_moves) -->
+        <addColumn tableName="games">
+            <column name="white_time_remaining_ms" type="BIGINT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <addColumn tableName="games">
+            <column name="black_time_remaining_ms" type="BIGINT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <!-- Timestamp of the last move (denormalized cache of MAX(game_moves.received_at)) -->
+        <addColumn tableName="games">
+            <column name="last_move_at" type="TIMESTAMP">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <!-- Server-side receive timestamp per move (source of truth for timing) -->
+        <addColumn tableName="game_moves">
+            <column name="received_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

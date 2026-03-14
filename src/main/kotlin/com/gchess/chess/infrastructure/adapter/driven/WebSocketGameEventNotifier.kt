@@ -34,6 +34,7 @@ import com.gchess.chess.infrastructure.adapter.driver.dto.GameResignedMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.DrawOfferedMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.DrawAcceptedMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.DrawRejectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.TimeoutConfirmedMessage
 import com.gchess.chess.infrastructure.adapter.driver.GameConnectionManager
 import com.gchess.chess.infrastructure.adapter.driver.SpectatorConnectionManager
 import com.gchess.shared.domain.model.Player
@@ -69,7 +70,9 @@ class WebSocketGameEventNotifier(
                 newPositionFen = game.board.toFen(),
                 gameStatus = game.status.toString(),
                 currentSide = game.currentSide.toString(),
-                isCheck = chessRules.isInCheck(game.board, game.currentSide)
+                isCheck = chessRules.isInCheck(game.board, game.currentSide),
+                whiteTimeRemainingMs = game.whiteTimeRemainingMs,
+                blackTimeRemainingMs = game.blackTimeRemainingMs
             )
 
             // Broadcast to both players
@@ -113,7 +116,8 @@ class WebSocketGameEventNotifier(
         return status == GameStatus.CHECKMATE ||
                 status == GameStatus.STALEMATE ||
                 status == GameStatus.DRAW ||
-                status == GameStatus.RESIGNED
+                status == GameStatus.RESIGNED ||
+                status == GameStatus.TIMEOUT
     }
 
     override suspend fun notifyMoveRejected(playerId: PlayerId, reason: String) {
@@ -278,6 +282,39 @@ class WebSocketGameEventNotifier(
             )
         } catch (e: Exception) {
             logger.error("Error sending draw rejected notification for game ${game.id}", e)
+        }
+    }
+
+    override suspend fun notifyTimeout(game: Game, loser: Player) {
+        try {
+            val message = TimeoutConfirmedMessage(
+                loserPlayerId = loser.id.toString(),
+                gameStatus = game.status.toString()
+            )
+
+            // Broadcast to both players
+            val (whiteSent, blackSent) = gameConnectionManager.broadcastToGame(game, message)
+
+            // Broadcast to all spectators
+            val spectatorCount = spectatorConnectionManager.broadcastToSpectators(game.id, message)
+
+            logger.info(
+                "Timeout notification sent for game ${game.id}: " +
+                        "loser=${loser.id}, white=$whiteSent, black=$blackSent, spectators=$spectatorCount"
+            )
+
+            // Close WebSocket connections after timeout
+            kotlinx.coroutines.delay(1000)
+
+            val (whiteClosed, blackClosed) = gameConnectionManager.closeGameConnections(game)
+            val spectatorsClosed = spectatorConnectionManager.closeGameSpectators(game.id)
+
+            logger.info(
+                "Closed WebSocket connections for timed-out game ${game.id}: " +
+                        "white=$whiteClosed, black=$blackClosed, spectators=$spectatorsClosed"
+            )
+        } catch (e: Exception) {
+            logger.error("Error sending timeout notification for game ${game.id}", e)
         }
     }
 }

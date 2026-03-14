@@ -34,6 +34,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jooq.DSLContext
 import java.time.LocalDateTime
+import java.time.ZoneOffset
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 /**
  * PostgreSQL implementation of GameRepository using jOOQ.
@@ -51,10 +54,15 @@ class PostgresGameRepository(
     private val dsl: DSLContext
 ) : GameRepository {
 
+    @OptIn(ExperimentalTime::class)
     override suspend fun save(game: Game): Game = withContext(Dispatchers.IO) {
         dsl.transactionResult { config ->
             val ctx = config.dsl()
             val now = LocalDateTime.now()
+            val lastMoveAtDb = game.lastMoveAt?.let { instant ->
+                java.time.Instant.ofEpochMilli(instant.toEpochMilliseconds())
+                    .atOffset(ZoneOffset.UTC).toLocalDateTime()
+            }
 
             // Upsert game record
             // Note: We now persist both PlayerId and UserId for each player
@@ -68,6 +76,11 @@ class PostgresGameRepository(
                 .set(GAMES.CURRENT_SIDE, game.currentSide.name)
                 .set(GAMES.STATUS, game.status.name)
                 .set(GAMES.DRAW_OFFERED_BY, game.drawOfferedBy?.name)
+                .set(GAMES.TIME_CONTROL_TOTAL_SECONDS, game.timeControl?.totalTimeSeconds)
+                .set(GAMES.TIME_CONTROL_INCREMENT_SECONDS, game.timeControl?.incrementSeconds)
+                .set(GAMES.WHITE_TIME_REMAINING_MS, game.whiteTimeRemainingMs)
+                .set(GAMES.BLACK_TIME_REMAINING_MS, game.blackTimeRemainingMs)
+                .set(GAMES.LAST_MOVE_AT, lastMoveAtDb)
                 .set(GAMES.CREATED_AT, now)
                 .set(GAMES.UPDATED_AT, now)
                 .onConflict(GAMES.ID)
@@ -76,6 +89,9 @@ class PostgresGameRepository(
                 .set(GAMES.CURRENT_SIDE, game.currentSide.name)
                 .set(GAMES.STATUS, game.status.name)
                 .set(GAMES.DRAW_OFFERED_BY, game.drawOfferedBy?.name)
+                .set(GAMES.WHITE_TIME_REMAINING_MS, game.whiteTimeRemainingMs)
+                .set(GAMES.BLACK_TIME_REMAINING_MS, game.blackTimeRemainingMs)
+                .set(GAMES.LAST_MOVE_AT, lastMoveAtDb)
                 .set(GAMES.UPDATED_AT, now)
                 .execute()
 
@@ -93,6 +109,7 @@ class PostgresGameRepository(
                     .set(GAME_MOVES.TO_SQUARE, move.to.toAlgebraic())
                     .set(GAME_MOVES.PROMOTION, move.promotion?.name)
                     .set(GAME_MOVES.CREATED_AT, now)
+                    .set(GAME_MOVES.RECEIVED_AT, now)
                     .execute()
             }
 
@@ -100,6 +117,7 @@ class PostgresGameRepository(
         }
     }
 
+    @OptIn(ExperimentalTime::class)
     override suspend fun findById(id: GameId): Game? = withContext(Dispatchers.IO) {
         // Fetch game record
         val gameRecord = dsl.select(
@@ -111,7 +129,12 @@ class PostgresGameRepository(
                 GAMES.BOARD_FEN,
                 GAMES.CURRENT_SIDE,
                 GAMES.STATUS,
-                GAMES.DRAW_OFFERED_BY
+                GAMES.DRAW_OFFERED_BY,
+                GAMES.TIME_CONTROL_TOTAL_SECONDS,
+                GAMES.TIME_CONTROL_INCREMENT_SECONDS,
+                GAMES.WHITE_TIME_REMAINING_MS,
+                GAMES.BLACK_TIME_REMAINING_MS,
+                GAMES.LAST_MOVE_AT
             )
             .from(GAMES)
             .where(GAMES.ID.eq(id.value))
@@ -141,6 +164,16 @@ class PostgresGameRepository(
         val whitePlayer = Player(whitePlayerId, whiteUserId, PlayerSide.WHITE)
         val blackPlayer = Player(blackPlayerId, blackUserId, PlayerSide.BLACK)
 
+        val totalSeconds = gameRecord.value10()
+        val incrementSeconds = gameRecord.value11()
+        val timeControl = if (totalSeconds != null && incrementSeconds != null) {
+            TimeControl(totalSeconds, incrementSeconds)
+        } else null
+
+        val lastMoveAt = gameRecord.value14()?.let { ldt ->
+                Instant.fromEpochMilliseconds(ldt.toInstant(ZoneOffset.UTC).toEpochMilli())
+            }
+
         Game(
             id = GameId(gameRecord.value1()!!),
             whitePlayer = whitePlayer,
@@ -149,7 +182,11 @@ class PostgresGameRepository(
             currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
             status = GameStatus.valueOf(gameRecord.value8()!!),
             moveHistory = moves,
-            drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) }
+            drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) },
+            timeControl = timeControl,
+            whiteTimeRemainingMs = gameRecord.value12(),
+            blackTimeRemainingMs = gameRecord.value13(),
+            lastMoveAt = lastMoveAt
         )
     }
 
@@ -160,6 +197,7 @@ class PostgresGameRepository(
         // game_moves are deleted automatically via CASCADE
     }
 
+    @OptIn(ExperimentalTime::class)
     override suspend fun findAll(): List<Game> = withContext(Dispatchers.IO) {
         // Fetch all games
         val gameRecords = dsl.select(
@@ -171,7 +209,12 @@ class PostgresGameRepository(
                 GAMES.BOARD_FEN,
                 GAMES.CURRENT_SIDE,
                 GAMES.STATUS,
-                GAMES.DRAW_OFFERED_BY
+                GAMES.DRAW_OFFERED_BY,
+                GAMES.TIME_CONTROL_TOTAL_SECONDS,
+                GAMES.TIME_CONTROL_INCREMENT_SECONDS,
+                GAMES.WHITE_TIME_REMAINING_MS,
+                GAMES.BLACK_TIME_REMAINING_MS,
+                GAMES.LAST_MOVE_AT
             )
             .from(GAMES)
             .fetch()
@@ -202,6 +245,16 @@ class PostgresGameRepository(
             val whitePlayer = Player(whitePlayerId, whiteUserId, PlayerSide.WHITE)
             val blackPlayer = Player(blackPlayerId, blackUserId, PlayerSide.BLACK)
 
+            val totalSeconds = gameRecord.value10()
+            val incrementSeconds = gameRecord.value11()
+            val timeControl = if (totalSeconds != null && incrementSeconds != null) {
+                TimeControl(totalSeconds, incrementSeconds)
+            } else null
+
+            val lastMoveAt = gameRecord.value14()?.let { ldt ->
+                Instant.fromEpochMilliseconds(ldt.toInstant(ZoneOffset.UTC).toEpochMilli())
+            }
+
             Game(
                 id = GameId(gameId),
                 whitePlayer = whitePlayer,
@@ -210,7 +263,11 @@ class PostgresGameRepository(
                 currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
                 status = GameStatus.valueOf(gameRecord.value8()!!),
                 moveHistory = moves,
-                drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) }
+                drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) },
+                timeControl = timeControl,
+                whiteTimeRemainingMs = gameRecord.value12(),
+                blackTimeRemainingMs = gameRecord.value13(),
+                lastMoveAt = lastMoveAt
             )
         }
     }

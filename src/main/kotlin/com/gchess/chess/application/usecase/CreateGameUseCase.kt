@@ -23,11 +23,14 @@ package com.gchess.chess.application.usecase
 
 import com.gchess.chess.domain.model.ChessPosition
 import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.TimeControl
 import com.gchess.shared.domain.model.Player
 import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.chess.domain.model.toChessPosition
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.shared.domain.model.GameId
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Use case for creating a new chess game.
@@ -54,7 +57,13 @@ open class CreateGameUseCase(
      * @param initialPosition Optional FEN string to set a custom starting position (defaults to standard chess position)
      * @return Result.success(Game) if game is created, Result.failure if validation fails
      */
-    open suspend fun execute(whitePlayer: Player, blackPlayer: Player, initialPosition: String? = null): Result<Game> {
+    @OptIn(ExperimentalTime::class)
+    open suspend fun execute(
+        whitePlayer: Player,
+        blackPlayer: Player,
+        initialPosition: String? = null,
+        timeControl: TimeControl? = null
+    ): Result<Game> {
         // Validate that white player has WHITE side
         if (whitePlayer.side != PlayerSide.WHITE) {
             return Result.failure(Exception("White player must have WHITE side, got ${whitePlayer.side}"))
@@ -81,13 +90,25 @@ open class CreateGameUseCase(
             ChessPosition.initial()
         }
 
+        // Initialize clock if timed game
+        val (whiteTimeMs, blackTimeMs, lastMoveAt) = if (timeControl != null && !timeControl.isUntimed) {
+            val totalMs = timeControl.totalTimeSeconds * 1000L
+            Triple(totalMs, totalMs, Clock.System.now())
+        } else {
+            Triple(null, null, null)
+        }
+
         // Create and save the game
         val game = Game(
             id = GameId.generate(),
             whitePlayer = whitePlayer,
             blackPlayer = blackPlayer,
             board = board,
-            currentSide = board.sideToMove
+            currentSide = board.sideToMove,
+            timeControl = timeControl,
+            whiteTimeRemainingMs = whiteTimeMs,
+            blackTimeRemainingMs = blackTimeMs,
+            lastMoveAt = lastMoveAt
         )
 
         return Result.success(gameRepository.save(game))

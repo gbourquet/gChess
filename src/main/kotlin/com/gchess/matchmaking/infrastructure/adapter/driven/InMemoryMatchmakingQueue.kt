@@ -53,26 +53,29 @@ class InMemoryMatchmakingQueue : MatchmakingQueue {
     private val indexByUser = ConcurrentHashMap<UserId, QueueEntry>()
 
     @OptIn(ExperimentalTime::class)
-    override suspend fun addPlayer(userId: UserId): QueueEntry = withContext(Dispatchers.IO) {
-        lock.withLock {
-            // Check if user already in queue
-            if (indexByUser.containsKey(userId)) {
-                throw IllegalStateException("User $userId is already in the queue")
+    override suspend fun addPlayer(userId: UserId, totalTimeSeconds: Int, incrementSeconds: Int): QueueEntry =
+        withContext(Dispatchers.IO) {
+            lock.withLock {
+                // Check if user already in queue
+                if (indexByUser.containsKey(userId)) {
+                    throw IllegalStateException("User $userId is already in the queue")
+                }
+
+                // Create queue entry
+                val entry = QueueEntry(
+                    userId = userId,
+                    joinedAt = Clock.System.now(),
+                    totalTimeSeconds = totalTimeSeconds,
+                    incrementSeconds = incrementSeconds
+                )
+
+                // Add to both queue and index
+                queue.add(entry)
+                indexByUser[userId] = entry
+
+                entry
             }
-
-            // Create queue entry
-            val entry = QueueEntry(
-                userId = userId,
-                joinedAt = Clock.System.now()
-            )
-
-            // Add to both queue and index
-            queue.add(entry)
-            indexByUser[userId] = entry
-
-            entry
         }
-    }
 
     override suspend fun removePlayer(userId: UserId): Boolean = withContext(Dispatchers.IO) {
         lock.withLock {
@@ -93,20 +96,25 @@ class InMemoryMatchmakingQueue : MatchmakingQueue {
                 return@withContext null
             }
 
-            // Poll the two oldest entries (FIFO)
-            val user1Entry = queue.poll() ?: return@withContext null
-            val user2Entry = queue.poll() ?: run {
-                // If second poll fails, put first user back
-                queue.add(user1Entry)
-                return@withContext null
+            // Scan for two entries with compatible time controls (O(n²), acceptable for typical queue sizes)
+            val entries = queue.toList()
+            for (i in entries.indices) {
+                for (j in i + 1 until entries.size) {
+                    val e1 = entries[i]
+                    val e2 = entries[j]
+                    if (e1.totalTimeSeconds == e2.totalTimeSeconds &&
+                        e1.incrementSeconds == e2.incrementSeconds
+                    ) {
+                        queue.remove(e1)
+                        queue.remove(e2)
+                        indexByUser.remove(e1.userId)
+                        indexByUser.remove(e2.userId)
+                        return@withContext Pair(e1, e2)
+                    }
+                }
             }
 
-            // Remove from index
-            indexByUser.remove(user1Entry.userId)
-            indexByUser.remove(user2Entry.userId)
-
-            // Return the match
-            Pair(user1Entry, user2Entry)
+            null
         }
     }
 

@@ -14,7 +14,9 @@ sealed class MatchmakingMessage {
 @SerialName("JoinQueue")
 data class JoinQueueMessage(
     @SerialName("myType")
-    override val type: String = "JoinQueue"
+    override val type: String = "JoinQueue",
+    val totalTimeMinutes: Int = 0,  // 0 = unlimited
+    val incrementSeconds: Int = 0
 ) : MatchmakingMessage()
 
 /**
