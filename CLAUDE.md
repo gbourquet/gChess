@@ -52,7 +52,7 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
     - Chess use cases NEVER manipulate UserId - only Player objects
 - **Ports**: `GameRepository`, `GameEventNotifier`
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
-- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`
+- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`, `ClaimTimeoutUseCase`
 - **Infrastructure**: `GameRoutes` (REST), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
 
 #### User Context (`com.gchess.user`)
@@ -99,7 +99,7 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory
 - `Player`: id (PlayerId), userId, side (WHITE/BLACK) - created via `Player.create(userId, side)`
 - `ChessPosition`: Bitboard-based (12 bitboards: 6 types × 2 colors), FEN support
-- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED
+- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT
 - `Game.pendingDrawOffer`: Optional PlayerSide indicating who offered a draw
 
 ### User
@@ -121,6 +121,7 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 ### Game Ending
 - ✅ Checkmate, Stalemate
 - ✅ Fifty-move rule, Threefold repetition, Insufficient material
+- ✅ Timeout (flag): auto-detected on move attempt + client-initiated via `ClaimTimeout`
 
 ## API Endpoints (Port 8080)
 
@@ -169,12 +170,15 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
   - `{"type": "MoveAttempt", "from": "e2", "to": "e4", "promotion": "QUEEN"}`
   - `{"type": "Resign"}`
   - `{"type": "OfferDraw"}`, `{"type": "AcceptDraw"}`, `{"type": "RejectDraw"}`
+  - `{"type": "ClaimTimeout"}` — réclame le timeout de l'adversaire (uniquement le joueur qui attend)
 - Server → Client: `GameAuthSuccess`, `GameAuthFailed`, `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `GameError`, `PlayerDisconnected`, `PlayerReconnected`
+  - `TimeoutConfirmed` (broadcast) `{ loserPlayerId, gameStatus: "TIMEOUT" }` — timeout confirmé
+  - `TimeoutClaimRejected` (uniquement au réclamant) `{ remainingMs }` — encore du temps
 - Multi-device support (same UserId can connect to multiple games)
 
 **Spectator**: `ws://localhost:8080/ws/game/{gameId}/spectate?token=<JWT>`
 - Read-only, indexed by (GameId, UserId)
-- Receives: `GameStateSync`, `MoveExecuted`, `PlayerDisconnected/Reconnected`
+- Receives: `GameStateSync`, `MoveExecuted`, `PlayerDisconnected/Reconnected`, `TimeoutConfirmed`
 
 ### Connection Managers
 - `MatchmakingConnectionManager`: UserId → WebSocketSession
@@ -202,7 +206,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Matchmaking queue is in-memory (lost on restart; games/users persist)
 - No JWT refresh mechanism
 - Simple FIFO matchmaking (no ELO)
-- No game clocks (time control)
+- Fischer time control implemented (total time + increment); clock cache is async/recalculable from `game_moves.received_at`; each player's clock starts after their own first move (moves 1 & 2 are free)
 - WebSocket reconnection is manual (no auto-recovery)
 
 ## Architecture Testing (ArchUnit)

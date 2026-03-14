@@ -96,10 +96,18 @@ fun Application.configureMatchmakingWebSocketRoutes() {
                             // Parse message
                             when (val message = json.decodeFromString<MatchmakingMessage>(text)) {
                                 is JoinQueueMessage -> {
-                                    logger.info("User $userId joining matchmaking queue")
+                                    val totalTimeSeconds = message.totalTimeMinutes * 60
+                                    logger.info(
+                                        "User $userId joining matchmaking queue " +
+                                                "(time: ${message.totalTimeMinutes}min+${message.incrementSeconds}s)"
+                                    )
 
-                                    // Call the use case
-                                    val result = joinMatchmakingUseCase.execute(userId)
+                                    // Call the use case with time control preferences
+                                    val result = joinMatchmakingUseCase.execute(
+                                        userId,
+                                        totalTimeSeconds,
+                                        message.incrementSeconds
+                                    )
 
                                     if (result.isFailure) {
                                         // Send error notification

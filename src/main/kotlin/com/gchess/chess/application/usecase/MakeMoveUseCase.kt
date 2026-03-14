@@ -29,6 +29,8 @@ import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.shared.domain.model.GameId
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 /**
  * Use case for executing a move in a chess game.
@@ -68,7 +70,8 @@ class MakeMoveUseCase(
      * @param move The move to execute
      * @return Result.success(Game) if move is valid, Result.failure otherwise
      */
-    suspend fun execute(gameId: GameId, player: Player, move: Move): Result<Game> {
+    @OptIn(ExperimentalTime::class)
+    suspend fun execute(gameId: GameId, player: Player, move: Move, receivedAt: Instant): Result<Game> {
         // Find the game
         val game = gameRepository.findById(gameId)
             ?: return Result.failure(Exception("Game not found"))
@@ -83,13 +86,28 @@ class MakeMoveUseCase(
             return Result.failure(Exception("Game is already finished"))
         }
 
+        // Apply clock tick and check for flag (timeout)
+        val gameWithClock = game.applyClockTick(receivedAt)
+        val currentTimeMs = if (gameWithClock.currentSide == com.gchess.shared.domain.model.PlayerSide.WHITE) {
+            gameWithClock.whiteTimeRemainingMs
+        } else {
+            gameWithClock.blackTimeRemainingMs
+        }
+
+        if (currentTimeMs != null && currentTimeMs <= 0) {
+            val timedOutGame = gameWithClock.copy(status = GameStatus.TIMEOUT)
+            gameRepository.save(timedOutGame)
+            gameEventNotifier.notifyMoveExecuted(timedOutGame, move)
+            return Result.success(timedOutGame)
+        }
+
         // Verify move is legal
         if (!chessRules.isMoveLegal(game.board, move)) {
             return Result.failure(Exception("Invalid move"))
         }
 
         // Execute the move
-        val gameAfterMove = game.makeMove(move)
+        val gameAfterMove = gameWithClock.makeMove(move)
 
         // Evaluate game status after the move
         val updatedGame = updateGameStatus(gameAfterMove)
@@ -112,6 +130,7 @@ class MakeMoveUseCase(
      * 5. Insufficient material - impossible to checkmate
      * 6. Otherwise - game continues (IN_PROGRESS)
      */
+    @OptIn(ExperimentalTime::class)
     private fun updateGameStatus(game: Game): Game {
         val position = game.board
         val positionHistory = game.getPositionHistory()

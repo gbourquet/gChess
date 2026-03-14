@@ -2,7 +2,7 @@ asyncapi: 3.0.0
 
 info:
   title: gChess WebSocket API
-  version: 2.0.0
+  version: 2.2.0
   description: |
     Real-time WebSocket API for gChess chess application.
 
@@ -44,7 +44,7 @@ channels:
     description: |
       WebSocket channel for matchmaking (human vs human).
 
-      Users join the FIFO queue and receive notifications when matched with another player.
+      Users join the queue and receive notifications when matched with another player with a compatible time control.
 
       **Authentication**: JWT required
       **Connection scope**: One connection per UserId
@@ -110,6 +110,12 @@ channels:
         $ref: '#/components/messages/RejectDraw'
       DrawRejected:
         $ref: '#/components/messages/DrawRejected'
+      ClaimTimeout:
+        $ref: '#/components/messages/ClaimTimeout'
+      TimeoutConfirmed:
+        $ref: '#/components/messages/TimeoutConfirmed'
+      TimeoutClaimRejected:
+        $ref: '#/components/messages/TimeoutClaimRejected'
       Error:
         $ref: '#/components/messages/Error'
 
@@ -143,6 +149,8 @@ channels:
         $ref: '#/components/messages/GameResigned'
       DrawAccepted:
         $ref: '#/components/messages/DrawAccepted'
+      TimeoutConfirmed:
+        $ref: '#/components/messages/TimeoutConfirmed'
 
 components:
   messages:
@@ -182,7 +190,11 @@ components:
       summary: Join matchmaking queue
       description: |
         Client → Server. User requests to join matchmaking.
-        User joins FIFO queue and waits for another human opponent.
+        User joins the queue and waits for an opponent with a compatible time control.
+
+        **Time control (Fischer)**: optional. Both players must request the same
+        `totalTimeMinutes` and `incrementSeconds` to be matched together.
+        Set `totalTimeMinutes` to `0` (default) for unlimited games.
       payload:
         type: object
         required: [type]
@@ -190,6 +202,22 @@ components:
           type:
             type: string
             const: JoinQueue
+          totalTimeMinutes:
+            type: integer
+            description: |
+              Total time per player in minutes (Fischer clock).
+              `0` means unlimited (no clock). Default: `0`.
+            minimum: 0
+            default: 0
+            example: 5
+          incrementSeconds:
+            type: integer
+            description: |
+              Increment added to the player's clock after each move, in seconds.
+              Default: `0` (no increment).
+            minimum: 0
+            default: 0
+            example: 3
 
     QueuePositionUpdate:
       summary: Queue position update
@@ -304,7 +332,7 @@ components:
           gameStatus:
             type: string
             description: Current game status
-            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED]
+            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT]
             example: 'IN_PROGRESS'
           currentSide:
             type: string
@@ -317,6 +345,20 @@ components:
               True if the current player (currentSide) is in check.
               Useful for UI feedback to highlight the king in danger.
             example: false
+          whiteTimeRemainingMs:
+            type: integer
+            format: int64
+            description: |
+              White player's remaining clock time in milliseconds after this move.
+              `null` for unlimited games.
+            example: 297000
+          blackTimeRemainingMs:
+            type: integer
+            format: int64
+            description: |
+              Black player's remaining clock time in milliseconds after this move.
+              `null` for unlimited games.
+            example: 300000
 
     MoveRejected:
       summary: Move rejected (invalid)
@@ -363,13 +405,39 @@ components:
           gameStatus:
             type: string
             description: Current game status
-            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED]
+            enum: [IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT]
             example: 'IN_PROGRESS'
           currentSide:
             type: string
             description: Whose turn it is
             enum: [WHITE, BLACK]
             example: 'WHITE'
+          totalTimeSeconds:
+            type: integer
+            description: |
+              Total time per player in seconds (Fischer clock).
+              `null` for unlimited games.
+            example: 300
+          incrementSeconds:
+            type: integer
+            description: |
+              Increment per move in seconds.
+              `null` for unlimited games.
+            example: 3
+          whiteTimeRemainingMs:
+            type: integer
+            format: int64
+            description: |
+              White player's remaining clock time in milliseconds.
+              `null` for unlimited games.
+            example: 300000
+          blackTimeRemainingMs:
+            type: integer
+            format: int64
+            description: |
+              Black player's remaining clock time in milliseconds.
+              `null` for unlimited games.
+            example: 300000
           whitePlayerId:
             type: string
             description: PlayerId of white player (ULID)
@@ -539,6 +607,70 @@ components:
             type: string
             description: PlayerId of the player who rejected the draw (ULID)
             example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+
+    # ========== Timeout Messages ==========
+    ClaimTimeout:
+      summary: Claim opponent timeout
+      description: |
+        Client → Server. The waiting player asserts that the opponent's clock has reached zero.
+
+        Can only be sent by the player who is **not** currently to move.
+        The server computes the true remaining time and responds with either
+        `TimeoutConfirmed` (broadcast) or `TimeoutClaimRejected` (private).
+
+        Preconditions:
+        - The game must be `IN_PROGRESS` or `CHECK`
+        - The game must have an active time control (Fischer)
+        - Both players must have completed their first move (≥ 2 moves in history),
+          since each player's clock only starts after their own first move
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: ClaimTimeout
+
+    TimeoutConfirmed:
+      summary: Timeout confirmed — game over
+      description: |
+        Server → Client. The opponent's clock truly reached zero.
+        Broadcast to both players and all spectators.
+        WebSocket connections are closed ~1 second after this message.
+      payload:
+        type: object
+        required: [type, loserPlayerId, gameStatus]
+        properties:
+          type:
+            type: string
+            const: TimeoutConfirmed
+          loserPlayerId:
+            type: string
+            description: PlayerId of the player who ran out of time (ULID)
+            example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
+          gameStatus:
+            type: string
+            const: TIMEOUT
+            description: Game status after timeout
+
+    TimeoutClaimRejected:
+      summary: Timeout claim rejected — opponent still has time
+      description: |
+        Server → Client. Sent **only to the claimer** when the opponent still has time remaining.
+        The client should use `remainingMs` to re-synchronise its local countdown timer.
+      payload:
+        type: object
+        required: [type, remainingMs]
+        properties:
+          type:
+            type: string
+            const: TimeoutClaimRejected
+          remainingMs:
+            type: integer
+            format: int64
+            description: Opponent's true remaining clock time in milliseconds
+            minimum: 1
+            example: 4823
 
     # ========== Common Messages ==========
     Error:

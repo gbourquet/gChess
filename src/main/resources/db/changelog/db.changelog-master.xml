@@ -21,4 +21,7 @@
     <!-- Bot context removal: drop bots table and bot system users -->
     <include file="db/changelog/changes/20260308-drop-bots-table.xml"/>
 
+    <!-- Chess context: add time control columns -->
+    <include file="db/changelog/changes/20260310-add-time-control-columns.xml"/>
+
 </databaseChangeLog>

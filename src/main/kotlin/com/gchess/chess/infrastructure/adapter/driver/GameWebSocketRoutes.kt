@@ -21,6 +21,8 @@
  */
 package com.gchess.chess.infrastructure.adapter.driver
 
+import com.gchess.chess.application.usecase.ClaimTimeoutResult
+import com.gchess.chess.application.usecase.ClaimTimeoutUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.application.usecase.ResignGameUseCase
@@ -38,10 +40,12 @@ import com.gchess.chess.infrastructure.adapter.driver.dto.GameWebSocketMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveAttemptMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveDto
 import com.gchess.chess.infrastructure.adapter.driver.dto.MoveRejectedMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.ClaimTimeoutMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.ResignMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.OfferDrawMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.AcceptDrawMessage
 import com.gchess.chess.infrastructure.adapter.driver.dto.RejectDrawMessage
+import com.gchess.chess.infrastructure.adapter.driver.dto.TimeoutClaimRejectedMessage
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.infrastructure.websocket.WebSocketJwtAuth
 import io.ktor.server.application.*
@@ -51,6 +55,8 @@ import io.ktor.websocket.*
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Configure all WebSocket routes.
@@ -78,6 +84,7 @@ fun Application.configureGameWebSocketRoutes() {
     val offerDrawUseCase by inject<OfferDrawUseCase>()
     val acceptDrawUseCase by inject<AcceptDrawUseCase>()
     val rejectDrawUseCase by inject<RejectDrawUseCase>()
+    val claimTimeoutUseCase by inject<ClaimTimeoutUseCase>()
 
     routing {
         // ========== Game WebSocket ==========
@@ -161,7 +168,11 @@ fun Application.configureGameWebSocketRoutes() {
                 whitePlayerId = game.whitePlayer.id.toString(),
                 blackPlayerId = game.blackPlayer.id.toString(),
                 whiteUsername = whiteUser?.username ?: "White",
-                blackUsername = blackUser?.username ?: "Black"
+                blackUsername = blackUser?.username ?: "Black",
+                totalTimeSeconds = game.timeControl?.totalTimeSeconds,
+                incrementSeconds = game.timeControl?.incrementSeconds,
+                whiteTimeRemainingMs = game.whiteTimeRemainingMs,
+                blackTimeRemainingMs = game.blackTimeRemainingMs
             )
             gameManager.send(playerId, stateSyncMsg)
 
@@ -173,6 +184,10 @@ fun Application.configureGameWebSocketRoutes() {
                         logger.debug("Received message from player $playerId: $text")
 
                         try {
+                            // Capture receive timestamp before parsing (server time, not client time)
+                            @OptIn(ExperimentalTime::class)
+                            val receivedAt = Clock.System.now()
+
                             // Parse message
                             when (val message = json.decodeFromString<GameWebSocketMessage>(text)) {
                                 is MoveAttemptMessage -> {
@@ -188,7 +203,8 @@ fun Application.configureGameWebSocketRoutes() {
                                     val move = Move(from, to, promotion)
 
                                     // Call the use case (player object already available from connection)
-                                    val result = makeMoveUseCase.execute(gameId, player, move)
+                                    @OptIn(ExperimentalTime::class)
+                                    val result = makeMoveUseCase.execute(gameId, player, move, receivedAt)
 
                                     if (result.isFailure) {
                                         // Send error notification to the player who attempted the move
@@ -269,6 +285,30 @@ fun Application.configureGameWebSocketRoutes() {
                                         logger.warn("Draw rejection failed for player $playerId: ${error.message}")
                                     } else {
                                         logger.info("Player $playerId successfully rejected draw in game $gameId")
+                                    }
+                                }
+
+                                is ClaimTimeoutMessage -> {
+                                    logger.info("Player $playerId claiming timeout in game $gameId")
+                                    @OptIn(ExperimentalTime::class)
+                                    when (val result = claimTimeoutUseCase.execute(gameId, player, Clock.System.now())) {
+                                        is ClaimTimeoutResult.TimeoutConfirmed -> {
+                                            logger.info("Timeout confirmed in game $gameId, loser=${result.loserPlayerId}")
+                                            // Broadcast already handled by notifyTimeout inside the use case
+                                        }
+                                        is ClaimTimeoutResult.TimeoutRejected -> {
+                                            logger.info("Timeout claim rejected for player $playerId: ${result.remainingMs}ms remaining")
+                                            val rejectedMsg = TimeoutClaimRejectedMessage(remainingMs = result.remainingMs)
+                                            gameManager.send(playerId, rejectedMsg)
+                                        }
+                                        is ClaimTimeoutResult.ClaimError -> {
+                                            logger.warn("Timeout claim error for player $playerId: ${result.message}")
+                                            val errorMsg = GameErrorMessage(
+                                                code = "CLAIM_TIMEOUT_FAILED",
+                                                message = result.message
+                                            )
+                                            gameManager.send(playerId, errorMsg)
+                                        }
                                     }
                                 }
 
@@ -378,7 +418,11 @@ fun Application.configureGameWebSocketRoutes() {
                 whitePlayerId = game.whitePlayer.id.toString(),
                 blackPlayerId = game.blackPlayer.id.toString(),
                 whiteUsername = whiteUser?.username ?: "White",
-                blackUsername = blackUser?.username ?: "Black"
+                blackUsername = blackUser?.username ?: "Black",
+                totalTimeSeconds = game.timeControl?.totalTimeSeconds,
+                incrementSeconds = game.timeControl?.incrementSeconds,
+                whiteTimeRemainingMs = game.whiteTimeRemainingMs,
+                blackTimeRemainingMs = game.blackTimeRemainingMs
             )
             spectatorManager.broadcastToSpectators(gameId, stateSyncMsg)
 

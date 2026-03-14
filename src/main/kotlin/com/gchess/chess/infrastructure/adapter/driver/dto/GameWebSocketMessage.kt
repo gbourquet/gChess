@@ -59,9 +59,11 @@ data class MoveExecutedMessage(
     override val type: String = "MoveExecuted",
     val move: MoveDto,
     val newPositionFen: String, // FEN notation of the new position
-    val gameStatus: String, // "IN_PROGRESS", "CHECK", "CHECKMATE", "STALEMATE", "DRAW"
+    val gameStatus: String, // "IN_PROGRESS", "CHECK", "CHECKMATE", "STALEMATE", "DRAW", "TIMEOUT"
     val currentSide: String, // "WHITE" or "BLACK" - whose turn it is now
-    val isCheck: Boolean // true if the current player is in check
+    val isCheck: Boolean, // true if the current player is in check
+    val whiteTimeRemainingMs: Long? = null,
+    val blackTimeRemainingMs: Long? = null
 ) : GameWebSocketMessage()
 
 @Serializable
@@ -100,7 +102,11 @@ data class GameStateSyncMessage(
     val whitePlayerId: String,
     val blackPlayerId: String,
     val whiteUsername: String,
-    val blackUsername: String
+    val blackUsername: String,
+    val totalTimeSeconds: Int? = null,
+    val incrementSeconds: Int? = null,
+    val whiteTimeRemainingMs: Long? = null,
+    val blackTimeRemainingMs: Long? = null
 ) : GameWebSocketMessage()
 
 /**
@@ -252,4 +258,42 @@ data class DrawRejectedMessage(
     @SerialName("myType")
     override val type: String = "DrawRejected",
     val rejectedByPlayerId: String
+) : GameWebSocketMessage()
+
+// ========== Timeout Messages ==========
+
+/**
+ * Client → Server: Player claims the opponent has run out of time
+ * Can only be sent by the player who is waiting (not the one whose turn it is)
+ */
+@Serializable
+@SerialName("ClaimTimeout")
+data class ClaimTimeoutMessage(
+    @SerialName("myType")
+    override val type: String = "ClaimTimeout"
+) : GameWebSocketMessage()
+
+/**
+ * Server → Client: Timeout confirmed, game is over
+ * Broadcast to both players and spectators
+ */
+@Serializable
+@SerialName("TimeoutConfirmed")
+data class TimeoutConfirmedMessage(
+    @SerialName("myType")
+    override val type: String = "TimeoutConfirmed",
+    val loserPlayerId: String,
+    val gameStatus: String
+) : GameWebSocketMessage()
+
+/**
+ * Server → Client: Timeout claim rejected — the opponent still has time remaining
+ * Sent only to the player who claimed the timeout
+ */
+@Serializable
+@SerialName("TimeoutClaimRejected")
+data class TimeoutClaimRejectedMessage(
+    @SerialName("myType")
+    override val type: String = "TimeoutClaimRejected",
+    val remainingMs: Long
 ) : GameWebSocketMessage()

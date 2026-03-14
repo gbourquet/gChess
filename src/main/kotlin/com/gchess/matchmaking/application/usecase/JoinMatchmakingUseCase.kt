@@ -58,7 +58,11 @@ class JoinMatchmakingUseCase(
      * @return Result.success(MatchmakingResult) indicating status (WAITING or MATCHED),
      *         or Result.failure if validation fails
      */
-    suspend fun execute(userId: UserId): Result<MatchmakingResult> {
+    suspend fun execute(
+        userId: UserId,
+        totalTimeSeconds: Int = 0,
+        incrementSeconds: Int = 0
+    ): Result<MatchmakingResult> {
         // 1. Validate user exists (ACL to User context)
         val userExists = try {
             userExistenceChecker.exists(userId)
@@ -75,10 +79,10 @@ class JoinMatchmakingUseCase(
             return Result.failure(Exception("User is already in the matchmaking queue"))
         }
 
-        // 3. Add user to queue
-        matchmakingQueue.addPlayer(userId)
+        // 3. Add user to queue with time control preferences
+        matchmakingQueue.addPlayer(userId, totalTimeSeconds, incrementSeconds)
 
-        // 4. Try to find a match
+        // 4. Try to find a match (only compatible time controls are paired)
         val matchPair = matchmakingQueue.findMatch()
 
         if (matchPair == null) {
@@ -106,8 +110,13 @@ class JoinMatchmakingUseCase(
         val whitePlayer = Player.create(whiteUserId, PlayerSide.WHITE)
         val blackPlayer = Player.create(blackUserId, PlayerSide.BLACK)
 
-        // Create game via ACL
-        val gameIdResult = gameCreator.createGame(whitePlayer, blackPlayer)
+        // Create game via ACL, passing time control as primitives
+        val gameIdResult = gameCreator.createGame(
+            whitePlayer,
+            blackPlayer,
+            user1Entry.totalTimeSeconds,
+            user1Entry.incrementSeconds
+        )
         if (gameIdResult.isFailure) {
             return Result.failure(gameIdResult.exceptionOrNull()!!)
         }

@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 /*
  * Copyright (c) 2024-2025 Guillaume Bourquet
  *

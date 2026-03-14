@@ -33,5 +33,6 @@ enum class GameStatus {
     STALEMATE,
     DRAW,
     RESIGNED,
-    DRAW_OFFERED
+    DRAW_OFFERED,
+    TIMEOUT
 }

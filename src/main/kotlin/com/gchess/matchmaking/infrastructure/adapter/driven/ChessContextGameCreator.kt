@@ -22,6 +22,7 @@
 package com.gchess.matchmaking.infrastructure.adapter.driven
 
 import com.gchess.chess.application.usecase.CreateGameUseCase
+import com.gchess.chess.domain.model.TimeControl
 import com.gchess.shared.domain.model.Player
 import com.gchess.matchmaking.domain.port.GameCreator
 import com.gchess.shared.domain.model.GameId
@@ -44,13 +45,23 @@ class ChessContextGameCreator(
     private val createGameUseCase: CreateGameUseCase
 ) : GameCreator {
 
-    override suspend fun createGame(whitePlayer: Player, blackPlayer: Player): Result<GameId> {
+    override suspend fun createGame(
+        whitePlayer: Player,
+        blackPlayer: Player,
+        totalTimeSeconds: Int,
+        incrementSeconds: Int
+    ): Result<GameId> {
+        // Reconstitute TimeControl from primitives (ACL boundary: primitives cross context boundary)
+        val timeControl = if (totalTimeSeconds > 0) {
+            TimeControl(totalTimeSeconds, incrementSeconds)
+        } else null
+
         // Call Chess context use case with Player objects
         // The Matchmaking context has already created these Players with:
         // - Generated PlayerIds
         // - Assigned UserId (from matched users)
         // - Assigned PlayerSide (WHITE/BLACK with random 50/50 distribution)
-        val gameResult = createGameUseCase.execute(whitePlayer, blackPlayer)
+        val gameResult = createGameUseCase.execute(whitePlayer, blackPlayer, timeControl = timeControl)
 
         // Transform Result<Game> to Result<GameId>
         return gameResult.map { game ->

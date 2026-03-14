@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 /*
  * Copyright (c) 2024-2025 Guillaume Bourquet
  *
@@ -34,6 +36,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.equals.shouldBeEqual
 import io.kotest.matchers.shouldBe
 import io.mockk.*
+import kotlin.time.Clock
 
 class MakeMoveUseCaseTest : FunSpec({
 
@@ -78,12 +81,13 @@ class MakeMoveUseCaseTest : FunSpec({
         every { chessRules.isCheckmate(any()) } returns false
         every { chessRules.isStalemate(any()) } returns false
         every { chessRules.isFiftyMoveRule(any()) } returns false
+        every { chessRules.isThreefoldRepetition(any(), any()) } returns false
         every { chessRules.isInsufficientMaterial(any()) } returns false
         coEvery { gameRepository.save(any()) } returns gameAfterMove
         coEvery { gameEventNotifier.notifyMoveExecuted(any(), move) } returns Unit
 
         // When
-        val result = useCase.execute(gameId, whitePlayer, move)
+        val result = useCase.execute(gameId, whitePlayer, move, Clock.System.now())
 
         // Then
         result.isSuccess shouldBe true
@@ -137,12 +141,13 @@ class MakeMoveUseCaseTest : FunSpec({
         every { chessRules.isCheckmate(any()) } returns false
         every { chessRules.isStalemate(any()) } returns false
         every { chessRules.isFiftyMoveRule(any()) } returns false
+        every { chessRules.isThreefoldRepetition(any(), any()) } returns false
         every { chessRules.isInsufficientMaterial(any()) } returns false
         coEvery { gameRepository.save(any()) } returns gameAfterMove
         coEvery { gameEventNotifier.notifyMoveExecuted(any(), move) } returns Unit
 
         // When
-        val result = useCase.execute(gameId, whitePlayer, move)
+        val result = useCase.execute(gameId, whitePlayer, move, Clock.System.now())
 
         // Then
         result.isSuccess shouldBe true
@@ -174,7 +179,7 @@ class MakeMoveUseCaseTest : FunSpec({
         coEvery { gameRepository.findById(gameId) } returns null
 
         // When
-        val result = useCase.execute(gameId, player, move)
+        val result = useCase.execute(gameId, player, move, Clock.System.now())
 
         // Then
         result.isFailure shouldBe true
@@ -219,7 +224,7 @@ class MakeMoveUseCaseTest : FunSpec({
         coEvery { gameRepository.findById(gameId) } returns game
 
         // When - black player tries to move on white's turn
-        val result = useCase.execute(gameId, blackPlayer, move)
+        val result = useCase.execute(gameId, blackPlayer, move, Clock.System.now())
 
         // Then
         result.isFailure shouldBe true
@@ -265,7 +270,7 @@ class MakeMoveUseCaseTest : FunSpec({
         coEvery { gameRepository.findById(gameId) } returns game
 
         // When
-        val result = useCase.execute(gameId, whitePlayer, move)
+        val result = useCase.execute(gameId, whitePlayer, move, Clock.System.now())
 
         // Then
         result.isFailure shouldBe true
@@ -312,7 +317,7 @@ class MakeMoveUseCaseTest : FunSpec({
         every { chessRules.isMoveLegal(initialPosition, illegalMove) } returns false
 
         // When
-        val result = useCase.execute(gameId, whitePlayer, illegalMove)
+        val result = useCase.execute(gameId, whitePlayer, illegalMove, Clock.System.now())
 
         // Then
         result.isFailure shouldBe true
@@ -369,7 +374,7 @@ class MakeMoveUseCaseTest : FunSpec({
         coEvery { gameEventNotifier.notifyMoveExecuted(any(), checkmateMove) } returns Unit
 
         // When
-        val result = useCase.execute(gameId, blackPlayer, checkmateMove)
+        val result = useCase.execute(gameId, blackPlayer, checkmateMove, Clock.System.now())
 
         // Then
         result.isSuccess shouldBe true
@@ -427,7 +432,7 @@ class MakeMoveUseCaseTest : FunSpec({
         coEvery { gameEventNotifier.notifyMoveExecuted(any(), stalemateMove) } returns Unit
 
         // When
-        val result = useCase.execute(gameId, whitePlayer, stalemateMove)
+        val result = useCase.execute(gameId, whitePlayer, stalemateMove, Clock.System.now())
 
         // Then
         result.isSuccess shouldBe true
@@ -475,7 +480,7 @@ class MakeMoveUseCaseTest : FunSpec({
         coEvery { chessRules.isFiftyMoveRule(any()) } returns false
         coEvery { chessRules.isThreefoldRepetition(any(), any())} returns true
 
-        val result = useCase.execute(currentGame.id, whitePlayer, Move(Position.fromAlgebraic("g1"), Position.fromAlgebraic("f3")))
+        val result = useCase.execute(currentGame.id, whitePlayer, Move(Position.fromAlgebraic("g1"), Position.fromAlgebraic("f3")), Clock.System.now())
 
         result.getOrNull()?.status shouldBe GameStatus.DRAW
     }

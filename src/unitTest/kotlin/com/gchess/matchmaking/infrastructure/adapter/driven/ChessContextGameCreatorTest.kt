@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.gchess.matchmaking.infrastructure.adapter.driven
 
 import com.gchess.chess.application.usecase.CreateGameUseCase
@@ -35,7 +37,7 @@ class ChessContextGameCreatorTest : FunSpec({
             whitePlayer = whitePlayer,
             blackPlayer = blackPlayer)
         val createGameUseCase = mockk<CreateGameUseCase>()
-        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer) } returns Result.success(expectedGame)
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer, any(), any()) } returns Result.success(expectedGame)
 
         val gameCreator = ChessContextGameCreator(createGameUseCase)
 
@@ -61,7 +63,7 @@ class ChessContextGameCreatorTest : FunSpec({
         )
         val errorMessage = "Player does not exist"
         val createGameUseCase = mockk<CreateGameUseCase>()
-        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer) } returns Result.failure(Exception(errorMessage))
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer, any(), any()) } returns Result.failure(Exception(errorMessage))
         val gameCreator = ChessContextGameCreator(createGameUseCase)
 
         // When
@@ -100,7 +102,7 @@ class ChessContextGameCreatorTest : FunSpec({
             currentSide = PlayerSide.BLACK
         )
         val createGameUseCase = mockk<CreateGameUseCase>()
-        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer) } returns Result.success(game1) andThen Result.success(game2)
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer, any(), any()) } returns Result.success(game1) andThen Result.success(game2)
         val gameCreator = ChessContextGameCreator(createGameUseCase)
 
         // When - first call with gameId1
@@ -131,7 +133,7 @@ class ChessContextGameCreatorTest : FunSpec({
         val specificError = "White player abc123 does not exist"
 
         val createGameUseCase = mockk<CreateGameUseCase>()
-        coEvery { createGameUseCase.execute(whitePlayer,blackPlayer) } returns Result.failure(Exception(specificError))
+        coEvery { createGameUseCase.execute(whitePlayer, blackPlayer, any(), any()) } returns Result.failure(Exception(specificError))
 
         val gameCreator = ChessContextGameCreator(createGameUseCase)
 

@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package com.gchess.matchmaking.application.usecase
 
 import com.gchess.matchmaking.domain.port.GameCreator

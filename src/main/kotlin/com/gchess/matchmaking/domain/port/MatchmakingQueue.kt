@@ -37,10 +37,12 @@ interface MatchmakingQueue {
      * Adds a user to the matchmaking queue.
      *
      * @param userId The unique identifier of the user to add
+     * @param totalTimeSeconds Total time per player in seconds (0 = unlimited)
+     * @param incrementSeconds Increment per move in seconds (0 = no increment)
      * @return The created QueueEntry
      * @throws IllegalStateException if the user is already in the queue
      */
-    suspend fun addPlayer(userId: UserId): QueueEntry
+    suspend fun addPlayer(userId: UserId, totalTimeSeconds: Int = 0, incrementSeconds: Int = 0): QueueEntry
 
     /**
      * Removes a user from the matchmaking queue.
