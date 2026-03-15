@@ -66,10 +66,9 @@ val appModule = module {
     // DataSource (HikariCP connection pool)
     single<DataSource> { DatabaseConfig.createDataSource() }
 
-    // DSLContext (jOOQ) - migrations are run before creating the context
-    single<DSLContext> {
+    // DSLContext (jOOQ) - migrations are run at startup (createdAtStart = true)
+    single<DSLContext>(createdAtStart = true) {
         val dataSource = get<DataSource>()
-        // Run migrations on first access (ensures schema is up to date)
         DatabaseConfig.runMigrations(dataSource)
         DatabaseConfig.createDslContext(dataSource)
     }
