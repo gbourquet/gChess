@@ -1,42 +1,55 @@
 meta {
-  name: Create Game
+  name: Create Game (via Matchmaking)
   type: http
   seq: 1
 }
 
-post {
-  url: {{baseUrl}}/api/games
-  body: json
-  auth: bearer
+// La création de partie se fait via le WebSocket de matchmaking.
+// Exécuter d'abord :
+//   1. Auth / Register White Player + Login White Player  → whiteToken, whitePlayerId
+//   2. Auth / Register Black Player + Login Black Player  → blackToken, blackPlayerId
+//   3. Matchmaking / Connect to matchmaking - Player 1    → whiteToken rejoint la file
+//   4. Matchmaking / Connect to matchmaking - Player 2    → blackToken rejoint, la partie est créée
+//
+// L'env var gameId est automatiquement renseignée par le message MatchFound reçu.
+// Une fois gameId disponible, utiliser les requêtes WebSocket ci-dessous.
+
+get {
+  url: {{baseUrl}}/health
+  body: none
+  auth: none
 }
 
-auth:bearer {
-  token: {{whiteToken}}
-}
+docs {
+  # Prérequis — Création de partie
 
-body:json {
-  {
-    "whitePlayerId": "{{whitePlayerId}}",
-    "blackPlayerId": "{{blackPlayerId}}"
-  }
-}
+  Les tests WebSocket du dossier `2. Game` nécessitent que les variables d'environnement
+  suivantes soient définies :
 
-tests {
-  test("Status is 201", function() {
-    expect(res.status).to.equal(201);
-  });
+  | Variable | Renseignée par |
+  |---|---|
+  | `whiteToken` | `1. Auth / Login White Player` |
+  | `blackToken` | `1. Auth / Login Black Player` |
+  | `whitePlayerId` | `1. Auth / Register White Player` |
+  | `blackPlayerId` | `1. Auth / Register Black Player` |
+  | `gameId` | `3. Matchmaking / Connect to matchmaking - Player 1 & 2` |
 
-  test("Game created with correct players", function() {
-    expect(res.body.whitePlayer).to.equal(bru.getEnvVar("whitePlayerId"));
-    expect(res.body.blackPlayer).to.equal(bru.getEnvVar("blackPlayerId"));
-    bru.setEnvVar("gameId", res.body.id);
-  });
+  **Protocole Game WebSocket** : `ws://localhost:8080/ws/game/{gameId}?token=<JWT>`
 
-  test("Game status is IN_PROGRESS", function() {
-    expect(res.body.status).to.equal("IN_PROGRESS");
-  });
+  Messages Client → Serveur :
+  - `{"type": "MoveAttempt", "from": "e2", "to": "e4"}` — jouer un coup
+  - `{"type": "MoveAttempt", "from": "e7", "to": "e8", "promotion": "QUEEN"}` — avec promotion
+  - `{"type": "Resign"}` — abandonner
+  - `{"type": "OfferDraw"}` / `{"type": "AcceptDraw"}` / `{"type": "RejectDraw"}`
+  - `{"type": "ClaimTimeout"}` — réclamer le timeout de l'adversaire
 
-  test("Current side is WHITE", function() {
-    expect(res.body.currentSide).to.equal("WHITE");
-  });
+  Messages Serveur → Client :
+  - `GameAuthSuccess` / `GameAuthFailed`
+  - `GameStateSync` — état complet à la connexion
+  - `MoveExecuted` — coup accepté (broadcast)
+  - `MoveRejected` — coup refusé (uniquement à l'émetteur)
+  - `DrawOffered` / `DrawAccepted` / `DrawRejected`
+  - `GameResigned`
+  - `TimeoutConfirmed` / `TimeoutClaimRejected`
+  - `PlayerDisconnected` / `PlayerReconnected`
 }

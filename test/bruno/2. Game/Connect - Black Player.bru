@@ -1,0 +1,23 @@
+meta {
+  name: Connect - Black Player (GameStateSync)
+  type: ws
+  seq: 3
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{blackToken}}
+  auth: inherit
+}
+
+docs {
+  # Connexion Black Player — réception du GameStateSync
+
+  Se connecte au WebSocket de la partie en tant que joueur noir.
+
+  **Messages reçus automatiquement du serveur :**
+  1. `GameAuthSuccess` — authentification réussie
+  2. `GameStateSync` — état complet de la partie
+
+  Si les deux connexions (white + black) sont ouvertes simultanément,
+  chaque coup joué par l'un est broadcasté à l'autre via `MoveExecuted`.
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Get Game Moves - Forbidden
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/history/games/{{gameId}}/moves
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{thirdToken}}
+}
+
+// Prérequis : enregistrer un troisième utilisateur et stocker son token dans thirdToken.
+// Exemple :
+//   POST /api/auth/register  { "username": "charlie", "email": "charlie@example.com", "password": "password123" }
+//   POST /api/auth/login     { "username": "charlie", "password": "password123" }
+//   → bru.setEnvVar("thirdToken", res.body.token)
+
+tests {
+  test("Status is 403", function() {
+    expect(res.status).to.equal(403);
+  });
+
+  test("Response has error field", function() {
+    expect(res.body.error).to.be.a('string');
+  });
+}

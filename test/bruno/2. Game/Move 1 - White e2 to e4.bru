@@ -1,37 +1,44 @@
 meta {
   name: Move 1 - White e2 to e4
-  type: http
-  seq: 3
+  type: ws
+  seq: 5
 }
 
-post {
-  url: {{baseUrl}}/api/games/{{gameId}}/moves
-  body: json
-  auth: bearer
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  body: ws
+  auth: inherit
 }
 
-auth:bearer {
-  token: {{blackToken}}
+body:ws {
+  name: MoveAttempt e2-e4
+  type: json
+  content: '''
+    {
+      "type": "MoveAttempt",
+      "from": "e2",
+      "to": "e4"
+    }
+  '''
 }
 
-body:json {
-  {
-    "from": "e2",
-    "to": "e4"
-  }
-}
+docs {
+  # Coup 1 — Blanc : e2-e4 (Ouverture du pion roi)
 
-tests {
-  test("Status is 200", function() {
-    expect(res.status).to.equal(200);
-  });
-  
-  test("Current side switched to BLACK", function() {
-    expect(res.body.currentSide).to.equal("BLACK");
-  });
-  
-  test("Move history has 1 move", function() {
-    expect(res.body.moveHistory).to.be.an('array');
-    expect(res.body.moveHistory.length).to.equal(1);
-  });
+  Se connecte en tant que joueur blanc et joue e2→e4.
+
+  **Messages reçus du serveur :**
+  1. `GameAuthSuccess`
+  2. `GameStateSync` — état initial
+  3. `MoveExecuted` (broadcast aux deux joueurs) :
+     ```json
+     {
+       "type": "MoveExecuted",
+       "move": { "from": "e2", "to": "e4", "promotion": null },
+       "newPositionFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+       "gameStatus": "IN_PROGRESS",
+       "currentSide": "BLACK",
+       "isCheck": false
+     }
+     ```
 }

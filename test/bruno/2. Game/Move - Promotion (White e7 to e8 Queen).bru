@@ -1,0 +1,45 @@
+meta {
+  name: Move - Promotion (e7-e8 Queen)
+  type: ws
+  seq: 8
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: MoveAttempt promotion Queen
+  type: json
+  content: '''
+    {
+      "type": "MoveAttempt",
+      "from": "e7",
+      "to": "e8",
+      "promotion": "QUEEN"
+    }
+  '''
+}
+
+docs {
+  # Promotion de pion — Blanc : e7-e8 = Dame
+
+  Joue un coup avec promotion. Le champ `promotion` est requis lorsqu'un pion
+  atteint la dernière rangée ; valeurs possibles : `QUEEN`, `ROOK`, `BISHOP`, `KNIGHT`.
+
+  ⚠️ Ce coup n'est valide que si un pion blanc se trouve effectivement en e7
+  (position issue d'une séquence de jeu spécifique).
+
+  **Message MoveExecuted attendu :**
+  ```json
+  {
+    "type": "MoveExecuted",
+    "move": { "from": "e7", "to": "e8", "promotion": "QUEEN" },
+    "gameStatus": "IN_PROGRESS",
+    "currentSide": "BLACK",
+    "isCheck": false
+  }
+  ```
+}

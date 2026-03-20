@@ -1,0 +1,17 @@
+meta {
+  name: Get My Games - Unauthorized
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/history/games
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status is 401", function() {
+    expect(res.status).to.equal(401);
+  });
+}

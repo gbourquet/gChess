@@ -1,0 +1,38 @@
+meta {
+  name: Resign - White
+  type: ws
+  seq: 9
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: Resign
+  type: json
+  content: '''
+    {
+      "type": "Resign"
+    }
+  '''
+}
+
+docs {
+  # Abandon — Joueur Blanc
+
+  Se connecte en tant que joueur blanc et abandonne la partie.
+
+  **Message GameResigned reçu (broadcast aux deux joueurs) :**
+  ```json
+  {
+    "type": "GameResigned",
+    "resignedPlayerId": "<whitePlayerId>",
+    "gameStatus": "RESIGNED"
+  }
+  ```
+
+  La partie passe en statut `RESIGNED`. Aucun coup supplémentaire ne peut être joué.
+}

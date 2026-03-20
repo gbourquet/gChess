@@ -23,7 +23,9 @@ package com.gchess.infrastructure.config
 
 import com.gchess.chess.application.usecase.ClaimTimeoutUseCase
 import com.gchess.chess.application.usecase.CreateGameUseCase
+import com.gchess.chess.application.usecase.GetGameMovesUseCase
 import com.gchess.chess.application.usecase.GetGameUseCase
+import com.gchess.chess.application.usecase.GetUserGamesUseCase
 import com.gchess.chess.application.usecase.MakeMoveUseCase
 import com.gchess.chess.application.usecase.ResignGameUseCase
 import com.gchess.chess.application.usecase.OfferDrawUseCase
@@ -94,6 +96,8 @@ val appModule = module {
     single { AcceptDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { RejectDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { ClaimTimeoutUseCase(get(), get()) }  // gameRepository, gameEventNotifier
+    single { GetUserGamesUseCase(get()) }
+    single { GetGameMovesUseCase(get()) }
 
     // ========== User Context ==========
 

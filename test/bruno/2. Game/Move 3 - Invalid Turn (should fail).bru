@@ -1,34 +1,43 @@
 meta {
-  name: Move 3 - Invalid Turn (should fail)
-  type: http
-  seq: 5
+  name: Move 3 - Invalid Turn (MoveRejected)
+  type: ws
+  seq: 7
 }
 
-post {
-  url: {{baseUrl}}/api/games/{{gameId}}/moves
-  body: json
-  auth: bearer
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{blackToken}}
+  body: ws
+  auth: inherit
 }
 
-auth:bearer {
-  token: {{blackToken}}
+body:ws {
+  name: MoveAttempt invalide (tour de blanc)
+  type: json
+  content: '''
+    {
+      "type": "MoveAttempt",
+      "from": "g8",
+      "to": "f6"
+    }
+  '''
 }
 
-body:json {
-  {
-    "from": "g8",
-    "to": "f6"
-  }
-}
+docs {
+  # Coup invalide — Noir joue pendant le tour de Blanc (MoveRejected)
 
-tests {
-  test("Status is 400 (Bad Request)", function() {
-    expect(res.status).to.equal(400);
-  });
+  Se connecte en tant que joueur noir et tente de jouer alors que c'est le tour des blancs.
+  Prérequis : après deux coups (e2-e4, e7-e5), currentSide = WHITE.
 
-  test("Error message mentions turn", function() {
-    const body = res.body;
-    const bodyStr = JSON.stringify(body).toLowerCase();
-    expect(bodyStr).to.include("turn");
-  });
+  **Messages reçus du serveur :**
+  1. `GameAuthSuccess`
+  2. `GameStateSync`
+  3. `MoveRejected` (uniquement à l'émetteur) :
+     ```json
+     {
+       "type": "MoveRejected",
+       "reason": "Not your turn"
+     }
+     ```
+
+  La partie n'est pas affectée : le coup est ignoré.
 }

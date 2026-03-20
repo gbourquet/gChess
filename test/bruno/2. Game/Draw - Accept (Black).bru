@@ -1,0 +1,38 @@
+meta {
+  name: Draw - Accept (Black)
+  type: ws
+  seq: 11
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{blackToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: AcceptDraw
+  type: json
+  content: '''
+    {
+      "type": "AcceptDraw"
+    }
+  '''
+}
+
+docs {
+  # Acceptation de nulle — Joueur Noir
+
+  Se connecte en tant que joueur noir et accepte la proposition de nulle.
+  Prérequis : une offre de nulle active doit exister (envoyée via `Draw - Offer (White)`).
+
+  **Message DrawAccepted reçu (broadcast aux deux joueurs) :**
+  ```json
+  {
+    "type": "DrawAccepted",
+    "gameStatus": "DRAW"
+  }
+  ```
+
+  La partie passe en statut `DRAW`. Aucun coup supplémentaire ne peut être joué.
+}

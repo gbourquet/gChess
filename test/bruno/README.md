@@ -1,185 +1,150 @@
-# gChess API Tests - Bruno Collection
+# gChess API Tests — Collection Bruno
 
-Cette collection Bruno contient des tests end-to-end pour l'API gChess, reproduisant les scénarios des tests d'intégration automatisés.
+Collection de tests end-to-end pour l'API gChess. Les tests HTTP s'exécutent en séquence ; les tests WebSocket (matchmaking, jeu) s'utilisent manuellement depuis l'interface Bruno.
 
-## Installation de Bruno
+## Prérequis
 
-Bruno est un client HTTP open-source similaire à Postman/Insomnia, mais basé sur des fichiers (git-friendly).
+1. **Bruno** installé ([usebruno.com](https://www.usebruno.com/))
+2. Base de données démarrée :
+   ```bash
+   cd docker && docker compose up -d
+   ```
+3. Application démarrée :
+   ```bash
+   ./gradlew run
+   ```
 
-### Télécharger Bruno
+## Ouverture dans Bruno
 
-- **Site officiel** : https://www.usebruno.com/
-- **GitHub** : https://github.com/usebruno/bruno
-
-**Installation** :
-- macOS : `brew install bruno`
-- Windows : Télécharger depuis le site
-- Linux : AppImage ou `snap install bruno`
-
-## Utilisation
-
-### 1. Démarrer la base de données
-
-```bash
-cd ../docker
-docker compose up -d
-```
-
-### 2. Démarrer l'application
-
-```bash
-cd ..
-./gradlew run
-```
-
-Attendez que l'application soit prête (environ 10-15 secondes) :
-```
-Application started in 0.7 seconds.
-Responding at http://0.0.0.0:8080
-```
-
-### 3. Ouvrir Bruno
-
-1. Lancez Bruno
-2. Cliquez sur "Open Collection"
-3. Sélectionnez le répertoire `test/bruno`
-
-### 4. Sélectionner l'environnement
-
-Dans Bruno, sélectionnez l'environnement **"Local"** en haut à droite.
-
-### 5. Exécuter les tests
-
-#### Option 1 : Exécuter test par test
-
-Parcourez les dossiers et cliquez sur chaque requête pour l'exécuter.
-
-**Ordre recommandé** :
-1. **1. Auth** → Register & Login (crée les tokens)
-2. **2. Game** → Créer et jouer une partie
-3. **3. Matchmaking** → Tester le système de matchmaking
-
-#### Option 2 : Exécuter toute la collection
-
-Clic droit sur "gChess API" → "Run Collection" pour exécuter tous les tests en séquence.
+1. Lancer Bruno
+2. **Open Collection** → sélectionner `test/bruno`
+3. Sélectionner l'environnement **"Local"** en haut à droite
 
 ## Structure de la collection
 
 ```
 test/bruno/
-├── bruno.json                      # Configuration de la collection
 ├── environments/
-│   └── Local.bru                   # Variables d'environnement (tokens, IDs, etc.)
-├── 1. Auth/                        # Tests d'authentification
-│   ├── Register White Player.bru
-│   ├── Login White Player.bru
-│   ├── Register Black Player.bru
-│   └── Login Black Player.bru
-├── 2. Game/                        # Tests de partie d'échecs
-│   ├── Create Game.bru
-│   ├── Get Game.bru
-│   ├── Move 1 - White e2 to e4.bru
-│   ├── Move 2 - Black e7 to e5.bru
-│   └── Move 3 - Invalid Turn (should fail).bru
-└── 3. Matchmaking/                 # Tests de matchmaking
-    ├── Join Queue - Player 1.bru
-    ├── Get Status - Player 1 Waiting.bru
-    ├── Join Queue - Already in Queue (should fail).bru
-    ├── Join Queue - Player 2 (creates match).bru
-    ├── Get Status - Player 1 Matched.bru
-    └── Unauthorized - No Token (should fail).bru
+│   └── Local.bru                          # Variables d'environnement
+├── 1. Auth/                               # Tests HTTP — authentification
+│   ├── Register White Player.bru  (seq 1)
+│   ├── Login White Player.bru     (seq 2)
+│   ├── Register Black Player.bru  (seq 3)
+│   └── Login Black Player.bru     (seq 4)
+├── 2. Game/                               # Tests WebSocket — partie de jeu
+│   ├── Create Game.bru            (seq 1)  ← doc + prérequis
+│   ├── Get Game.bru               (seq 2)  ← Connect White (GameStateSync)
+│   ├── Connect - Black Player.bru (seq 3)
+│   ├── Connect - Invalid Token.bru (seq 4)
+│   ├── Move 1 - White e2 to e4.bru (seq 5)
+│   ├── Move 2 - Black e7 to e5.bru (seq 6)
+│   ├── Move 3 - Invalid Turn.bru  (seq 7)
+│   ├── Move - Promotion.bru       (seq 8)
+│   ├── Resign - White.bru         (seq 9)
+│   ├── Draw - Offer (White).bru   (seq 10)
+│   ├── Draw - Accept (Black).bru  (seq 11)
+│   ├── Draw - Reject (White).bru  (seq 12)
+│   └── Claim Timeout.bru          (seq 13)
+├── 3. Matchmaking/                        # Tests WebSocket — matchmaking
+│   ├── Connect to matchmaking - Player 1.bru
+│   ├── Connect to matchmaking - Player 2.bru
+│   ├── Connect to matchmaking with bad token.bru
+│   └── ws/                               # Payloads de référence
+│       ├── Connect to Matchmaking.bru
+│       └── Send JoinQueue.bru
+└── 4. History/                            # Tests HTTP — historique
+    ├── Get My Games.bru           (seq 1)
+    ├── Get My Games - Unauthorized.bru (seq 2)
+    ├── Get Game Moves.bru         (seq 3)
+    ├── Get Game Moves - Black Player.bru (seq 4)
+    ├── Get Game Moves - Not Found.bru (seq 5)
+    └── Get Game Moves - Forbidden.bru (seq 6)
 ```
-
-## Scénarios de test
-
-### 1. Authentification (4 tests)
-- ✅ Enregistrement de deux joueurs (Alice & Bob)
-- ✅ Login et récupération des tokens JWT
-- ✅ Stockage automatique des tokens dans l'environnement
-
-### 2. Partie d'échecs (5 tests)
-- ✅ Création d'une partie entre deux joueurs
-- ✅ Récupération de l'état de la partie
-- ✅ Coups valides (e2→e4, e7→e5)
-- ✅ Rejet de coup invalide (mauvais tour)
-- ✅ Validation JWT sur les endpoints protégés
-
-### 3. Matchmaking (6 tests)
-- ✅ Joueur 1 rejoint la queue (WAITING)
-- ✅ Vérification du statut (queue position)
-- ✅ Rejet si déjà dans la queue (409 Conflict)
-- ✅ Joueur 2 rejoint → match automatique
-- ✅ Création automatique de la partie
-- ✅ Vérification de l'autorisation (401 sans token)
 
 ## Variables d'environnement
 
-Les variables suivantes sont automatiquement définies lors de l'exécution des tests :
+| Variable | Définie par | Description |
+|---|---|---|
+| `baseUrl` | `Local.bru` (fixe) | `http://localhost:8080` |
+| `whiteToken` | `1. Auth / Login White Player` | JWT du joueur blanc |
+| `blackToken` | `1. Auth / Login Black Player` | JWT du joueur noir |
+| `thirdToken` | Manuel | JWT d'un troisième utilisateur (test Forbidden) |
+| `whitePlayerId` | `1. Auth / Register White Player` | UserId du joueur blanc |
+| `blackPlayerId` | `1. Auth / Register Black Player` | UserId du joueur noir |
+| `gameId` | `3. Matchmaking` (WS) **ou** `4. History / Get My Games` | Id de la partie |
 
-| Variable | Description | Défini par |
-|----------|-------------|------------|
-| `baseUrl` | URL de l'API | Manuel (Local.bru) |
-| `whiteToken` | Token JWT du joueur blanc | Login White Player |
-| `blackToken` | Token JWT du joueur noir | Login Black Player |
-| `whitePlayerId` | ID ULID du joueur blanc | Register White Player |
-| `blackPlayerId` | ID ULID du joueur noir | Register Black Player |
-| `gameId` | ID ULID de la partie créée | Create Game |
+## Exécution des tests
 
-## Tests automatisés
+### Dossiers HTTP (automatisables)
 
-Chaque requête Bruno contient des assertions (section `tests`) qui valident :
-- Les codes de statut HTTP
-- La structure des réponses JSON
-- Les valeurs des champs
-- La logique métier (tour de jeu, matchmaking, etc.)
+Clic droit sur un dossier → **Run** pour exécuter toutes les requêtes en séquence.
 
-**Exemples d'assertions** :
-```javascript
-test("Status is 200", function() {
-  expect(res.status).to.equal(200);
-});
+**Ordre recommandé :**
+1. `1. Auth` → génère les tokens et les playerIds
+2. `3. Matchmaking` (manuellement, voir ci-dessous) → génère `gameId`
+3. `4. History` → utilise `gameId` (ou le set depuis la réponse)
 
-test("Status is MATCHED", function() {
-  expect(res.body.status).to.equal("MATCHED");
-});
-```
+### Dossiers WebSocket (manuels)
 
-## Nettoyage
+Les requêtes `type: ws` ne peuvent pas être lancées via le runner. Pour chaque fichier :
+1. Clic sur la requête
+2. Bouton **Connect**
+3. Observer les messages dans le panneau droit
+4. Les requêtes avec `body:ws` envoient leur message automatiquement à la connexion
 
-Pour repartir d'une base vierge :
+**Flow matchmaking pour obtenir un `gameId` :**
+1. Ouvrir `3. Matchmaking / Connect to matchmaking - Player 1` → Connect → `{"type": "JoinQueue"}`
+2. Ouvrir `3. Matchmaking / Connect to matchmaking - Player 2` → Connect → `{"type": "JoinQueue"}`
+3. Les deux reçoivent `MatchFound` avec le `gameId` → le noter dans l'environnement Local
+
+### Dossier `4. History` en autonomie
+
+`Get My Games` set automatiquement `gameId` depuis le premier résultat de la liste, ce qui permet d'enchaîner directement `Get Game Moves` sans passer par le matchmaking.
+
+## Scénarios de test
+
+### `1. Auth` — 4 tests HTTP
+- Enregistrement de deux joueurs (alice, bob)
+- Login → stockage automatique de `whiteToken`, `blackToken`, `whitePlayerId`, `blackPlayerId`
+
+### `2. Game` — 13 requêtes WebSocket
+- Connexion en tant que joueur blanc ou noir (réception `GameStateSync`)
+- Rejet d'authentification avec token invalide (`GameAuthFailed`)
+- Coups valides (`MoveExecuted` broadcast)
+- Coup refusé au mauvais tour (`MoveRejected`)
+- Promotion de pion
+- Abandon (`GameResigned`)
+- Nulle — proposition, acceptation, refus
+- Claim de timeout Fischer
+
+### `3. Matchmaking` — 3 requêtes WebSocket
+- Connexion Player 1 → `JoinQueue` → `QueuePositionUpdate`
+- Connexion Player 2 → `JoinQueue` → `MatchFound` (les deux)
+- Token invalide → `AuthFailed`
+
+### `4. History` — 6 tests HTTP
+- Liste des parties du joueur authentifié (200 + set `gameId`)
+- Accès sans token → 401
+- Liste des coups d'une partie (200, joueur blanc et noir)
+- Partie inconnue → 404
+- Non-participant → 403
+
+## Nettoyage entre exécutions
 
 ```bash
-# Arrêter l'application (Ctrl+C)
-
-# Supprimer les données PostgreSQL
 cd docker
 docker compose down -v
-rm -rf data/*
-
-# Redémarrer
 docker compose up -d
-cd ..
-./gradlew run
 ```
 
-## Équivalence avec les tests Kotlin
-
-Ces tests Bruno reproduisent fonctionnellement :
-- `src/integrationTest/kotlin/com/gchess/chess/integration/GameE2ETest.kt`
-- `src/integrationTest/kotlin/com/gchess/matchmaking/integration/MatchmakingE2ETest.kt`
-
-La différence : Bruno permet de tester manuellement l'API en local, tandis que les tests Kotlin s'exécutent automatiquement avec Testcontainers dans la CI/CD.
+Puis relancer l'application (`./gradlew run`).
 
 ## Dépannage
 
-**Problème** : "Connection refused"
-→ Vérifiez que l'application est bien démarrée sur le port 8080
-
-**Problème** : "401 Unauthorized"
-→ Exécutez d'abord les tests d'authentification pour générer les tokens
-
-**Problème** : "409 Conflict" sur Create Game
-→ Les joueurs n'existent pas, exécutez d'abord Register + Login
-
-**Problème** : Tests échouent après plusieurs exécutions
-→ Redémarrez l'application ou nettoyez la base de données
+| Problème | Cause | Solution |
+|---|---|---|
+| `Connection refused` | Application non démarrée | `./gradlew run` |
+| `401 Unauthorized` | Tokens absents | Exécuter `1. Auth` en premier |
+| `404` sur moves ou history | `gameId` absent | Exécuter matchmaking WS ou `4. History / Get My Games` |
+| `403` sur Get Game Moves - Forbidden | `thirdToken` non défini | Enregistrer un troisième utilisateur et copier son token dans l'env |
+| Tests History échouent | Aucune partie en base | Créer une partie via matchmaking WS |

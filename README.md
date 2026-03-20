@@ -35,12 +35,14 @@
 ### 🎮 Game Management
 - **Real-time gameplay** via WebSocket connections
 - **Automatic game creation** from matchmaking
-- **Manual game creation** via REST API
 - **Move validation** with complete chess rules
 - **Game state persistence** with FEN notation
 - **Move history tracking** with algebraic notation
 - **Game resignation** - players can resign at any time
 - **Draw offers** - propose, accept, or reject draw offers
+- **Fischer time control** - configurable total time + increment per move
+- **Timeout claim** - client-initiated flag claim when opponent's clock runs out
+- **Game history** - retrieve past games and move lists per player
 - **Spectator mode** (read-only WebSocket connections)
 - **Multi-device support** (play multiple games simultaneously)
 
@@ -68,6 +70,7 @@
   - ✅ Fifty-move rule
   - ✅ Threefold repetition
   - ✅ Insufficient material
+  - ✅ Timeout (Fischer clock flag)
 - **FEN notation** support for position serialization
 - **Bitboard architecture** for optimal performance
 
@@ -222,7 +225,7 @@ The project includes automated architecture validation:
 
 ### REST API (Synchronous)
 
-gChess uses a **hybrid architecture**: REST for authentication and user management, WebSocket for all real-time operations (matchmaking, gameplay).
+gChess uses a **hybrid architecture**: REST for authentication, user management and game history; WebSocket for all real-time operations (matchmaking, gameplay).
 
 #### Authentication Endpoints
 
@@ -230,6 +233,51 @@ gChess uses a **hybrid architecture**: REST for authentication and user manageme
 |----------|--------|------|-------------|
 | `/api/auth/register` | POST | ❌ | Register new user |
 | `/api/auth/login` | POST | ❌ | Login and get JWT token |
+
+#### History Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/history/games` | GET | ✅ JWT | List all games for the authenticated player |
+| `/api/history/games/{gameId}/moves` | GET | ✅ JWT | List moves of a game (participants only) |
+
+**Example: Get game history**
+```bash
+GET /api/history/games
+Authorization: Bearer <token>
+
+# Response: 200 OK
+[
+  {
+    "gameId": "01HQZN3A4B5C6D7E8F9G0H1J2K",
+    "whiteUserId": "01HQZN2K3M4P5Q6R7S8T9V0W1X",
+    "blackUserId": "01HQZN2K3M4P5Q6R7S8T9V0W1Y",
+    "status": "CHECKMATE",
+    "moveCount": 42
+  }
+]
+```
+
+**Example: Get moves of a game**
+```bash
+GET /api/history/games/01HQZN3A4B5C6D7E8F9G0H1J2K/moves
+Authorization: Bearer <token>
+
+# Response: 200 OK — participants only, 403 otherwise
+[
+  { "moveNumber": 0, "from": "e2", "to": "e4", "promotion": null },
+  { "moveNumber": 1, "from": "e7", "to": "e5", "promotion": null }
+]
+```
+
+#### Health Endpoints (Public)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Simple UP/DOWN status |
+| `/actuator/health` | GET | Detailed status with component checks |
+| `/ready` | GET | Readiness probe (200 or 503) |
+| `/alive` | GET | Liveness probe |
 
 **Example: Register**
 ```bash
@@ -351,144 +399,106 @@ ws://localhost:8080/ws/<endpoint>?token=<JWT_TOKEN>
 
 **Client → Server Messages**:
 
-1. **Move Attempt**
-```json
-{
-  "type": "MoveAttempt",
-  "from": "e2",
-  "to": "e4",
-  "promotion": null
-}
-```
+| Type | Description |
+|---|---|
+| `MoveAttempt` | Play a move (`from`, `to`, optional `promotion`) |
+| `Resign` | Forfeit the game |
+| `OfferDraw` | Propose a draw |
+| `AcceptDraw` | Accept opponent's draw offer |
+| `RejectDraw` | Decline opponent's draw offer |
+| `ClaimTimeout` | Claim opponent's flag (Fischer time control only) |
 
-For pawn promotion:
 ```json
-{
-  "type": "MoveAttempt",
-  "from": "e7",
-  "to": "e8",
-  "promotion": "QUEEN"
-}
+{ "type": "MoveAttempt", "from": "e2", "to": "e4" }
+{ "type": "MoveAttempt", "from": "e7", "to": "e8", "promotion": "QUEEN" }
+{ "type": "Resign" }
+{ "type": "OfferDraw" }
+{ "type": "AcceptDraw" }
+{ "type": "RejectDraw" }
+{ "type": "ClaimTimeout" }
 ```
 
 **Server → Client Messages**:
 
-1. **Game State Sync** (on connection)
+1. **GameAuthSuccess / GameAuthFailed** (on connection)
+```json
+{ "type": "GameAuthSuccess", "userId": "01HQZN..." }
+{ "type": "GameAuthFailed", "reason": "Invalid or expired token" }
+```
+
+2. **GameStateSync** (on connection, after auth)
 ```json
 {
   "type": "GameStateSync",
   "gameId": "01HQZN3A4B5C6D7E8F9G0H1J2K",
   "positionFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-  "moveHistory": [
-    { "from": "e2", "to": "e4", "promotion": null }
-  ],
+  "moveHistory": [{ "from": "e2", "to": "e4", "promotion": null }],
   "gameStatus": "IN_PROGRESS",
   "currentSide": "BLACK",
-  "whitePlayerId": "01HQZN3B5C6D7E8F9G0H1J2K3L",
-  "blackPlayerId": "01HQZN3C6D7E8F9G0H1J2K3L4M"
+  "whitePlayerId": "01HQZN3B...",
+  "blackPlayerId": "01HQZN3C...",
+  "whiteUsername": "alice",
+  "blackUsername": "bob",
+  "totalTimeSeconds": 600,
+  "incrementSeconds": 5,
+  "whiteTimeRemainingMs": 600000,
+  "blackTimeRemainingMs": 600000
 }
 ```
 
-2. **Move Executed** (broadcast to both players)
+3. **MoveExecuted** (broadcast to both players)
 ```json
 {
   "type": "MoveExecuted",
-  "gameId": "01HQZN3A4B5C6D7E8F9G0H1J2K",
-  "from": "e2",
-  "to": "e4",
-  "promotion": null,
+  "move": { "from": "e2", "to": "e4", "promotion": null },
   "newPositionFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
   "gameStatus": "IN_PROGRESS",
-  "nextSide": "BLACK"
+  "currentSide": "BLACK",
+  "isCheck": false,
+  "whiteTimeRemainingMs": 600000,
+  "blackTimeRemainingMs": 600000
 }
 ```
 
-3. **Move Rejected** (invalid move)
+4. **MoveRejected** (to the attempting player only)
 ```json
-{
-  "type": "MoveRejected",
-  "reason": "It's not your turn"
-}
+{ "type": "MoveRejected", "reason": "Not your turn" }
 ```
 
-4. **Player Disconnected**
+5. **GameResigned** (broadcast)
 ```json
-{
-  "type": "PlayerDisconnected",
-  "playerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
-  "side": "BLACK"
-}
+{ "type": "GameResigned", "resignedPlayerId": "01HQZN3B...", "gameStatus": "RESIGNED" }
 ```
 
-5. **Player Reconnected**
+6. **DrawOffered** (broadcast)
 ```json
-{
-  "type": "PlayerReconnected",
-  "playerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
-  "side": "BLACK"
-}
+{ "type": "DrawOffered", "offeredByPlayerId": "01HQZN3B..." }
 ```
 
-6. **Resign** (client → server)
+7. **DrawAccepted** (broadcast)
 ```json
-{
-  "type": "Resign"
-}
+{ "type": "DrawAccepted", "gameStatus": "DRAW" }
 ```
 
-7. **Game Resigned** (server → both players)
+8. **DrawRejected** (broadcast)
 ```json
-{
-  "type": "GameResigned",
-  "resignedPlayerId": "01HQZN3B5C6D7E8F9G0H1J2K3L",
-  "gameStatus": "RESIGNED"
-}
+{ "type": "DrawRejected" }
 ```
 
-8. **Offer Draw** (client → server)
+9. **TimeoutConfirmed** (broadcast)
 ```json
-{
-  "type": "OfferDraw"
-}
+{ "type": "TimeoutConfirmed", "loserPlayerId": "01HQZN3C...", "gameStatus": "TIMEOUT" }
 ```
 
-9. **Draw Offered** (server → opponent)
+10. **TimeoutClaimRejected** (to claimer only)
 ```json
-{
-  "type": "DrawOffered",
-  "offeredByPlayerId": "01HQZN3B5C6D7E8F9G0H1J2K3L"
-}
+{ "type": "TimeoutClaimRejected", "remainingMs": 45000 }
 ```
 
-10. **Accept Draw** (client → server)
+11. **PlayerDisconnected / PlayerReconnected** (broadcast)
 ```json
-{
-  "type": "AcceptDraw"
-}
-```
-
-11. **Draw Accepted** (server → both players)
-```json
-{
-  "type": "DrawAccepted",
-  "acceptedByPlayerId": "01HQZN3C6D7E8F9G0H1J2K3L4M",
-  "gameStatus": "DRAW"
-}
-```
-
-12. **Reject Draw** (client → server)
-```json
-{
-  "type": "RejectDraw"
-}
-```
-
-13. **Draw Rejected** (server → player who offered)
-```json
-{
-  "type": "DrawRejected",
-  "rejectedByPlayerId": "01HQZN3C6D7E8F9G0H1J2K3L4M"
-}
+{ "type": "PlayerDisconnected", "playerId": "01HQZN3C...", "side": "BLACK" }
+{ "type": "PlayerReconnected", "playerId": "01HQZN3C...", "side": "BLACK" }
 ```
 
 **Lifecycle**:
@@ -700,7 +710,7 @@ sequenceDiagram
 | **Integration Tests** | Testcontainers | 2.0.2 |
 | **Build Tool** | Gradle (KTS) | 8.x |
 | **Logging** | Logback + SLF4J | 1.5.21 |
-| **Documentation** | Kompendium (OpenAPI) | 3.14.4 |
+| **Documentation** | Kompendium (OpenAPI) | 4.0.3 |
 | **CORS** | Ktor CORS | 3.3.2 |
 
 ---
@@ -724,14 +734,20 @@ CREATE INDEX idx_users_email_lower ON users (LOWER(email));
 ### Games Table
 ```sql
 CREATE TABLE games (
-  id VARCHAR(26) PRIMARY KEY,           -- ULID
+  id VARCHAR(26) PRIMARY KEY,                    -- ULID
   white_user_id VARCHAR(26) NOT NULL REFERENCES users(id),
   black_user_id VARCHAR(26) NOT NULL REFERENCES users(id),
-  white_player_id VARCHAR(26) NOT NULL, -- Ephemeral per-game player ID
+  white_player_id VARCHAR(26) NOT NULL,          -- Ephemeral per-game player ID
   black_player_id VARCHAR(26) NOT NULL,
-  board_fen TEXT NOT NULL,              -- Position in FEN notation
-  current_side VARCHAR(10) NOT NULL,    -- "WHITE" or "BLACK"
-  status VARCHAR(20) NOT NULL,          -- IN_PROGRESS, CHECKMATE, etc.
+  board_fen TEXT NOT NULL,                       -- Position in FEN notation
+  current_side VARCHAR(10) NOT NULL,             -- "WHITE" or "BLACK"
+  status VARCHAR(20) NOT NULL,                   -- IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT
+  draw_offered_by VARCHAR(10),                   -- "WHITE" or "BLACK" (nullable)
+  time_control_total_seconds INT,                -- Fischer: total time per player (nullable)
+  time_control_increment_seconds INT,            -- Fischer: increment per move (nullable)
+  white_time_remaining_ms BIGINT,                -- Remaining clock for white (nullable)
+  black_time_remaining_ms BIGINT,                -- Remaining clock for black (nullable)
+  last_move_at TIMESTAMP,                        -- For clock deduction (nullable)
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL
 );
@@ -745,13 +761,14 @@ CREATE TABLE game_moves (
   move_number INT NOT NULL,
   from_square VARCHAR(2) NOT NULL,      -- e.g., "e2"
   to_square VARCHAR(2) NOT NULL,        -- e.g., "e4"
-  promotion VARCHAR(10),                -- QUEEN, ROOK, BISHOP, KNIGHT
+  promotion VARCHAR(10),                -- QUEEN, ROOK, BISHOP, KNIGHT (nullable)
+  received_at TIMESTAMP NOT NULL,       -- Server reception timestamp (for clock)
   created_at TIMESTAMP NOT NULL,
   UNIQUE (game_id, move_number)
 );
 ```
 
-**Note**: Matchmaking is handled in-memory (not persisted in database). When two players are matched, a game is created directly in the `games` table.
+**Note**: Matchmaking is handled in-memory (queue) + PostgreSQL (match records). When two players match, a game is created in the `games` table and both players are notified via WebSocket.
 
 Migrations are managed by **Liquibase** in `src/main/resources/db/changelog/`
 
@@ -820,12 +837,11 @@ The project has **100+ tests** organized into three categories:
 ## 📋 Current Limitations
 
 - ❌ No JWT refresh mechanism (tokens expire after 24 hours)
-- ❌ Matchmaking queue is in-memory (lost on restart; games persist)
+- ❌ Matchmaking queue is in-memory (lost on restart; games and matches persist)
 - ❌ No ELO/rating system (simple FIFO matchmaking)
-- ❌ No game clocks/time controls
 - ❌ No manual reconnection recovery (must reconnect manually)
 - ❌ No rate limiting on API endpoints
-- ❌ No game history/replay functionality
+- ❌ Fischer clock cache is in-memory / recalculable from `game_moves.received_at`
 
 ---
 
@@ -834,8 +850,7 @@ The project has **100+ tests** organized into three categories:
 - [ ] JWT refresh tokens
 - [ ] Persistent matchmaking queue (database-backed)
 - [ ] ELO rating system
-- [ ] Game clocks with time controls
-- [ ] Move history with algebraic notation (e.g., "Nf3", "O-O")
+- [ ] Move notation in standard algebraic form (e.g., "Nf3", "O-O")
 - [ ] Game replay and analysis
 - [ ] Rate limiting and throttling
 - [ ] Mobile app (Kotlin Multiplatform)
