@@ -21,6 +21,7 @@
  */
 package com.gchess
 
+import com.gchess.chess.infrastructure.adapter.driver.configureGameHistoryRoutes
 import com.gchess.chess.infrastructure.adapter.driver.configureGameWebSocketRoutes
 import com.gchess.infrastructure.config.EnvironmentConfig
 import com.gchess.infrastructure.config.JwtConfig
@@ -31,8 +32,10 @@ import com.gchess.matchmaking.infrastructure.adapter.driver.configureMatchmaking
 import com.gchess.user.infrastructure.adapter.driver.configureAuthRoutes
 import io.bkbn.kompendium.core.plugin.NotarizedApplication
 import io.bkbn.kompendium.oas.OpenApiSpec
+import io.bkbn.kompendium.oas.component.Components
 import io.bkbn.kompendium.oas.info.Contact
 import io.bkbn.kompendium.oas.info.Info
+import io.bkbn.kompendium.oas.security.BearerAuth
 import io.bkbn.kompendium.oas.server.Server
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -143,6 +146,11 @@ fun Application.module() {
                     url = URI(OpenApiConfig.Server.LOCAL_URL),
                     description = OpenApiConfig.Server.LOCAL_DESCRIPTION
                 )
+            ),
+            components = Components(
+                securitySchemes = mutableMapOf(
+                    "bearerAuth" to BearerAuth()
+                )
             )
         ) }
     }
@@ -168,6 +176,7 @@ fun Application.module() {
     configureAuthRoutes()       // User context auth routes (register, login) - public
     configureMatchmakingWebSocketRoutes()  // Matchmaking webSocket routes for real-time communication
     configureGameWebSocketRoutes()  // Game webSocket routes for real-time communication (players and spectators)
+    configureGameHistoryRoutes()    // Game history REST routes (JWT protected)
 
     routing {
         get("/") {

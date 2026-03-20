@@ -1,0 +1,49 @@
+meta {
+  name: Claim Timeout (Fischer)
+  type: ws
+  seq: 13
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: ClaimTimeout
+  type: json
+  content: '''
+    {
+      "type": "ClaimTimeout"
+    }
+  '''
+}
+
+docs {
+  # Réclamer le timeout de l'adversaire (contrôle Fischer)
+
+  Envoie une demande de timeout contre l'adversaire. Uniquement valide si :
+  - La partie utilise le contrôle de temps Fischer (`timeControl` non null)
+  - L'adversaire a dépassé son temps (`remainingMs <= 0`)
+  - C'est le tour de l'adversaire (le réclamant attend)
+
+  **Cas 1 — Timeout confirmé** (broadcast aux deux joueurs) :
+  ```json
+  {
+    "type": "TimeoutConfirmed",
+    "loserPlayerId": "<blackPlayerId>",
+    "gameStatus": "TIMEOUT"
+  }
+  ```
+
+  **Cas 2 — Claim rejeté** (uniquement au réclamant) :
+  ```json
+  {
+    "type": "TimeoutClaimRejected",
+    "remainingMs": 45000
+  }
+  ```
+
+  ⚠️ La partie doit avoir été créée avec un `timeControl` pour que ce message soit pertinent.
+}

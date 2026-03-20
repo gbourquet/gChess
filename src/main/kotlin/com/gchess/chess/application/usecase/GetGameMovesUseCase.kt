@@ -19,16 +19,30 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.domain.port
+package com.gchess.chess.application.usecase
 
-import com.gchess.chess.domain.model.Game
+import com.gchess.chess.domain.model.Move
+import com.gchess.chess.domain.port.GameRepository
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.UserId
 
-interface GameRepository {
-    suspend fun save(game: Game): Game
-    suspend fun findById(id: GameId): Game?
-    suspend fun findByUserId(userId: UserId): List<Game>
-    suspend fun delete(id: GameId)
-    suspend fun findAll(): List<Game>
+sealed class GetGameMovesResult {
+    data class Success(val moves: List<Move>) : GetGameMovesResult()
+    data object GameNotFound : GetGameMovesResult()
+    data object Forbidden : GetGameMovesResult()
+}
+
+class GetGameMovesUseCase(
+    private val gameRepository: GameRepository
+) {
+    suspend fun execute(gameId: GameId, requestingUserId: UserId): GetGameMovesResult {
+        val game = gameRepository.findById(gameId) ?: return GetGameMovesResult.GameNotFound
+
+        val isParticipant = game.whitePlayer.userId == requestingUserId ||
+            game.blackPlayer.userId == requestingUserId
+
+        if (!isParticipant) return GetGameMovesResult.Forbidden
+
+        return GetGameMovesResult.Success(game.moveHistory)
+    }
 }

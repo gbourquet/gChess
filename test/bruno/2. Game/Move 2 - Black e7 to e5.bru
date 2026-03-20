@@ -1,37 +1,45 @@
 meta {
   name: Move 2 - Black e7 to e5
-  type: http
-  seq: 4
+  type: ws
+  seq: 6
 }
 
-post {
-  url: {{baseUrl}}/api/games/{{gameId}}/moves
-  body: json
-  auth: bearer
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{blackToken}}
+  body: ws
+  auth: inherit
 }
 
-auth:bearer {
-  token: {{blackToken}}
+body:ws {
+  name: MoveAttempt e7-e5
+  type: json
+  content: '''
+    {
+      "type": "MoveAttempt",
+      "from": "e7",
+      "to": "e5"
+    }
+  '''
 }
 
-body:json {
-  {
-    "from": "e7",
-    "to": "e5"
-  }
-}
+docs {
+  # Coup 2 — Noir : e7-e5
 
-tests {
-  test("Status is 200", function() {
-    expect(res.status).to.equal(200);
-  });
+  Se connecte en tant que joueur noir et joue e7→e5.
+  Prérequis : le coup blanc e2-e4 a déjà été joué (currentSide = BLACK).
 
-  test("Current side switched to WHITE", function() {
-    expect(res.body.currentSide).to.equal("WHITE");
-  });
-
-  test("Move history has 2 moves", function() {
-    expect(res.body.moveHistory).to.be.an('array');
-    expect(res.body.moveHistory.length).to.equal(2);
-  });
+  **Messages reçus du serveur :**
+  1. `GameAuthSuccess`
+  2. `GameStateSync` — état après e2-e4
+  3. `MoveExecuted` (broadcast) :
+     ```json
+     {
+       "type": "MoveExecuted",
+       "move": { "from": "e7", "to": "e5", "promotion": null },
+       "newPositionFen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+       "gameStatus": "IN_PROGRESS",
+       "currentSide": "WHITE",
+       "isCheck": false
+     }
+     ```
 }

@@ -52,8 +52,9 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
     - Chess use cases NEVER manipulate UserId - only Player objects
 - **Ports**: `GameRepository`, `GameEventNotifier`
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
-- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`, `ClaimTimeoutUseCase`
-- **Infrastructure**: `GameRoutes` (REST), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
+- **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`, `ClaimTimeoutUseCase`, `GetUserGamesUseCase`, `GetGameMovesUseCase`
+- **Infrastructure**: `GameHistoryRoutes` (REST history), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
+  - **DTOs**: `GameSummaryDTO` (gameId, whiteUserId, blackUserId, status, moveCount), `MoveSummaryDTO` (moveNumber, from, to, promotion)
 
 #### User Context (`com.gchess.user`)
 - **Domain**: `User` (id: UserId, username, email, passwordHash), `Credentials`
@@ -81,7 +82,7 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
   - Matchmaking → User: `UserExistenceChecker` validates users
   - Chess is fully isolated (no dependencies on User/Matchmaking)
 - **Player Object Pattern**: Separates User (permanent) from Player (game participation)
-  - Player creation: Matchmaking creates Players, GameRoutes creates Players from JWT
+  - Player creation: Matchmaking creates Players, `GameHistoryRoutes` creates Players from JWT
   - Chess uses only Player objects, never UserId directly
 - **Hexagonal Architecture**: Domain → Application → Infrastructure (ports & adapters)
 - **Value Objects**: Immutable (Player, Move, Position, CastlingRights, QueueEntry, Match)
@@ -96,7 +97,7 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 ## Domain Model Summary
 
 ### Chess
-- `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory
+- `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory, timeControl?, whiteTimeRemainingMs?, blackTimeRemainingMs?, lastMoveAt?
 - `Player`: id (PlayerId), userId, side (WHITE/BLACK) - created via `Player.create(userId, side)`
 - `ChessPosition`: Bitboard-based (12 bitboards: 6 types × 2 colors), FEN support
 - `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT
@@ -130,14 +131,9 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `POST /api/auth/login` - Login (returns JWT token)
 - `GET /api/users/{id}` - Get user profile
 
-### Game Operations
-- `POST /api/games` - Create game (**JWT required**)
-- `GET /api/games/{id}` - Get game state (Public)
-- `POST /api/games/{id}/moves` - Make move (**JWT required**, body: `{"from": "e2", "to": "e4"}`)
-- `POST /api/games/{id}/resign` - Resign game (**JWT required**)
-- `POST /api/games/{id}/draw/offer` - Offer draw (**JWT required**)
-- `POST /api/games/{id}/draw/accept` - Accept draw offer (**JWT required**)
-- `POST /api/games/{id}/draw/reject` - Reject draw offer (**JWT required**)
+### Game History (**JWT required**)
+- `GET /api/history/games` - List authenticated user's games (only their own)
+- `GET /api/history/games/{gameId}/moves` - List moves of a game (participants only; 403 for non-participants, 404 for unknown game)
 
 ### Matchmaking (**All require JWT**)
 - `POST /api/matchmaking/queue` - Join queue (returns WAITING or MATCHED)
@@ -195,8 +191,8 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 ### JWT
 - **Generation**: Login returns JWT with userId claim, 24h expiration, HMAC256
 - **Validation**: Ktor plugin validates signature, issuer, audience, expiration
-- **Protected Routes**: Game operations, matchmaking (require `Authorization: Bearer <token>`)
-- **User ID Extraction**: userId from JWT creates Player objects in GameRoutes
+- **Protected Routes**: Game history, matchmaking (require `Authorization: Bearer <token>`)
+- **User ID Extraction**: userId from JWT used directly in `GameHistoryRoutes` (history queries use UserId, not Player)
 
 ### Password Hashing
 - BCrypt work factor 12, auto-salting, passwords never logged
@@ -230,7 +226,7 @@ Run: `./gradlew architectureTest`
 
 - **Location**: `src/integrationTest/kotlin/`
 - **Database**: Testcontainers PostgreSQL 16 (singleton, auto-migrations, cleanup between tests)
-- **Coverage**: Full stack (REST → Use Cases → Domain → Repository), JWT auth, matchmaking flow, DTOs, HTTP status codes, ACL
+- **Coverage**: Full stack (REST → Use Cases → Domain → Repository), JWT auth, matchmaking flow, game history, DTOs, HTTP status codes, ACL
 - Run: `./gradlew integrationTest`
 
 ## Development Notes

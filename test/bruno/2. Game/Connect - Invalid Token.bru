@@ -1,0 +1,26 @@
+meta {
+  name: Connect - Invalid Token (GameAuthFailed)
+  type: ws
+  seq: 4
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token=invalid.jwt.token
+  auth: inherit
+}
+
+docs {
+  # Connexion avec un token invalide
+
+  Tente de se connecter avec un JWT invalide.
+
+  **Message reçu du serveur :**
+  ```json
+  {
+    "type": "GameAuthFailed",
+    "reason": "Invalid or expired token"
+  }
+  ```
+
+  La connexion est fermée immédiatement après.
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Get Game Moves - Not Found
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/history/games/01JXXXXXXXXXXXXXXXXXXXXXXXXX/moves
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{whiteToken}}
+}
+
+tests {
+  test("Status is 404", function() {
+    expect(res.status).to.equal(404);
+  });
+
+  test("Response has error field", function() {
+    expect(res.body.error).to.be.a('string');
+  });
+}

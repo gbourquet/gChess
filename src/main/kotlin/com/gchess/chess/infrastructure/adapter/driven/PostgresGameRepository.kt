@@ -190,6 +190,78 @@ class PostgresGameRepository(
         )
     }
 
+    @OptIn(ExperimentalTime::class)
+    override suspend fun findByUserId(userId: UserId): List<Game> = withContext(Dispatchers.IO) {
+        val gameRecords = dsl.select(
+                GAMES.ID,
+                GAMES.WHITE_PLAYER_ID,
+                GAMES.WHITE_USER_ID,
+                GAMES.BLACK_PLAYER_ID,
+                GAMES.BLACK_USER_ID,
+                GAMES.BOARD_FEN,
+                GAMES.CURRENT_SIDE,
+                GAMES.STATUS,
+                GAMES.DRAW_OFFERED_BY,
+                GAMES.TIME_CONTROL_TOTAL_SECONDS,
+                GAMES.TIME_CONTROL_INCREMENT_SECONDS,
+                GAMES.WHITE_TIME_REMAINING_MS,
+                GAMES.BLACK_TIME_REMAINING_MS,
+                GAMES.LAST_MOVE_AT
+            )
+            .from(GAMES)
+            .where(GAMES.WHITE_USER_ID.eq(userId.value).or(GAMES.BLACK_USER_ID.eq(userId.value)))
+            .fetch()
+
+        gameRecords.mapNotNull { gameRecord ->
+            val gameId = gameRecord.value1() ?: return@mapNotNull null
+
+            val moves = dsl.select(GAME_MOVES.FROM_SQUARE, GAME_MOVES.TO_SQUARE, GAME_MOVES.PROMOTION)
+                .from(GAME_MOVES)
+                .where(GAME_MOVES.GAME_ID.eq(gameId))
+                .orderBy(GAME_MOVES.MOVE_NUMBER.asc())
+                .fetch()
+                .map { record ->
+                    val from = Position.fromAlgebraic(record.value1()!!)
+                    val to = Position.fromAlgebraic(record.value2()!!)
+                    val promotion = record.value3()?.let { PieceType.valueOf(it) }
+                    Move(from, to, promotion)
+                }
+
+            val whitePlayerId = PlayerId.fromString(gameRecord.value2()!!)
+            val whiteUserId = UserId.fromString(gameRecord.value3()!!)
+            val blackPlayerId = PlayerId.fromString(gameRecord.value4()!!)
+            val blackUserId = UserId.fromString(gameRecord.value5()!!)
+
+            val whitePlayer = Player(whitePlayerId, whiteUserId, PlayerSide.WHITE)
+            val blackPlayer = Player(blackPlayerId, blackUserId, PlayerSide.BLACK)
+
+            val totalSeconds = gameRecord.value10()
+            val incrementSeconds = gameRecord.value11()
+            val timeControl = if (totalSeconds != null && incrementSeconds != null) {
+                TimeControl(totalSeconds, incrementSeconds)
+            } else null
+
+            val lastMoveAt = gameRecord.value14()?.let { ldt ->
+                Instant.fromEpochMilliseconds(ldt.toInstant(ZoneOffset.UTC).toEpochMilli())
+            }
+
+            Game(
+                id = GameId(gameId),
+                whitePlayer = whitePlayer,
+                blackPlayer = blackPlayer,
+                board = gameRecord.value6()!!.toChessPosition(),
+                currentSide = PlayerSide.valueOf(gameRecord.value7()!!),
+                status = GameStatus.valueOf(gameRecord.value8()!!),
+                moveHistory = moves,
+                drawOfferedBy = gameRecord.value9()?.let { PlayerSide.valueOf(it) },
+                timeControl = timeControl,
+                whiteTimeRemainingMs = gameRecord.value12(),
+                blackTimeRemainingMs = gameRecord.value13(),
+                lastMoveAt = lastMoveAt
+            )
+        }
+    }
+
     override suspend fun delete(id: GameId): Unit = withContext(Dispatchers.IO) {
         dsl.deleteFrom(GAMES)
             .where(GAMES.ID.eq(id.value))

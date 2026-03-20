@@ -1,26 +1,34 @@
 meta {
-  name: Get Game
-  type: http
+  name: Connect - White Player (GameStateSync)
+  type: ws
   seq: 2
 }
 
-get {
-  url: {{baseUrl}}/api/games/{{gameId}}
-  body: none
-  auth: none
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  auth: inherit
 }
 
-tests {
-  test("Status is 200", function() {
-    expect(res.status).to.equal(200);
-  });
+docs {
+  # Connexion White Player — réception du GameStateSync
 
-  test("Game ID matches", function() {
-    expect(res.body.id).to.equal(bru.getEnvVar("gameId"));
-  });
+  Se connecte au WebSocket de la partie en tant que joueur blanc.
 
-  test("Game has correct players", function() {
-    expect(res.body.whitePlayer).to.equal(bru.getEnvVar("whitePlayerId"));
-    expect(res.body.blackPlayer).to.equal(bru.getEnvVar("blackPlayerId"));
-  });
+  **Messages reçus automatiquement du serveur :**
+  1. `GameAuthSuccess` — authentification réussie
+  2. `GameStateSync` — état complet de la partie :
+     ```json
+     {
+       "type": "GameStateSync",
+       "gameId": "...",
+       "positionFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+       "moveHistory": [],
+       "gameStatus": "IN_PROGRESS",
+       "currentSide": "WHITE",
+       "whitePlayerId": "...",
+       "blackPlayerId": "...",
+       "whiteUsername": "alice",
+       "blackUsername": "bob"
+     }
+     ```
 }

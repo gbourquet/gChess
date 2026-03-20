@@ -19,16 +19,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.domain.port
+package com.gchess.chess.application.usecase
 
 import com.gchess.chess.domain.model.Game
-import com.gchess.shared.domain.model.GameId
+import com.gchess.chess.domain.port.GameRepository
 import com.gchess.shared.domain.model.UserId
 
-interface GameRepository {
-    suspend fun save(game: Game): Game
-    suspend fun findById(id: GameId): Game?
-    suspend fun findByUserId(userId: UserId): List<Game>
-    suspend fun delete(id: GameId)
-    suspend fun findAll(): List<Game>
+class GetUserGamesUseCase(
+    private val gameRepository: GameRepository
+) {
+    suspend fun execute(userId: UserId): List<Game> {
+        return gameRepository.findByUserId(userId)
+    }
 }

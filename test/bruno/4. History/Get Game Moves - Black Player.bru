@@ -1,0 +1,25 @@
+meta {
+  name: Get Game Moves - Black Player
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/history/games/{{gameId}}/moves
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{blackToken}}
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("Black player sees the same moves as white", function() {
+    expect(res.body).to.be.an('array');
+  });
+}

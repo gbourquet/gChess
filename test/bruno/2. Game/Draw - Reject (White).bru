@@ -1,0 +1,37 @@
+meta {
+  name: Draw - Reject (White)
+  type: ws
+  seq: 12
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: RejectDraw
+  type: json
+  content: '''
+    {
+      "type": "RejectDraw"
+    }
+  '''
+}
+
+docs {
+  # Refus de nulle — Joueur Blanc
+
+  Se connecte en tant que joueur blanc et refuse la proposition de nulle du noir.
+  Prérequis : une offre de nulle active du joueur noir doit exister.
+
+  **Message DrawRejected reçu (broadcast aux deux joueurs) :**
+  ```json
+  {
+    "type": "DrawRejected"
+  }
+  ```
+
+  La partie continue (`IN_PROGRESS`). Le tour de jeu normal reprend.
+}

@@ -1,0 +1,38 @@
+meta {
+  name: Draw - Offer (White)
+  type: ws
+  seq: 10
+}
+
+ws {
+  url: {{baseUrl}}/ws/game/{{gameId}}?token={{whiteToken}}
+  body: ws
+  auth: inherit
+}
+
+body:ws {
+  name: OfferDraw
+  type: json
+  content: '''
+    {
+      "type": "OfferDraw"
+    }
+  '''
+}
+
+docs {
+  # Proposition de nulle — Joueur Blanc
+
+  Se connecte en tant que joueur blanc et propose une nulle.
+
+  **Message DrawOffered reçu (broadcast aux deux joueurs) :**
+  ```json
+  {
+    "type": "DrawOffered",
+    "offeredByPlayerId": "<whitePlayerId>"
+  }
+  ```
+
+  Le joueur noir doit ensuite accepter (`AcceptDraw`) ou refuser (`RejectDraw`).
+  Une seule offre de nulle active à la fois : une nouvelle offre annule la précédente.
+}

@@ -19,16 +19,40 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.domain.port
+package com.gchess.chess.infrastructure.adapter.driver.dto
 
 import com.gchess.chess.domain.model.Game
-import com.gchess.shared.domain.model.GameId
-import com.gchess.shared.domain.model.UserId
+import com.gchess.chess.domain.model.Move
+import kotlinx.serialization.Serializable
 
-interface GameRepository {
-    suspend fun save(game: Game): Game
-    suspend fun findById(id: GameId): Game?
-    suspend fun findByUserId(userId: UserId): List<Game>
-    suspend fun delete(id: GameId)
-    suspend fun findAll(): List<Game>
-}
+@Serializable
+data class GameSummaryDTO(
+    val gameId: String,
+    val whiteUserId: String,
+    val blackUserId: String,
+    val status: String,
+    val moveCount: Int
+)
+
+@Serializable
+data class MoveSummaryDTO(
+    val moveNumber: Int,
+    val from: String,
+    val to: String,
+    val promotion: String? = null
+)
+
+fun Game.toSummaryDTO() = GameSummaryDTO(
+    gameId = id.value,
+    whiteUserId = whitePlayer.userId.value,
+    blackUserId = blackPlayer.userId.value,
+    status = status.name,
+    moveCount = moveHistory.size
+)
+
+fun Move.toSummaryDTO(moveNumber: Int) = MoveSummaryDTO(
+    moveNumber = moveNumber,
+    from = from.toAlgebraic(),
+    to = to.toAlgebraic(),
+    promotion = promotion?.name
+)
