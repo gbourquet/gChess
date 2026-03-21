@@ -96,7 +96,7 @@ val appModule = module {
     single { AcceptDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { RejectDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { ClaimTimeoutUseCase(get(), get()) }  // gameRepository, gameEventNotifier
-    single { GetUserGamesUseCase(get()) }
+    single { GetUserGamesUseCase(get(), get()) }  // gameRepository, userRepository
     single { GetGameMovesUseCase(get()) }
 
     // ========== User Context ==========

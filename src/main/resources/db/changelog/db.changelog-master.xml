@@ -24,4 +24,7 @@
     <!-- Chess context: add time control columns -->
     <include file="db/changelog/changes/20260310-add-time-control-columns.xml"/>
 
+    <!-- Chess context: add winner side column -->
+    <include file="db/changelog/changes/20260320-add-winner-side-column.xml"/>
+
 </databaseChangeLog>

@@ -78,7 +78,12 @@ fun Application.configureGameHistoryRoutes() {
                         val userId = JwtConfig.extractUserId(principal.payload)
 
                         val games = getUserGamesUseCase.execute(userId)
-                        call.respond(HttpStatusCode.OK, games.map { it.toSummaryDTO() })
+                        call.respond(HttpStatusCode.OK, games.map { result ->
+                            result.game.toSummaryDTO(
+                                whiteUsername = result.whiteUsername,
+                                blackUsername = result.blackUsername
+                            )
+                        })
                     }
                 }
 

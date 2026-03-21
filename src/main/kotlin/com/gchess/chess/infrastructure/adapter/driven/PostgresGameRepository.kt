@@ -33,6 +33,7 @@ import com.gchess.shared.domain.model.UserId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlin.time.ExperimentalTime
@@ -53,6 +54,33 @@ import kotlin.time.Instant
 class PostgresGameRepository(
     private val dsl: DSLContext
 ) : GameRepository {
+
+    private fun loadMoves(gameId: String): List<Move> {
+        val records = dsl.select(
+                GAME_MOVES.FROM_SQUARE,
+                GAME_MOVES.TO_SQUARE,
+                GAME_MOVES.PROMOTION,
+                GAME_MOVES.RECEIVED_AT
+            )
+            .from(GAME_MOVES)
+            .where(GAME_MOVES.GAME_ID.eq(gameId))
+            .orderBy(GAME_MOVES.MOVE_NUMBER.asc())
+            .fetch()
+
+        return records.mapIndexed { index, record ->
+            val from = Position.fromAlgebraic(record.value1()!!)
+            val to = Position.fromAlgebraic(record.value2()!!)
+            val promotion = record.value3()?.let { PieceType.valueOf(it) }
+            val receivedAt = record.value4()
+            val timeSpentMs = if (index > 0) {
+                val prev = records[index - 1].value4()
+                if (prev != null && receivedAt != null)
+                    java.time.Duration.between(prev, receivedAt).toMillis()
+                else null
+            } else null
+            Move(from, to, promotion, timeSpentMs)
+        }
+    }
 
     @OptIn(ExperimentalTime::class)
     override suspend fun save(game: Game): Game = withContext(Dispatchers.IO) {
@@ -81,6 +109,7 @@ class PostgresGameRepository(
                 .set(GAMES.WHITE_TIME_REMAINING_MS, game.whiteTimeRemainingMs)
                 .set(GAMES.BLACK_TIME_REMAINING_MS, game.blackTimeRemainingMs)
                 .set(GAMES.LAST_MOVE_AT, lastMoveAtDb)
+                .set(DSL.field("winner_side", String::class.java), game.winnerSide?.name)
                 .set(GAMES.CREATED_AT, now)
                 .set(GAMES.UPDATED_AT, now)
                 .onConflict(GAMES.ID)
@@ -92,15 +121,11 @@ class PostgresGameRepository(
                 .set(GAMES.WHITE_TIME_REMAINING_MS, game.whiteTimeRemainingMs)
                 .set(GAMES.BLACK_TIME_REMAINING_MS, game.blackTimeRemainingMs)
                 .set(GAMES.LAST_MOVE_AT, lastMoveAtDb)
+                .set(DSL.field("winner_side", String::class.java), game.winnerSide?.name)
                 .set(GAMES.UPDATED_AT, now)
                 .execute()
 
-            // Delete old moves and insert new ones (simpler than diffing)
-            ctx.deleteFrom(GAME_MOVES)
-                .where(GAME_MOVES.GAME_ID.eq(game.id.value))
-                .execute()
-
-            // Insert all moves with their order
+            // Insert only new moves (ON CONFLICT DO NOTHING preserves original received_at)
             game.moveHistory.forEachIndexed { index, move ->
                 ctx.insertInto(GAME_MOVES)
                     .set(GAME_MOVES.GAME_ID, game.id.value)
@@ -110,6 +135,8 @@ class PostgresGameRepository(
                     .set(GAME_MOVES.PROMOTION, move.promotion?.name)
                     .set(GAME_MOVES.CREATED_AT, now)
                     .set(GAME_MOVES.RECEIVED_AT, now)
+                    .onConflict(GAME_MOVES.GAME_ID, GAME_MOVES.MOVE_NUMBER)
+                    .doNothing()
                     .execute()
             }
 
@@ -120,6 +147,7 @@ class PostgresGameRepository(
     @OptIn(ExperimentalTime::class)
     override suspend fun findById(id: GameId): Game? = withContext(Dispatchers.IO) {
         // Fetch game record
+        val winnerSideField = DSL.field("winner_side", String::class.java)
         val gameRecord = dsl.select(
                 GAMES.ID,
                 GAMES.WHITE_PLAYER_ID,
@@ -134,25 +162,15 @@ class PostgresGameRepository(
                 GAMES.TIME_CONTROL_INCREMENT_SECONDS,
                 GAMES.WHITE_TIME_REMAINING_MS,
                 GAMES.BLACK_TIME_REMAINING_MS,
-                GAMES.LAST_MOVE_AT
+                GAMES.LAST_MOVE_AT,
+                winnerSideField
             )
             .from(GAMES)
             .where(GAMES.ID.eq(id.value))
             .fetchOne()
             ?: return@withContext null
 
-        // Fetch moves ordered by move_number
-        val moves = dsl.select(GAME_MOVES.FROM_SQUARE, GAME_MOVES.TO_SQUARE, GAME_MOVES.PROMOTION)
-            .from(GAME_MOVES)
-            .where(GAME_MOVES.GAME_ID.eq(id.value))
-            .orderBy(GAME_MOVES.MOVE_NUMBER.asc())
-            .fetch()
-            .map { record ->
-                val from = Position.fromAlgebraic(record.value1()!!)
-                val to = Position.fromAlgebraic(record.value2()!!)
-                val promotion = record.value3()?.let { PieceType.valueOf(it) }
-                Move(from, to, promotion)
-            }
+        val moves = loadMoves(id.value)
 
         // Reconstruct Game domain model
         // Note: Both PlayerIds and UserIds are now persisted and loaded
@@ -186,12 +204,14 @@ class PostgresGameRepository(
             timeControl = timeControl,
             whiteTimeRemainingMs = gameRecord.value12(),
             blackTimeRemainingMs = gameRecord.value13(),
-            lastMoveAt = lastMoveAt
+            lastMoveAt = lastMoveAt,
+            winnerSide = gameRecord.get(winnerSideField)?.let { PlayerSide.valueOf(it) }
         )
     }
 
     @OptIn(ExperimentalTime::class)
     override suspend fun findByUserId(userId: UserId): List<Game> = withContext(Dispatchers.IO) {
+        val winnerSideField = DSL.field("winner_side", String::class.java)
         val gameRecords = dsl.select(
                 GAMES.ID,
                 GAMES.WHITE_PLAYER_ID,
@@ -206,7 +226,8 @@ class PostgresGameRepository(
                 GAMES.TIME_CONTROL_INCREMENT_SECONDS,
                 GAMES.WHITE_TIME_REMAINING_MS,
                 GAMES.BLACK_TIME_REMAINING_MS,
-                GAMES.LAST_MOVE_AT
+                GAMES.LAST_MOVE_AT,
+                winnerSideField
             )
             .from(GAMES)
             .where(GAMES.WHITE_USER_ID.eq(userId.value).or(GAMES.BLACK_USER_ID.eq(userId.value)))
@@ -215,17 +236,7 @@ class PostgresGameRepository(
         gameRecords.mapNotNull { gameRecord ->
             val gameId = gameRecord.value1() ?: return@mapNotNull null
 
-            val moves = dsl.select(GAME_MOVES.FROM_SQUARE, GAME_MOVES.TO_SQUARE, GAME_MOVES.PROMOTION)
-                .from(GAME_MOVES)
-                .where(GAME_MOVES.GAME_ID.eq(gameId))
-                .orderBy(GAME_MOVES.MOVE_NUMBER.asc())
-                .fetch()
-                .map { record ->
-                    val from = Position.fromAlgebraic(record.value1()!!)
-                    val to = Position.fromAlgebraic(record.value2()!!)
-                    val promotion = record.value3()?.let { PieceType.valueOf(it) }
-                    Move(from, to, promotion)
-                }
+            val moves = loadMoves(gameId)
 
             val whitePlayerId = PlayerId.fromString(gameRecord.value2()!!)
             val whiteUserId = UserId.fromString(gameRecord.value3()!!)
@@ -257,7 +268,8 @@ class PostgresGameRepository(
                 timeControl = timeControl,
                 whiteTimeRemainingMs = gameRecord.value12(),
                 blackTimeRemainingMs = gameRecord.value13(),
-                lastMoveAt = lastMoveAt
+                lastMoveAt = lastMoveAt,
+                winnerSide = gameRecord.get(winnerSideField)?.let { PlayerSide.valueOf(it) }
             )
         }
     }
@@ -271,6 +283,7 @@ class PostgresGameRepository(
 
     @OptIn(ExperimentalTime::class)
     override suspend fun findAll(): List<Game> = withContext(Dispatchers.IO) {
+        val winnerSideField = DSL.field("winner_side", String::class.java)
         // Fetch all games
         val gameRecords = dsl.select(
                 GAMES.ID,
@@ -286,7 +299,8 @@ class PostgresGameRepository(
                 GAMES.TIME_CONTROL_INCREMENT_SECONDS,
                 GAMES.WHITE_TIME_REMAINING_MS,
                 GAMES.BLACK_TIME_REMAINING_MS,
-                GAMES.LAST_MOVE_AT
+                GAMES.LAST_MOVE_AT,
+                winnerSideField
             )
             .from(GAMES)
             .fetch()
@@ -295,18 +309,7 @@ class PostgresGameRepository(
         gameRecords.mapNotNull { gameRecord ->
             val gameId = gameRecord.value1() ?: return@mapNotNull null
 
-            // Fetch moves for this game
-            val moves = dsl.select(GAME_MOVES.FROM_SQUARE, GAME_MOVES.TO_SQUARE, GAME_MOVES.PROMOTION)
-                .from(GAME_MOVES)
-                .where(GAME_MOVES.GAME_ID.eq(gameId))
-                .orderBy(GAME_MOVES.MOVE_NUMBER.asc())
-                .fetch()
-                .map { record ->
-                    val from = Position.fromAlgebraic(record.value1()!!)
-                    val to = Position.fromAlgebraic(record.value2()!!)
-                    val promotion = record.value3()?.let { PieceType.valueOf(it) }
-                    Move(from, to, promotion)
-                }
+            val moves = loadMoves(gameId)
 
             // Reconstruct Player objects with persisted PlayerIds
             val whitePlayerId = PlayerId.fromString(gameRecord.value2()!!)
@@ -339,7 +342,8 @@ class PostgresGameRepository(
                 timeControl = timeControl,
                 whiteTimeRemainingMs = gameRecord.value12(),
                 blackTimeRemainingMs = gameRecord.value13(),
-                lastMoveAt = lastMoveAt
+                lastMoveAt = lastMoveAt,
+                winnerSide = gameRecord.get(winnerSideField)?.let { PlayerSide.valueOf(it) }
             )
         }
     }

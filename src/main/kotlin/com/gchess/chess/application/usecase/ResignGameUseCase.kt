@@ -67,7 +67,7 @@ class ResignGameUseCase(
             return Result.failure(Exception("Game is already finished"))
         }
 
-        val resignedGame = game.copy(status = GameStatus.RESIGNED)
+        val resignedGame = game.copy(status = GameStatus.RESIGNED, winnerSide = game.getOpponent(player).side)
         gameRepository.save(resignedGame)
 
         gameEventNotifier.notifyGameResigned(resignedGame, player)

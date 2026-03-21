@@ -24,11 +24,28 @@ package com.gchess.chess.application.usecase
 import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.shared.domain.model.UserId
+import com.gchess.user.domain.port.UserRepository
 
 class GetUserGamesUseCase(
-    private val gameRepository: GameRepository
+    private val gameRepository: GameRepository,
+    private val userRepository: UserRepository
 ) {
-    suspend fun execute(userId: UserId): List<Game> {
-        return gameRepository.findByUserId(userId)
+    data class GameWithUsernames(
+        val game: Game,
+        val whiteUsername: String,
+        val blackUsername: String
+    )
+
+    suspend fun execute(userId: UserId): List<GameWithUsernames> {
+        val games = gameRepository.findByUserId(userId)
+        return games.map { game ->
+            val whiteUser = userRepository.findById(game.whitePlayer.userId)
+            val blackUser = userRepository.findById(game.blackPlayer.userId)
+            GameWithUsernames(
+                game = game,
+                whiteUsername = whiteUser?.username ?: "?",
+                blackUsername = blackUser?.username ?: "?"
+            )
+        }
     }
 }

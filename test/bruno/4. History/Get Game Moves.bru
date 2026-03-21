@@ -28,7 +28,17 @@ tests {
       expect(move.moveNumber).to.be.a('number');
       expect(move.from).to.be.a('string').and.to.have.lengthOf(2);
       expect(move.to).to.be.a('string').and.to.have.lengthOf(2);
+      expect(move).to.have.property('timeSpentMs');
     });
+  });
+
+  test("timeSpentMs is null for move 0 and a number for subsequent moves", function() {
+    if (res.body.length > 0) {
+      expect(res.body[0].timeSpentMs).to.be.null;
+    }
+    for (var i = 1; i < res.body.length; i++) {
+      expect(res.body[i].timeSpentMs).to.be.a('number').and.to.be.at.least(0);
+    }
   });
 
   test("Moves are ordered by moveNumber", function() {

@@ -54,7 +54,7 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
 - **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`, `ClaimTimeoutUseCase`, `GetUserGamesUseCase`, `GetGameMovesUseCase`
 - **Infrastructure**: `GameHistoryRoutes` (REST history), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
-  - **DTOs**: `GameSummaryDTO` (gameId, whiteUserId, blackUserId, status, moveCount), `MoveSummaryDTO` (moveNumber, from, to, promotion)
+  - **DTOs**: `GameSummaryDTO` (gameId, whiteUserId, blackUserId, status, moveCount, winnerUserId?, whiteTimeRemainingMs?, blackTimeRemainingMs?), `MoveSummaryDTO` (moveNumber, from, to, promotion, timeSpentMs?)
 
 #### User Context (`com.gchess.user`)
 - **Domain**: `User` (id: UserId, username, email, passwordHash), `Credentials`
@@ -97,11 +97,13 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 ## Domain Model Summary
 
 ### Chess
-- `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory, timeControl?, whiteTimeRemainingMs?, blackTimeRemainingMs?, lastMoveAt?
+- `Game`: id, whitePlayer, blackPlayer, currentSide, currentPlayer (derived), status, moveHistory, timeControl?, whiteTimeRemainingMs?, blackTimeRemainingMs?, lastMoveAt?, winnerSide?
 - `Player`: id (PlayerId), userId, side (WHITE/BLACK) - created via `Player.create(userId, side)`
+- `Move`: from, to, promotion?, timeSpentMs? (null for first move; computed from `received_at` delta on load)
 - `ChessPosition`: Bitboard-based (12 bitboards: 6 types × 2 colors), FEN support
 - `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT
-- `Game.pendingDrawOffer`: Optional PlayerSide indicating who offered a draw
+- `Game.winnerSide`: set by use cases on game end — CHECKMATE/TIMEOUT/RESIGNED; null for draws and in-progress
+- `Game.drawOfferedBy`: Optional PlayerSide indicating who offered a draw
 
 ### User
 - `User`: id (UserId), username (min 3), email, passwordHash (BCrypt)
@@ -239,3 +241,4 @@ Run: `./gradlew architectureTest`
 - **Bitboard Engine**: 64-bit Longs, bit 0 = a1, bit 63 = h8, FEN import/export
 - **Immutability**: Domain models are immutable data classes
 - **Coroutines**: jOOQ calls wrapped in `withContext(Dispatchers.IO)`
+- **jOOQ generated files**: `src/main/generated/` — ne pas modifier `Games.kt` (table) car sa dépendance circulaire avec `Indexes.kt` casse la compilation. Utiliser `DSL.field("col_name", Type::class.java)` pour les nouvelles colonnes en attendant `./gradlew generateJooq`.
