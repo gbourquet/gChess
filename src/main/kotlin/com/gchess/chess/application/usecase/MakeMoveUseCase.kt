@@ -95,7 +95,10 @@ class MakeMoveUseCase(
         }
 
         if (currentTimeMs != null && currentTimeMs <= 0) {
-            val timedOutGame = gameWithClock.copy(status = GameStatus.TIMEOUT)
+            val timedOutGame = gameWithClock.copy(
+                status = GameStatus.TIMEOUT,
+                winnerSide = gameWithClock.currentSide.opposite()
+            )
             gameRepository.save(timedOutGame)
             gameEventNotifier.notifyMoveExecuted(timedOutGame, move)
             return Result.success(timedOutGame)
@@ -144,6 +147,9 @@ class MakeMoveUseCase(
             else -> GameStatus.IN_PROGRESS
         }
 
-        return game.copy(status = newStatus)
+        // After makeMove, currentSide is the player who just received checkmate (the loser)
+        val winnerSide = if (newStatus == GameStatus.CHECKMATE) game.currentSide.opposite() else null
+
+        return game.copy(status = newStatus, winnerSide = winnerSide)
     }
 }

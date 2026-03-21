@@ -91,6 +91,7 @@ class ClaimTimeoutUseCase(
         val loser = game.currentPlayer
         val timedOutGame = game.copy(
             status = GameStatus.TIMEOUT,
+            winnerSide = loser.side.opposite(),
             whiteTimeRemainingMs = if (game.currentSide == PlayerSide.WHITE) remainingMs else game.whiteTimeRemainingMs,
             blackTimeRemainingMs = if (game.currentSide == PlayerSide.BLACK) remainingMs else game.blackTimeRemainingMs
         )

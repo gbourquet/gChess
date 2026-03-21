@@ -35,6 +35,19 @@ tests {
     expect(game.blackUserId).to.be.a('string');
     expect(game.status).to.be.a('string');
     expect(game.moveCount).to.be.a('number');
+    // winnerUserId is null for in-progress or draw, string for a finished game with a winner
+    expect(game).to.have.property('winnerUserId');
+    // time fields are null when no time control is configured
+    expect(game).to.have.property('whiteTimeRemainingMs');
+    expect(game).to.have.property('blackTimeRemainingMs');
+  });
+
+  test("winnerUserId is a string or null", function() {
+    const game = res.body[0];
+    if (game.winnerUserId !== null) {
+      expect(game.winnerUserId).to.be.a('string');
+      expect([game.whiteUserId, game.blackUserId]).to.include(game.winnerUserId);
+    }
   });
 
   test("White player is in the game", function() {

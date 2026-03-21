@@ -22,4 +22,10 @@ tests {
   test("Black player sees the same moves as white", function() {
     expect(res.body).to.be.an('array');
   });
+
+  test("Moves include timeSpentMs", function() {
+    res.body.forEach(function(move) {
+      expect(move).to.have.property('timeSpentMs');
+    });
+  });
 }

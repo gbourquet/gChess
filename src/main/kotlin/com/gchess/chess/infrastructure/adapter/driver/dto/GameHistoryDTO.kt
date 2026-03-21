@@ -30,8 +30,16 @@ data class GameSummaryDTO(
     val gameId: String,
     val whiteUserId: String,
     val blackUserId: String,
+    val whiteUsername: String,
+    val blackUsername: String,
     val status: String,
-    val moveCount: Int
+    val moveCount: Int,
+    val winnerUserId: String?,
+    val whiteTimeRemainingMs: Long?,
+    val blackTimeRemainingMs: Long?,
+    val totalTimeSeconds: Int?,
+    val incrementSeconds: Int?,
+    val playedAt: String?
 )
 
 @Serializable
@@ -39,20 +47,34 @@ data class MoveSummaryDTO(
     val moveNumber: Int,
     val from: String,
     val to: String,
-    val promotion: String? = null
+    val promotion: String? = null,
+    val timeSpentMs: Long? = null
 )
 
-fun Game.toSummaryDTO() = GameSummaryDTO(
+@OptIn(kotlin.time.ExperimentalTime::class)
+fun Game.toSummaryDTO(whiteUsername: String, blackUsername: String) = GameSummaryDTO(
     gameId = id.value,
     whiteUserId = whitePlayer.userId.value,
     blackUserId = blackPlayer.userId.value,
+    whiteUsername = whiteUsername,
+    blackUsername = blackUsername,
     status = status.name,
-    moveCount = moveHistory.size
+    moveCount = moveHistory.size,
+    winnerUserId = winnerSide?.let { side ->
+        if (side == com.gchess.shared.domain.model.PlayerSide.WHITE) whitePlayer.userId.value
+        else blackPlayer.userId.value
+    },
+    whiteTimeRemainingMs = whiteTimeRemainingMs,
+    blackTimeRemainingMs = blackTimeRemainingMs,
+    totalTimeSeconds = timeControl?.totalTimeSeconds,
+    incrementSeconds = timeControl?.incrementSeconds,
+    playedAt = lastMoveAt?.toString()
 )
 
 fun Move.toSummaryDTO(moveNumber: Int) = MoveSummaryDTO(
     moveNumber = moveNumber,
     from = from.toAlgebraic(),
     to = to.toAlgebraic(),
-    promotion = promotion?.name
+    promotion = promotion?.name,
+    timeSpentMs = timeSpentMs
 )

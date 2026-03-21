@@ -53,7 +53,8 @@ data class Game(
     val timeControl: TimeControl? = null,
     val whiteTimeRemainingMs: Long? = null,
     val blackTimeRemainingMs: Long? = null,
-    val lastMoveAt: Instant? = null
+    val lastMoveAt: Instant? = null,
+    val winnerSide: PlayerSide? = null
 ) {
     init {
         require(whitePlayer.side == PlayerSide.WHITE) {

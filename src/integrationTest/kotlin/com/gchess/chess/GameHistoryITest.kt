@@ -45,6 +45,8 @@ import kotlinx.serialization.json.*
  * 4. Récupération des coups d'une partie (GET /api/history/games/{id}/moves)
  * 5. Accès interdit aux non-participants (403)
  * 6. Partie inconnue (404)
+ * 7. winnerUserId, whiteTimeRemainingMs, blackTimeRemainingMs dans GameSummaryDTO
+ * 8. timeSpentMs par coup dans MoveSummaryDTO
  */
 class GameHistoryITest : DatabaseITest({
 
@@ -184,6 +186,11 @@ class GameHistoryITest : DatabaseITest({
             val blackUserId = gameSummary["blackUserId"]?.jsonPrimitive?.content
             // L'un des deux doit être user1Id
             (whiteUserId == user1Id || blackUserId == user1Id) shouldBe true
+
+            // Partie en cours sans contrôle du temps : winnerUserId et temps null
+            gameSummary["winnerUserId"] shouldBe JsonNull
+            gameSummary["whiteTimeRemainingMs"] shouldBe JsonNull
+            gameSummary["blackTimeRemainingMs"] shouldBe JsonNull
         }
     }
 
@@ -320,11 +327,15 @@ class GameHistoryITest : DatabaseITest({
             move1["from"]?.jsonPrimitive?.content shouldBe "e2"
             move1["to"]?.jsonPrimitive?.content shouldBe "e4"
             move1["promotion"]?.jsonPrimitive?.contentOrNull shouldBe null
+            // Premier coup : pas de coup précédent, timeSpentMs est null
+            move1["timeSpentMs"]?.jsonPrimitive?.longOrNull shouldBe null
 
             val move2 = body[1].jsonObject
             move2["moveNumber"]?.jsonPrimitive?.int shouldBe 1
             move2["from"]?.jsonPrimitive?.content shouldBe "e7"
             move2["to"]?.jsonPrimitive?.content shouldBe "e5"
+            // Deuxième coup : temps écoulé depuis le premier coup, >= 0
+            move2["timeSpentMs"]?.jsonPrimitive?.longOrNull shouldNotBe null
 
             // Joueur noir peut aussi consulter les coups
             val responseBlack = httpClient.get("/api/history/games/$gameId/moves") {
@@ -333,6 +344,139 @@ class GameHistoryITest : DatabaseITest({
             responseBlack.status shouldBe HttpStatusCode.OK
             val bodyBlack = Json.parseToJsonElement(responseBlack.bodyAsText()).jsonArray
             bodyBlack shouldHaveSize 2
+        }
+    }
+
+    "GameSummaryDTO contient winnerUserId après une résignation" {
+        testApplication {
+            application { module() }
+            val httpClient = createClient { }
+
+            val token1 = registerAndLogin(httpClient, "resign_p1", "rp1@example.com")
+            val token2 = registerAndLogin(httpClient, "resign_p2", "rp2@example.com")
+
+            // Récupérer les userId des deux joueurs
+            val user1Id = Json.parseToJsonElement(
+                httpClient.post("/api/auth/login") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"username": "resign_p1", "password": "password123"}""")
+                }.bodyAsText()
+            ).jsonObject["user"]?.jsonObject?.get("id")?.jsonPrimitive?.content!!
+
+            val user2Id = Json.parseToJsonElement(
+                httpClient.post("/api/auth/login") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"username": "resign_p2", "password": "password123"}""")
+                }.bodyAsText()
+            ).jsonObject["user"]?.jsonObject?.get("id")?.jsonPrimitive?.content!!
+
+            val (gameId, whiteToken, blackToken) = createGameViaMatchmaking(token1, token2)
+
+            // Les blancs résignent
+            val gameClient = createClient { install(WebSockets) }
+            gameClient.webSocket("/ws/game/$gameId?token=$whiteToken") {
+                suspend fun receiveMessage(): JsonObject {
+                    val frame = incoming.receive() as Frame.Text
+                    return Json.parseToJsonElement(frame.readText()).jsonObject
+                }
+                receiveMessage() // AuthSuccess
+                receiveMessage() // GameStateSync
+                send(Frame.Text("""{"type": "Resign"}"""))
+                receiveMessage() // GameResigned broadcast
+                close()
+            }
+
+            // Vérifier le résumé de partie
+            val response = httpClient.get("/api/history/games") {
+                bearerAuth(whiteToken)
+            }
+            response.status shouldBe HttpStatusCode.OK
+            val body = Json.parseToJsonElement(response.bodyAsText()).jsonArray
+            body shouldHaveSize 1
+
+            val gameSummary = body[0].jsonObject
+            gameSummary["status"]?.jsonPrimitive?.content shouldBe "RESIGNED"
+
+            // winnerUserId doit être l'adversaire du résignant (les noirs)
+            val whiteUserId = gameSummary["whiteUserId"]?.jsonPrimitive?.content!!
+            val blackUserId = gameSummary["blackUserId"]?.jsonPrimitive?.content!!
+            val winnerUserId = gameSummary["winnerUserId"]?.jsonPrimitive?.contentOrNull
+
+            // Le gagnant est l'adversaire du joueur blanc (qui a résigné)
+            winnerUserId shouldNotBe null
+            winnerUserId shouldBe blackUserId
+
+            // Les deux userId sont bien ceux des joueurs enregistrés
+            setOf(whiteUserId, blackUserId) shouldBe setOf(user1Id, user2Id)
+        }
+    }
+
+    "timeSpentMs du deuxième coup est strictement positif (régression: était toujours 0)" {
+        testApplication {
+            application { module() }
+            val httpClient = createClient { }
+
+            val token1 = registerAndLogin(httpClient, "timing_white", "twhite@example.com")
+            val token2 = registerAndLogin(httpClient, "timing_black", "tblack@example.com")
+
+            val (gameId, whiteToken, blackToken) = createGameViaMatchmaking(token1, token2)
+
+            val gameClient1 = createClient { install(WebSockets) }
+            val gameClient2 = createClient { install(WebSockets) }
+
+            coroutineScope {
+                val whiteSession = async {
+                    gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
+                        suspend fun receiveMessage(): JsonObject {
+                            val frame = incoming.receive() as Frame.Text
+                            return Json.parseToJsonElement(frame.readText()).jsonObject
+                        }
+                        receiveMessage() // AuthSuccess
+                        receiveMessage() // GameStateSync
+                        send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
+                        receiveMessage() // MoveExecuted
+                        receiveMessage() // black's move
+                        close()
+                    }
+                }
+                val blackSession = async {
+                    gameClient2.webSocket("/ws/game/$gameId?token=$blackToken") {
+                        suspend fun receiveMessage(): JsonObject {
+                            val frame = incoming.receive() as Frame.Text
+                            return Json.parseToJsonElement(frame.readText()).jsonObject
+                        }
+                        receiveMessage() // AuthSuccess
+                        receiveMessage() // GameStateSync
+                        receiveMessage() // white's move
+
+                        // Délai intentionnel pour garantir timeSpentMs > 0
+                        delay(100)
+
+                        send(Frame.Text("""{"type": "MoveAttempt", "from": "e7", "to": "e5"}"""))
+                        receiveMessage() // MoveExecuted
+                        close()
+                    }
+                }
+                withTimeout(10000) {
+                    whiteSession.await()
+                    blackSession.await()
+                }
+            }
+
+            val response = httpClient.get("/api/history/games/$gameId/moves") {
+                bearerAuth(whiteToken)
+            }
+            response.status shouldBe HttpStatusCode.OK
+            val body = Json.parseToJsonElement(response.bodyAsText()).jsonArray
+            body shouldHaveSize 2
+
+            // Premier coup : timeSpentMs null (pas de coup précédent)
+            body[0].jsonObject["timeSpentMs"]?.jsonPrimitive?.longOrNull shouldBe null
+
+            // Deuxième coup : timeSpentMs strictement positif
+            val timeSpentMs = body[1].jsonObject["timeSpentMs"]?.jsonPrimitive?.longOrNull
+            timeSpentMs shouldNotBe null
+            (timeSpentMs!! > 0) shouldBe true
         }
     }
 

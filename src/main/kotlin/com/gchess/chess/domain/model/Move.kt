@@ -24,7 +24,8 @@ package com.gchess.chess.domain.model
 data class Move(
     val from: Position,
     val to: Position,
-    val promotion: PieceType? = null
+    val promotion: PieceType? = null,
+    val timeSpentMs: Long? = null
 ) {
     fun toAlgebraic(): String {
         val base = "${from.toAlgebraic()}${to.toAlgebraic()}"
