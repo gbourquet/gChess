@@ -19,6 +19,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+@file:OptIn(kotlin.time.ExperimentalTime::class)
 package com.gchess.chess.infrastructure.adapter.driver
 
 import com.gchess.chess.application.usecase.ClaimTimeoutResult
@@ -172,7 +173,8 @@ fun Application.configureGameWebSocketRoutes() {
                 totalTimeSeconds = game.timeControl?.totalTimeSeconds,
                 incrementSeconds = game.timeControl?.incrementSeconds,
                 whiteTimeRemainingMs = game.whiteTimeRemainingMs,
-                blackTimeRemainingMs = game.blackTimeRemainingMs
+                blackTimeRemainingMs = game.blackTimeRemainingMs,
+                lastMoveAt = game.lastMoveAt?.toString()
             )
             gameManager.send(playerId, stateSyncMsg)
 
@@ -422,7 +424,8 @@ fun Application.configureGameWebSocketRoutes() {
                 totalTimeSeconds = game.timeControl?.totalTimeSeconds,
                 incrementSeconds = game.timeControl?.incrementSeconds,
                 whiteTimeRemainingMs = game.whiteTimeRemainingMs,
-                blackTimeRemainingMs = game.blackTimeRemainingMs
+                blackTimeRemainingMs = game.blackTimeRemainingMs,
+                lastMoveAt = game.lastMoveAt?.toString()
             )
             spectatorManager.broadcastToSpectators(gameId, stateSyncMsg)
 
