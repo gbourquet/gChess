@@ -106,7 +106,8 @@ data class GameStateSyncMessage(
     val totalTimeSeconds: Int? = null,
     val incrementSeconds: Int? = null,
     val whiteTimeRemainingMs: Long? = null,
-    val blackTimeRemainingMs: Long? = null
+    val blackTimeRemainingMs: Long? = null,
+    val lastMoveAt: String? = null
 ) : GameWebSocketMessage()
 
 /**
