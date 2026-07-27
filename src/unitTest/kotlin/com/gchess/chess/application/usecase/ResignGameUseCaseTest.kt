@@ -57,7 +57,8 @@ class ResignGameUseCaseTest : FunSpec({
             moveHistory = emptyList()
         )
 
-        val resignedGame = game.copy(status = GameStatus.RESIGNED)
+        // Le joueur qui abandonne perd : c'est son adversaire qui est vainqueur.
+        val resignedGame = game.copy(status = GameStatus.RESIGNED, winnerSide = PlayerSide.BLACK)
 
         // Mock behavior
         coEvery { gameRepository.findById(gameId) } returns game
@@ -70,6 +71,7 @@ class ResignGameUseCaseTest : FunSpec({
         // Then
         result.isSuccess shouldBe true
         result.getOrNull()!!.status shouldBe GameStatus.RESIGNED
+        result.getOrNull()!!.winnerSide shouldBe PlayerSide.BLACK
 
         // Verify interactions
         coVerify { gameRepository.findById(gameId) }
@@ -198,7 +200,8 @@ class ResignGameUseCaseTest : FunSpec({
             moveHistory = emptyList()
         )
 
-        val resignedGame = game.copy(status = GameStatus.RESIGNED)
+        // Les noirs abandonnent : les blancs gagnent.
+        val resignedGame = game.copy(status = GameStatus.RESIGNED, winnerSide = PlayerSide.WHITE)
 
         // Mock behavior
         coEvery { gameRepository.findById(gameId) } returns game
@@ -211,6 +214,7 @@ class ResignGameUseCaseTest : FunSpec({
         // Then
         result.isSuccess shouldBe true
         result.getOrNull()!!.status shouldBe GameStatus.RESIGNED
+        result.getOrNull()!!.winnerSide shouldBe PlayerSide.WHITE
 
         // Verify interactions
         coVerify { gameRepository.findById(gameId) }

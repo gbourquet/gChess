@@ -35,7 +35,9 @@ import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.service.ChessRules
 import com.gchess.chess.domain.service.StandardChessRules
+import com.gchess.chess.domain.port.UsernameResolver
 import com.gchess.chess.infrastructure.adapter.driven.PostgresGameRepository
+import com.gchess.chess.infrastructure.adapter.driven.UserContextUsernameResolver
 import com.gchess.chess.infrastructure.adapter.driven.WebSocketGameEventNotifier
 import com.gchess.user.application.usecase.LoginUseCase
 import com.gchess.user.application.usecase.RegisterUserUseCase
@@ -96,7 +98,7 @@ val appModule = module {
     single { AcceptDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { RejectDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { ClaimTimeoutUseCase(get(), get()) }  // gameRepository, gameEventNotifier
-    single { GetUserGamesUseCase(get(), get()) }  // gameRepository, userRepository
+    single { GetUserGamesUseCase(get(), get()) }  // gameRepository, usernameResolver
     single { GetGameMovesUseCase(get()) }
 
     // ========== User Context ==========
@@ -123,6 +125,8 @@ val appModule = module {
     single<GameCreator> { ChessContextGameCreator(get()) }
     // Connects Matchmaking → User for user validation
     single<UserExistenceChecker> { UserContextUserChecker(get()) }
+    // Connects Chess → User to display usernames in game history
+    single<UsernameResolver> { UserContextUsernameResolver(get()) }
     // Matchmaking notifier for WebSocket real-time updates
     single<MatchmakingNotifier> { WebSocketMatchmakingNotifier(get()) }
 

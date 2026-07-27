@@ -19,33 +19,28 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.application.usecase
+package com.gchess.chess.infrastructure.adapter.driven
 
-import com.gchess.chess.domain.model.Game
-import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.port.UsernameResolver
 import com.gchess.shared.domain.model.UserId
+import com.gchess.user.application.usecase.GetUserUseCase
 
-class GetUserGamesUseCase(
-    private val gameRepository: GameRepository,
-    // Port ACL : le contexte Chess ne connaît pas le contexte User, seul
-    // l'adaptateur d'infrastructure franchit la frontière.
-    private val usernameResolver: UsernameResolver
-) {
-    data class GameWithUsernames(
-        val game: Game,
-        val whiteUsername: String,
-        val blackUsername: String
-    )
-
-    suspend fun execute(userId: UserId): List<GameWithUsernames> {
-        val games = gameRepository.findByUserId(userId)
-        return games.map { game ->
-            GameWithUsernames(
-                game = game,
-                whiteUsername = usernameResolver.resolve(game.whitePlayer.userId) ?: "?",
-                blackUsername = usernameResolver.resolve(game.blackPlayer.userId) ?: "?"
-            )
-        }
+/**
+ * Anti-Corruption Layer adapter that allows the Chess context to display
+ * usernames by communicating with the User context.
+ *
+ * This adapter:
+ * - Implements the UsernameResolver port (defined in Chess domain)
+ * - Calls GetUserUseCase from the User context
+ * - Extracts the username only, so the User aggregate never leaks into Chess
+ *
+ * Being in the infrastructure layer, it is the only place allowed to cross
+ * the bounded context boundary (enforced by BoundedContextTest).
+ */
+class UserContextUsernameResolver(
+    private val getUserUseCase: GetUserUseCase
+) : UsernameResolver {
+    override suspend fun resolve(userId: UserId): String? {
+        return getUserUseCase.execute(userId)?.username
     }
 }

@@ -19,33 +19,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.gchess.chess.application.usecase
+package com.gchess.chess.domain.port
 
-import com.gchess.chess.domain.model.Game
-import com.gchess.chess.domain.port.GameRepository
-import com.gchess.chess.domain.port.UsernameResolver
 import com.gchess.shared.domain.model.UserId
 
-class GetUserGamesUseCase(
-    private val gameRepository: GameRepository,
-    // Port ACL : le contexte Chess ne connaît pas le contexte User, seul
-    // l'adaptateur d'infrastructure franchit la frontière.
-    private val usernameResolver: UsernameResolver
-) {
-    data class GameWithUsernames(
-        val game: Game,
-        val whiteUsername: String,
-        val blackUsername: String
-    )
-
-    suspend fun execute(userId: UserId): List<GameWithUsernames> {
-        val games = gameRepository.findByUserId(userId)
-        return games.map { game ->
-            GameWithUsernames(
-                game = game,
-                whiteUsername = usernameResolver.resolve(game.whitePlayer.userId) ?: "?",
-                blackUsername = usernameResolver.resolve(game.blackPlayer.userId) ?: "?"
-            )
-        }
-    }
+/**
+ * Port for resolving a user's display name.
+ *
+ * This is part of the Anti-Corruption Layer (ACL) that allows the Chess context
+ * to display usernames in game history without depending on the User context.
+ *
+ * Only the display name crosses the boundary — never the User aggregate itself.
+ */
+interface UsernameResolver {
+    /**
+     * Resolves the username of a given user.
+     *
+     * @param userId The ID of the user
+     * @return The username, or null if no user matches this ID
+     */
+    suspend fun resolve(userId: UserId): String?
 }
