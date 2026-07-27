@@ -172,6 +172,14 @@ class PawnPromotionITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync. Si les blancs jouent
+            // pendant cette fenêtre, les noirs reçoivent le MoveExecuted avant
+            // leur sync et toute la chorégraphie se décale d'un message.
+            // Ce signal garantit que les noirs sont synchronisés avant le
+            // premier coup.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -187,6 +195,9 @@ class PawnPromotionITest : DatabaseITest({
                         // Receive GameStateSync
                         val syncMsg = receiveMessage()
                         syncMsg["type"]?.jsonPrimitive?.content shouldBe "GameStateSync"
+
+                        // Ne pas jouer tant que les noirs ne sont pas synchronisés
+                        blackReady.await()
 
                         // Move 1: d2-d4
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "d2", "to": "d4"}"""))
@@ -260,6 +271,9 @@ class PawnPromotionITest : DatabaseITest({
 
                         // Receive GameStateSync
                         receiveMessage()
+
+                        // Débloque les blancs : la synchronisation est faite
+                        blackReady.complete(Unit)
 
                         // Wait for white's move
                         val whiteMove1 = receiveMessage()

@@ -55,6 +55,16 @@ jobs:
       - name: Tests unitaires + architecture + intégration
         run: ./gradlew unitTest architectureTest integrationTest -x generateJooq -x setupJooqDatabase
 
+      # Sans ça, un échec ne laisse que la ligne « FAILED » dans les logs,
+      # sans le message d'assertion.
+      - name: Publier les rapports de test
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-tests
+          path: build/reports/tests/
+          retention-days: 7
+
   build:
     name: Build et publication de l'image
     needs: test
