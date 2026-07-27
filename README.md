@@ -803,6 +803,23 @@ export DATABASE_PASSWORD="<secure-password>"
 
 ---
 
+## 🚢 Deployment
+
+Production runs at **https://gchess.sur-le-web.fr** (server `72.62.236.230`),
+behind a single nginx that serves the Angular front on `/` and proxies the API
+on `/api` and the WebSockets on `/ws`.
+
+Any push to `master` builds a Docker image on GitHub Actions, publishes it to
+GHCR and restarts the container on the server — nothing is compiled in
+production. See **[`deploy/README.md`](deploy/README.md)** for server setup,
+required secrets, TLS bootstrap, rollback and database backups.
+
+```bash
+cd /opt/gchess
+docker compose ps
+docker compose logs -f back
+```
+
 ## 🧪 Testing
 
 The project has **100+ tests** organized into three categories:

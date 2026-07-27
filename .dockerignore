@@ -50,6 +50,10 @@ scripts/
 # CI/CD
 .github/
 
+# Stack de déploiement (compose, nginx, scripts serveur) : synchronisée
+# par rsync vers /opt/gchess, jamais embarquée dans l'image.
+deploy/
+
 # nginx configuration (handled separately)
 nginx/
 

@@ -1,0 +1,139 @@
+name: Deploy
+
+# Build de l'image sur les runners GitHub, publication sur GHCR,
+# puis simple « pull & up » sur le serveur : rien n'est compilé
+# en production.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  # Deux déploiements simultanés se marcheraient dessus sur le serveur.
+  group: deploy-back
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/gchess-back
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurer Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Configurer Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Tests unitaires + architecture + intégration
+        run: ./gradlew unitTest architectureTest integrationTest -x generateJooq -x setupJooqDatabase
+
+  build:
+    name: Build et publication de l'image
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authentification GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build et push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Le tag SHA rend le rollback trivial :
+          #   sed -i "s|^BACK_IMAGE=.*|BACK_IMAGE=<image>:<sha précédent>|" .env
+          #   docker compose up -d back
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Déploiement sur le serveur
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparer la clé SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      # Le repo back est propriétaire de la stack : on synchronise le
+      # compose et la conf nginx à chaque déploiement. .env est exclu,
+      # il contient les secrets et vit uniquement sur le serveur.
+      - name: Synchroniser la stack de déploiement
+        run: |
+          rsync -az --delete \
+            --exclude '.env' \
+            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.SSH_PORT || 22 }}" \
+            deploy/ \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/gchess/"
+
+      - name: Pull et redémarrage
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "${{ secrets.SSH_PORT || 22 }}" \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'ENDSSH'
+          set -euo pipefail
+          cd /opt/gchess
+
+          # Login éphémère : le token du job expire à la fin du workflow,
+          # aucun identifiant durable n'est stocké sur le serveur.
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u token --password-stdin
+
+          # Épingle la version déployée (tag SHA) dans .env
+          sed -i "s|^BACK_IMAGE=.*|BACK_IMAGE=${{ env.IMAGE }}:${{ github.sha }}|" .env
+
+          docker compose pull back
+          docker compose up -d back
+
+          docker logout ghcr.io
+          docker image prune -f
+          ENDSSH
+
+      - name: Vérifier la santé du service
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://${{ vars.DOMAIN || 'gchess.sur-le-web.fr' }}/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "✅ Back en ligne (/health → 200)"
+              exit 0
+            fi
+            echo "Tentative $i : /health → $code"
+            sleep 5
+          done
+          echo "❌ Le back n'a pas répondu 200 sur /health après 150 s" >&2
+          exit 1

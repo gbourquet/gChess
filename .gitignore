@@ -29,6 +29,9 @@ bin/
 .env
 .env.*
 !.env.*.example
+# `.env.*.example` exige un segment intermédiaire et ne rattrape donc pas
+# `.env.example` (celui de deploy/), qui resterait ignoré sans cette ligne.
+!.env.example
 
 # Generated secrets (for deployment)
 jwt_secret.txt

@@ -1,0 +1,63 @@
+name: CI
+
+# Vérification des pull requests. Le déploiement rejoue ces mêmes
+# tests avant de publier l'image (voir deploy.yml).
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurer Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Configurer Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Les sources jOOQ sont committées dans src/main/generated/,
+      # inutile de lancer une base pour les régénérer au build.
+      - name: Tests unitaires
+        run: ./gradlew unitTest -x generateJooq -x setupJooqDatabase
+
+      - name: Tests d'architecture (ArchUnit)
+        run: ./gradlew architectureTest -x generateJooq -x setupJooqDatabase
+
+      # Testcontainers démarre un PostgreSQL 16 éphémère.
+      - name: Tests d'intégration
+        run: ./gradlew integrationTest -x generateJooq -x setupJooqDatabase
+
+      - name: Publier les rapports de test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-tests
+          path: build/reports/tests/
+          retention-days: 7
+
+  docker:
+    name: Build de l'image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # On vérifie que le Dockerfile compile toujours, sans publier.
+      - name: Build de l'image (sans push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

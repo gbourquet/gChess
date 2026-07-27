@@ -79,8 +79,9 @@ ENTRYPOINT ["java", \
     "-jar", \
     "/app/gchess.jar"]
 
-# Variables d'environnement (à configurer dans Railway) :
-# - PORT             : port d'écoute (défaut : 8080, Railway injecte automatiquement)
+# Variables d'environnement (définies dans /opt/gchess/.env sur le serveur,
+# voir deploy/.env.example) :
+# - PORT             : port d'écoute (défaut : 8080)
 # - ENVIRONMENT      : local|test|prod (défaut : local)
 # - DATABASE_URL     : JDBC URL PostgreSQL (ex: jdbc:postgresql://host:5432/db)
 # - DATABASE_USER    : utilisateur PostgreSQL
