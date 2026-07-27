@@ -135,6 +135,12 @@ class DrawAndResignITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -145,6 +151,8 @@ class DrawAndResignITest : DatabaseITest({
 
                         receiveMessage() // Skip AuthSuccess
                         receiveMessage() // Skip GameStateSync
+
+                        blackReady.await() // ne pas jouer avant que noir soit synchronisé
 
                         // Move 1: e2-e4
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
@@ -174,6 +182,9 @@ class DrawAndResignITest : DatabaseITest({
 
                         receiveMessage() // Skip AuthSuccess
                         receiveMessage() // Skip GameStateSync
+
+                        blackReady.complete(Unit) // débloque blanc
+
                         receiveMessage() // Wait for white's e4
 
                         // Move 1: e7-e5
@@ -297,6 +308,12 @@ class DrawAndResignITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -307,6 +324,8 @@ class DrawAndResignITest : DatabaseITest({
 
                         receiveMessage() // Skip AuthSuccess
                         receiveMessage() // Skip GameStateSync
+
+                        blackReady.await() // ne pas jouer avant que noir soit synchronisé
 
                         // Move 1: e2-e4
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
@@ -341,6 +360,9 @@ class DrawAndResignITest : DatabaseITest({
 
                         receiveMessage() // Skip AuthSuccess
                         receiveMessage() // Skip GameStateSync
+
+                        blackReady.complete(Unit) // débloque blanc
+
                         receiveMessage() // Wait for white's e4
 
                         // Move 1: e7-e5
@@ -465,6 +487,12 @@ class DrawAndResignITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -475,6 +503,8 @@ class DrawAndResignITest : DatabaseITest({
 
                         receiveMessage() // Skip AuthSuccess
                         receiveMessage() // Skip GameStateSync
+
+                        blackReady.await() // ne pas jouer avant que noir soit synchronisé
 
                         // Move 1: e2-e4
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
@@ -504,6 +534,9 @@ class DrawAndResignITest : DatabaseITest({
 
                         receiveMessage() // Skip AuthSuccess
                         receiveMessage() // Skip GameStateSync
+
+                        blackReady.complete(Unit) // débloque blanc
+
                         receiveMessage() // Wait for white's e4
 
                         // Move 1: e7-e5

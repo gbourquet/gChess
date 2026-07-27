@@ -277,6 +277,12 @@ class GameHistoryITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -286,6 +292,9 @@ class GameHistoryITest : DatabaseITest({
                         }
                         receiveMessage() // AuthSuccess
                         receiveMessage() // GameStateSync
+
+                        blackReady.await() // ne pas jouer avant que noir soit synchronisé
+
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
                         receiveMessage() // MoveExecuted
                         receiveMessage() // Wait for black's move
@@ -300,6 +309,9 @@ class GameHistoryITest : DatabaseITest({
                         }
                         receiveMessage() // AuthSuccess
                         receiveMessage() // GameStateSync
+
+                        blackReady.complete(Unit) // débloque blanc
+
                         receiveMessage() // Wait for white's e4
 
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e7", "to": "e5"}"""))
@@ -424,6 +436,12 @@ class GameHistoryITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -433,6 +451,9 @@ class GameHistoryITest : DatabaseITest({
                         }
                         receiveMessage() // AuthSuccess
                         receiveMessage() // GameStateSync
+
+                        blackReady.await() // ne pas jouer avant que noir soit synchronisé
+
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
                         receiveMessage() // MoveExecuted
                         receiveMessage() // black's move
@@ -447,6 +468,9 @@ class GameHistoryITest : DatabaseITest({
                         }
                         receiveMessage() // AuthSuccess
                         receiveMessage() // GameStateSync
+
+                        blackReady.complete(Unit) // débloque blanc
+
                         receiveMessage() // white's move
 
                         // Délai intentionnel pour garantir timeSpentMs > 0
@@ -494,6 +518,12 @@ class GameHistoryITest : DatabaseITest({
             val gameClient1 = createClient { install(WebSockets) }
             val gameClient2 = createClient { install(WebSockets) }
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     gameClient1.webSocket("/ws/game/$gameId?token=$whiteToken") {
@@ -503,6 +533,9 @@ class GameHistoryITest : DatabaseITest({
                         }
                         receiveMessage() // AuthSuccess
                         receiveMessage() // GameStateSync
+
+                        blackReady.await() // ne pas jouer avant que noir soit synchronisé
+
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e2", "to": "e4"}"""))
                         receiveMessage() // MoveExecuted
                         receiveMessage() // black's move
@@ -517,6 +550,9 @@ class GameHistoryITest : DatabaseITest({
                         }
                         receiveMessage() // AuthSuccess
                         receiveMessage() // GameStateSync
+
+                        blackReady.complete(Unit) // débloque blanc
+
                         receiveMessage() // white's move
 
                         send(Frame.Text("""{"type": "MoveAttempt", "from": "e7", "to": "e5"}"""))

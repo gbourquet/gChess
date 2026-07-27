@@ -192,6 +192,12 @@ class ScholarsMateITest : DatabaseITest({
 
             println("Starting game sessions...")
 
+            // Le serveur enregistre la session dans le GameConnectionManager
+            // AVANT de lui envoyer son GameStateSync : un coup joué pendant
+            // cette fenêtre arrive chez l'adversaire avant son sync et décale
+            // toute la chorégraphie d'un message.
+            val blackReady = CompletableDeferred<Unit>()
+
             coroutineScope {
                 val whiteSession = async {
                     println("White session starting...")
@@ -208,6 +214,9 @@ class ScholarsMateITest : DatabaseITest({
                     // Receive GameStateSync
                     val syncMsg = receiveMessage()
                     syncMsg["type"]?.jsonPrimitive?.content shouldBe "GameStateSync"
+
+                    // Ne pas jouer tant que les noirs ne sont pas synchronisés
+                    blackReady.await()
 
                     // Move 1: e2-e4
                     println("White plays e2-e4")
@@ -266,6 +275,9 @@ class ScholarsMateITest : DatabaseITest({
 
                     // Receive GameStateSync
                     receiveMessage()
+
+                    // Débloque les blancs : la synchronisation est faite
+                    blackReady.complete(Unit)
 
                     // Wait for white's move (e2-e4)
                     val whiteMove1 = receiveMessage()
