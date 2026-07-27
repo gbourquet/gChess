@@ -2,12 +2,22 @@
 # Stack de production gChess — serveur 72.62.236.230
 # ============================================================
 #
-# Topologie : un seul nginx en frontal, tout le reste sur le
-# réseau interne Docker (aucun port publié en dehors de 80/443).
+# Le serveur héberge déjà d'autres sites derrière un nginx système :
+# c'est lui qui détient les ports 80 et 443 et qui termine le TLS.
+# La stack n'expose donc qu'un port HTTP sur la boucle locale, et son
+# nginx interne se charge du routage applicatif.
 #
-#   https://gchess.sur-le-web.fr/         → front  (Angular)
-#   https://gchess.sur-le-web.fr/api/...  → back   (Ktor)
-#   https://gchess.sur-le-web.fr/ws/...   → back   (WebSocket)
+#   Internet :443
+#      → nginx SYSTÈME (TLS, certbot --nginx)  ← deploy/nginx-host/
+#         → 127.0.0.1:${HTTP_PORT}
+#            → nginx CONTENEUR                 ← deploy/nginx/
+#               ├─ /      → front (Angular)
+#               ├─ /api/  → back  (Ktor)
+#               └─ /ws/   → back  (WebSocket)
+#
+# Aucun port n'est joignable depuis l'extérieur : le bind sur
+# 127.0.0.1 rend la stack inaccessible autrement que par le nginx
+# système, indépendamment du pare-feu.
 #
 # Les images sont construites par GitHub Actions et récupérées
 # depuis ghcr.io — rien n'est compilé sur le serveur.
@@ -71,56 +81,24 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      # Bind explicite sur la boucle locale : sans le préfixe 127.0.0.1,
+      # Docker publierait sur 0.0.0.0 et ouvrirait le port au monde en
+      # contournant firewalld, qui ne voit pas les règles DOCKER de iptables.
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
     volumes:
       # Le suffixe :z réétiquette le fichier pour SELinux (container_file_t).
       # Sans lui, sur une distribution Enterprise Linux, nginx se voit refuser
       # la lecture de sa propre configuration et le conteneur boucle au
-      # démarrage. Les volumes nommés, eux, sont étiquetés par Docker.
-      - ./nginx/gchess.conf.template:/etc/nginx/templates/gchess.conf.template:ro,z
-      - certbot-webroot:/var/www/certbot:ro
-      - letsencrypt:/etc/letsencrypt:ro
-    environment:
-      DOMAIN: ${DOMAIN}
-      # L'image nginx applique envsubst sur /etc/nginx/templates/*.template.
-      # Sans cette liste, $host / $uri seraient eux aussi substitués.
-      NGINX_ENVSUBST_FILTER: "DOMAIN"
+      # démarrage.
+      - ./nginx/gchess.conf:/etc/nginx/conf.d/default.conf:ro,z
     depends_on:
       - back
       - front
     networks:
       - internal
 
-  # Renouvellement automatique des certificats.
-  # Certbot vérifie deux fois par jour ; Let's Encrypt ne renouvelle
-  # qu'à moins de 30 jours de l'expiration, les autres passages sont
-  # des no-op. Le rechargement de nginx est fait par le service reloader.
-  certbot:
-    image: certbot/certbot:latest
-    restart: unless-stopped
-    volumes:
-      - letsencrypt:/etc/letsencrypt
-      - certbot-webroot:/var/www/certbot
-    entrypoint: >
-      sh -c "trap exit TERM;
-             while :; do
-               certbot renew --webroot -w /var/www/certbot --quiet;
-               sleep 12h & wait $${!};
-             done"
-    networks:
-      - internal
-
-# nginx ne relit pas ses certificats tout seul : après un renouvellement il
-# faut lui envoyer un SIGHUP. C'est fait par une tâche cron sur l'hôte
-# (voir deploy/README.md) plutôt que par un conteneur montant
-# /var/run/docker.sock — SELinux refuse cet accès sur Enterprise Linux, et
-# donner la socket Docker à un conteneur revient à lui donner root.
-
 volumes:
   pgdata:
-  letsencrypt:
-  certbot-webroot:
 
 networks:
   internal:

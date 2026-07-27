@@ -3,18 +3,22 @@
 Stack de production servie depuis **72.62.236.230**, sur le domaine
 **gchess.sur-le-web.fr**.
 
-```
-                    ┌──────────────── serveur 72.62.236.230 ───────────────┐
-  Internet          │                                                      │
-     │              │   nginx :80/:443 ──┬─→ front  :8080  (Angular)       │
-     └──── 443 ─────┼──→ (TLS, proxy)    ├─→ back   :8080  (Ktor)          │
-                    │                    │        └─→ postgres :5432       │
-                    │   certbot (renouvellement automatique)               │
-                    └──────────────────────────────────────────────────────┘
-```
+Le serveur héberge déjà d'autres sites derrière un **nginx système**, qui
+détient les ports 80 et 443. gChess se place derrière lui.
 
-Seuls les ports **80** et **443** sont publiés. Le back, le front et la base
-ne sont joignables que depuis le réseau interne Docker.
+```
+                 ┌──────────────── serveur 72.62.236.230 ────────────────┐
+ Internet        │                                                       │
+    │            │  nginx SYSTÈME ──┬─→ site perso (inchangé)            │
+    └─── 443 ────┼─→ TLS, certbot   │                                    │
+                 │                  └─→ 127.0.0.1:8080                   │
+                 │                        │                              │
+                 │                        └─→ nginx CONTENEUR            │
+                 │                             ├─→ front    (Angular)    │
+                 │                             ├─→ back     (Ktor)       │
+                 │                             └─→ postgres              │
+                 └───────────────────────────────────────────────────────┘
+```
 
 | Chemin | Destination |
 |---|---|
@@ -26,6 +30,17 @@ ne sont joignables que depuis le réseau interne Docker.
 Front et API partagent la même origine : aucun préflight CORS, un seul
 certificat, et les WebSockets passent en `wss://` sans configuration
 supplémentaire.
+
+**Pourquoi deux nginx.** Celui de l'hôte ne connaît qu'une destination et son
+fichier de conf, une dizaine de lignes, n'a jamais à évoluer. Tout le routage
+applicatif reste en aval, versionné dans `deploy/nginx/` et redéployé par la
+CI. Le coût est un saut de proxy supplémentaire sur la boucle locale,
+négligeable.
+
+**Rien n'est joignable depuis l'extérieur** hormis le nginx système : la stack
+est publiée sur `127.0.0.1` uniquement. Ce bind explicite compte, car Docker
+insère ses règles directement dans iptables, en contournant firewalld — sans
+lui, un `ports: 8080:80` exposerait le service au monde malgré le pare-feu.
 
 ## Répartition des responsabilités
 
@@ -89,21 +104,22 @@ mkdir -p /opt/gchess
 chown deploy:deploy /opt/gchess
 
 # --- Pare-feu (firewalld, pas ufw) ---
+# Déjà en place si le nginx système sert un site : à vérifier seulement.
 firewall-cmd --permanent --add-service=ssh
 firewall-cmd --permanent --add-service=http
 firewall-cmd --permanent --add-service=https
 firewall-cmd --reload
 
-# --- Rechargement de nginx après renouvellement du certificat ---
-# cron n'est pas installé sur une CentOS Stream minimale.
-dnf -y install cronie
-systemctl enable --now crond
+# --- SELinux : autoriser nginx à proxifier vers la boucle locale ---
+# Sans ça, le nginx système reçoit un "Permission denied" en tentant de
+# joindre 127.0.0.1:8080, et renvoie 502 sur tout gChess.
+setsebool -P httpd_can_network_connect 1
+```
 
-# certbot renouvelle, mais nginx garde l'ancien certificat en mémoire.
-cat > /etc/cron.d/gchess-nginx-reload <<'EOF'
-0 4 * * * deploy cd /opt/gchess && /usr/bin/docker compose kill -s HUP nginx
-EOF
-chmod 644 /etc/cron.d/gchess-nginx-reload
+Vérifie que le port choisi est libre avant de démarrer la stack :
+
+```bash
+ss -tlnp | grep 8080    # doit ne rien renvoyer ; sinon, ajuster HTTP_PORT dans .env
 ```
 
 Vérification :
@@ -220,8 +236,8 @@ révoqué à la fin du workflow.
 
 ## 5. Premier démarrage
 
-Le tout premier déploiement se fait à la main, parce que les images
-n'existent pas encore et qu'aucun certificat n'a été émis.
+Le tout premier déploiement se fait à la main : les images n'existent pas
+encore et le nginx système ne connaît pas encore le domaine.
 
 ```bash
 # 1. Déclencher un build des deux images
@@ -229,10 +245,10 @@ n'existent pas encore et qu'aucun certificat n'a été émis.
 #    L'étape de déploiement échouera : c'est attendu, /opt/gchess est vide.
 
 # 2. Sur le serveur, récupérer la stack
-ssh deploy@72.62.236.230
+ssh -i ~/.ssh/gchess_deploy deploy@72.62.236.230
 cd /opt/gchess
-# (le déploiement du back a poussé docker-compose.yml, nginx/ et les scripts
-#  avant d'échouer ; sinon, copier deploy/ à la main)
+# (le déploiement du back y a poussé docker-compose.yml et nginx/ avant
+#  d'échouer ; sinon, copier deploy/ à la main par rsync)
 
 # 3. Configurer les secrets applicatifs
 cp .env.example .env
@@ -240,26 +256,53 @@ chmod 600 .env
 openssl rand -base64 32   # → JWT_SECRET
 openssl rand -base64 24   # → DATABASE_PASSWORD
 nano .env                 # remplacer les deux CHANGE_ME
-
-# 4. Se connecter à GHCR (images privées uniquement)
-#    Token GitHub classique avec la portée read:packages
-echo "<TON_TOKEN>" | docker login ghcr.io -u gbourquet --password-stdin
-
-# 5. Base et applications
-docker compose up -d postgres back front
-
-# 6. Certificat TLS (une seule fois)
-./init-letsencrypt.sh
-
-# 7. Le reste de la stack
-docker compose up -d
 ```
+
+Si les images GHCR sont privées, il faut s'authentifier. **Ne jamais écrire le
+token dans une commande** : il resterait en clair dans `~/.bash_history`.
+
+```bash
+read -rs GHCR_TOKEN       # coller le token, puis Entrée (rien ne s'affiche)
+echo "$GHCR_TOKEN" | docker login ghcr.io -u gbourquet --password-stdin
+unset GHCR_TOKEN
+```
+
+Le plus simple reste de rendre les paquets publics (*github.com/users/gbourquet/
+packages* → *Package settings* → *Change visibility*) : le serveur n'a alors
+aucun identifiant à stocker, et les images ne contiennent que du code déjà
+public — les secrets vivent dans `.env`, injectés au démarrage.
+
+```bash
+# 4. Démarrer la stack
+docker compose up -d
+curl -I http://127.0.0.1:8080/health          # 200, en local sur le serveur
+```
+
+### Brancher le nginx système
+
+```bash
+sudo cp /opt/gchess/nginx-host/gchess.conf /etc/nginx/conf.d/gchess.conf
+sudo nginx -t && sudo systemctl reload nginx
+
+# TLS : certbot écrit lui-même listen 443, les certificats et la
+# redirection HTTP→HTTPS dans le fichier.
+sudo certbot --nginx -d gchess.sur-le-web.fr
+```
+
+Les autres sites du serveur ne sont pas touchés : ce fichier n'ajoute qu'un
+`server` supplémentaire, sélectionné par `server_name`.
 
 Vérification :
 
 ```bash
 curl -I https://gchess.sur-le-web.fr/health   # 200
 curl -I https://gchess.sur-le-web.fr/         # 200
+
+# WebSocket : doit répondre 101 Switching Protocols
+curl -i -N -o /dev/null -w '%{http_code}\n' \
+  -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  https://gchess.sur-le-web.fr/ws/matchmaking
 ```
 
 Ensuite, **tout push sur `master` déploie automatiquement**.
@@ -313,15 +356,18 @@ gunzip -c gchess-2026-07-26.sql.gz | docker compose exec -T postgres psql -U gch
 
 ### Certificats
 
-Le service `certbot` tente un renouvellement deux fois par jour ; Let's Encrypt
-ne renouvelle qu'à moins de 30 jours de l'expiration. Le cron
-`/etc/cron.d/gchess-nginx-reload` envoie un SIGHUP à nginx chaque nuit pour
-qu'il reprenne un certificat fraîchement émis.
+Le TLS est entièrement géré par le Certbot **système**, comme pour les autres
+sites du serveur. La stack n'a ni certificat ni service certbot : rien de
+spécifique à gChess n'est à surveiller ici.
 
 ```bash
-docker compose logs certbot
-docker compose run --rm --entrypoint certbot certbot certificates   # dates d'expiration
+sudo certbot certificates              # dates d'expiration, tous domaines
+sudo certbot renew --dry-run           # vérifier le renouvellement automatique
+systemctl list-timers | grep certbot   # le timer qui s'en charge
 ```
+
+Le renouvellement recharge nginx tout seul : `certbot --nginx` installe le hook
+correspondant.
 
 ## 7. Points de vigilance
 
@@ -335,3 +381,10 @@ docker compose run --rm --entrypoint certbot certbot certificates   # dates d'ex
   tous les tokens émis deviendraient invalides et chacun serait déconnecté.
 - **Aucune sauvegarde n'est configurée par défaut.** Mettre en place le cron
   ci-dessus avant de considérer la prod comme sérieuse.
+- **Le nginx système est partagé avec les autres sites.** Un `nginx -t` qui
+  échoue empêche le rechargement et fige la configuration de *tous* les sites.
+  Toujours tester avant de recharger.
+- **`deploy/nginx-host/gchess.conf` n'est pas déployé automatiquement.** Il est
+  versionné pour référence, mais la CI ne touche jamais à `/etc/nginx`. Après
+  le passage de certbot, la copie sur l'hôte diverge d'ailleurs de celle du
+  repo, ce qui est normal.
