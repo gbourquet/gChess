@@ -116,30 +116,58 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Préparer la clé SSH
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+          # Si le secret SSH_KNOWN_HOSTS est fourni (sortie de `ssh-keyscan`
+          # exécuté depuis une machine de confiance), la clé du serveur est
+          # épinglée. Sinon on accepte celle présentée au premier contact.
+          #
+          # Un `ssh-keyscan` lancé ici à chaque déploiement n'apporterait
+          # rien : il ferait confiance à ce que le réseau lui répond, très
+          # exactement comme accept-new. Il ajoutait en revanche un point
+          # d'échec — son délai par défaut de 5 s suffit à faire tomber tout
+          # le déploiement sur une latence passagère.
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            echo "Clé serveur épinglée via SSH_KNOWN_HOSTS"
+          else
+            echo "SSH_KNOWN_HOSTS non défini : confiance au premier contact"
+          fi
+          chmod 644 ~/.ssh/known_hosts 2>/dev/null || true
+
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+              HostName ${{ secrets.SSH_HOST }}
+              User ${{ secrets.SSH_USER }}
+              Port ${{ secrets.SSH_PORT || 22 }}
+              IdentityFile ~/.ssh/id_deploy
+              IdentitiesOnly yes
+              StrictHostKeyChecking accept-new
+              ConnectTimeout 30
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Vérifier l'accès au serveur
+        run: ssh deploy-target "echo 'SSH OK' && docker version --format '{{.Server.Version}}'"
 
       # Le repo back est propriétaire de la stack : on synchronise le
       # compose et la conf nginx à chaque déploiement. .env est exclu,
       # il contient les secrets et vit uniquement sur le serveur.
       - name: Synchroniser la stack de déploiement
         run: |
-          rsync -az --delete \
-            --exclude '.env' \
-            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.SSH_PORT || 22 }}" \
-            deploy/ \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/gchess/"
+          rsync -az --delete --exclude '.env' deploy/ deploy-target:/opt/gchess/
 
       - name: Pull et redémarrage
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ssh -i ~/.ssh/id_deploy -p "${{ secrets.SSH_PORT || 22 }}" \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'ENDSSH'
+          ssh deploy-target "GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'ENDSSH'
           set -euo pipefail
           cd /opt/gchess
 
