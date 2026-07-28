@@ -336,6 +336,40 @@ Le SHA se lit dans l'historique des workflows, ou :
 docker images ghcr.io/gbourquet/gchess-back
 ```
 
+### Changer le mot de passe de la base
+
+`POSTGRES_PASSWORD` n'est lu qu'à la **première initialisation**, quand le
+volume de données est vide. Le modifier ensuite dans `.env` ne change rien à la
+base : l'application présente le nouveau mot de passe, PostgreSQL attend
+toujours l'ancien, et le back boucle sur `password authentication failed`.
+
+Il faut le changer des deux côtés :
+
+```bash
+cd /opt/gchess
+
+# Charge les valeurs du .env sans les taper (donc sans historique shell)
+set -a; . ./.env; set +a
+
+# Les connexions locales par socket unix sont en "trust" dans l'image
+# officielle : l'ancien mot de passe n'est pas nécessaire. Le nouveau
+# passe par stdin, donc invisible dans `ps`.
+printf "ALTER USER %s PASSWORD '%s';\n" "$DATABASE_USER" "$DATABASE_PASSWORD" \
+  | docker compose exec -T postgres psql -U "$DATABASE_USER" -d "$DATABASE_NAME"
+
+docker compose restart back
+docker compose logs --tail 30 back   # attendu : "Responding at http://0.0.0.0:8080"
+```
+
+Si la base est encore vide, repartir de zéro est plus court — mais **détruit
+définitivement son contenu** :
+
+```bash
+docker compose down
+docker volume rm gchess_pgdata
+docker compose up -d
+```
+
 ### Sauvegarde de la base
 
 Les parties et les comptes vivent dans le volume `gchess_pgdata`.
