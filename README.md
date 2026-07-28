@@ -805,14 +805,24 @@ export DATABASE_PASSWORD="<secure-password>"
 
 ## 🚢 Deployment
 
-Production runs at **https://gchess.sur-le-web.fr** (server `72.62.236.230`),
-behind a single nginx that serves the Angular front on `/` and proxies the API
-on `/api` and the WebSockets on `/ws`.
+gChess is designed to be **self-hosted**. The whole stack — Docker Compose,
+nginx routing, environment template — lives in [`deploy/`](deploy/), and
+[`deploy/README.md`](deploy/README.md) walks through deploying a fork on your
+own server: prerequisites, SSH key, GitHub secrets, TLS, rollback and database
+backups.
 
-Any push to `master` builds a Docker image on GitHub Actions, publishes it to
-GHCR and restarts the container on the server — nothing is compiled in
-production. See **[`deploy/README.md`](deploy/README.md)** for server setup,
-required secrets, TLS bootstrap, rollback and database backups.
+```
+Internet → nginx (host, TLS) → nginx (container) → front / back → postgres
+```
+
+The application sits behind a system nginx that terminates TLS, so it coexists
+with any other site already hosted on the machine. Front and API share a single
+origin: no CORS preflight, one certificate, and WebSockets over `wss://`.
+
+Any push to `master` runs the tests, builds a Docker image on GitHub Actions,
+publishes it to GHCR and restarts the container over SSH — nothing is compiled
+in production, and each image is tagged by commit SHA so rolling back is a
+one-liner.
 
 ```bash
 cd /opt/gchess

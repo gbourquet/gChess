@@ -186,9 +186,19 @@ jobs:
           ENDSSH
 
       - name: Vérifier la santé du service
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
         run: |
+          if [ -z "$DOMAIN" ]; then
+            echo "⚠️  Variable DOMAIN non définie : contrôle de santé public ignoré."
+            echo "    La définir dans Settings → Secrets and variables → Actions → Variables."
+            exit 0
+          fi
+
+          # GET, pas HEAD : les routes Ktor sont déclarées en `get(...)` et
+          # répondraient 405 à un `curl -I`.
           for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://${{ vars.DOMAIN || 'gchess.sur-le-web.fr' }}/health" || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/health" || true)
             if [ "$code" = "200" ]; then
               echo "✅ Back en ligne (/health → 200)"
               exit 0

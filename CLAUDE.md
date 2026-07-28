@@ -51,9 +51,14 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
     - Factory: `Player.create(userId, side)` generates PlayerId
     - Chess use cases NEVER manipulate UserId - only Player objects
 - **Ports**: `GameRepository`, `GameEventNotifier`
+  - **ACL Port**: `UsernameResolver` (→ User) — resolves a UserId to a display name for
+    game history. Only the username crosses the boundary, never the `User` aggregate.
+    `GetUserGamesUseCase` MUST depend on this port, never on `UserRepository`:
+    the direct dependency is an ArchUnit failure (`BoundedContextTest`).
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
 - **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`, `ClaimTimeoutUseCase`, `GetUserGamesUseCase`, `GetGameMovesUseCase`
 - **Infrastructure**: `GameHistoryRoutes` (REST history), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
+  - **ACL Adapter**: `UserContextUsernameResolver` (delegates to `GetUserUseCase`)
   - **DTOs**: `GameSummaryDTO` (gameId, whiteUserId, blackUserId, status, moveCount, winnerUserId?, whiteTimeRemainingMs?, blackTimeRemainingMs?), `MoveSummaryDTO` (moveNumber, from, to, promotion, timeSpentMs?)
 
 #### User Context (`com.gchess.user`)
@@ -80,7 +85,11 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 - **Anti-Corruption Layer (ACL)**: Protects context boundaries
   - Matchmaking → Chess: `GameCreator` creates game with Player objects
   - Matchmaking → User: `UserExistenceChecker` validates users
-  - Chess is fully isolated (no dependencies on User/Matchmaking)
+  - Chess → User: `UsernameResolver` resolves display names for game history
+  - Chess domain/application depend on no other context: every crossing goes
+    through a port declared in the calling context and implemented by an
+    adapter in `infrastructure/`. Injecting another context's repository
+    directly into a use case breaks `architectureTest`.
 - **Player Object Pattern**: Separates User (permanent) from Player (game participation)
   - Player creation: Matchmaking creates Players, `GameHistoryRoutes` creates Players from JWT
   - Chess uses only Player objects, never UserId directly
@@ -223,6 +232,32 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 - Shared Kernel: value objects only, no framework dependencies
 
 Run: `./gradlew architectureTest`
+
+## CI/CD and Deployment
+
+- **`.github/workflows/ci.yml`** — pull requests: unit, architecture and
+  integration tests, plus a Docker build without push.
+- **`.github/workflows/deploy.yml`** — push to `master`: tests → image build
+  → GHCR → `docker compose pull && up -d` over SSH. Images are tagged by commit
+  SHA, so a rollback is one `sed` on `/opt/gchess/.env`.
+- Both test jobs run a **PostgreSQL service container**: `generateOpenApiSpec`
+  is a dependency of `integrationTest`, boots the full Ktor module and needs a
+  database on `localhost:5432`. The integration tests themselves use
+  Testcontainers.
+- Any job building an image needs `docker/setup-buildx-action`: the default
+  docker driver cannot export the GHA cache.
+- The deployment stack lives in **[`deploy/`](deploy/)** and is rsynced to
+  `/opt/gchess` on every back deployment. See `deploy/README.md`.
+
+### Writing integration tests with two WebSocket sessions
+
+The server registers a session in the `GameConnectionManager` **before** sending
+it the `GameStateSync`. A move broadcast during that window reaches the peer
+ahead of its own sync and shifts the whole message choreography by one.
+
+Concurrent sessions must therefore synchronise explicitly — see the
+`CompletableDeferred` gate in `PawnPromotionITest` and the four other `*ITest`
+files. Without it a test passes locally and fails on CI, or the reverse.
 
 ## Integration Testing
 
