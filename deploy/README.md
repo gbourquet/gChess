@@ -275,7 +275,7 @@ public — les secrets vivent dans `.env`, injectés au démarrage.
 ```bash
 # 4. Démarrer la stack
 docker compose up -d
-curl -I http://127.0.0.1:8080/health          # 200, en local sur le serveur
+curl http://127.0.0.1:8080/health             # {"status":"UP"}, en local sur le serveur
 ```
 
 ### Brancher le nginx système
@@ -295,11 +295,18 @@ Les autres sites du serveur ne sont pas touchés : ce fichier n'ajoute qu'un
 Vérification :
 
 ```bash
-curl -I https://gchess.sur-le-web.fr/health   # 200
-curl -I https://gchess.sur-le-web.fr/         # 200
+# Ne pas utiliser `curl -I` : il envoie un HEAD, et les routes Ktor sont
+# déclarées en `get(...)` — la réponse serait un 405 trompeur.
+curl -s -o /dev/null -w '%{http_code}\n' https://gchess.sur-le-web.fr/health   # 200
+curl -s -o /dev/null -w '%{http_code}\n' https://gchess.sur-le-web.fr/         # 200
 
-# WebSocket : doit répondre 101 Switching Protocols
-curl -i -N -o /dev/null -w '%{http_code}\n' \
+# API protégée : 401 sans JWT, c'est le comportement attendu
+curl -s -o /dev/null -w '%{http_code}\n' https://gchess.sur-le-web.fr/api/history/games
+
+# WebSocket : doit répondre 101 Switching Protocols.
+# curl affiche « FAILED » juste après — il ne sait pas parler WebSocket une
+# fois le protocole changé. Seul le code 101 compte.
+curl -s -o /dev/null -w '%{http_code}\n' \
   -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
   https://gchess.sur-le-web.fr/ws/matchmaking
