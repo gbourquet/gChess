@@ -95,9 +95,12 @@ class MakeMoveUseCase(
         }
 
         if (currentTimeMs != null && currentTimeMs <= 0) {
+            // FIDE: a timeout is a draw if the opponent can no longer checkmate
+            val opponentSide = gameWithClock.currentSide.opposite()
+            val opponentCanCheckmate = chessRules.hasMatingMaterial(gameWithClock.board, opponentSide)
             val timedOutGame = gameWithClock.copy(
-                status = GameStatus.TIMEOUT,
-                winnerSide = gameWithClock.currentSide.opposite()
+                status = if (opponentCanCheckmate) GameStatus.TIMEOUT else GameStatus.DRAW,
+                winnerSide = if (opponentCanCheckmate) opponentSide else null
             )
             gameRepository.save(timedOutGame)
             gameEventNotifier.notifyMoveExecuted(timedOutGame, move)

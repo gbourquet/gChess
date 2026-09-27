@@ -132,4 +132,15 @@ interface ChessRules {
      * @return true if insufficient material for checkmate, false otherwise
      */
     fun isInsufficientMaterial(position: ChessPosition): Boolean
+
+    /**
+     * Checks if the given side still has enough material to checkmate.
+     * Used on Timeout: a flagged player only loses if the opponent could still checkmate.
+     * A lone king, or a king with a single bishop or knight, cannot checkmate.
+     *
+     * @param position The current chess position
+     * @param side The side whose material is evaluated
+     * @return true if the side can still checkmate, false otherwise
+     */
+    fun hasMatingMaterial(position: ChessPosition, side: PlayerSide): Boolean
 }

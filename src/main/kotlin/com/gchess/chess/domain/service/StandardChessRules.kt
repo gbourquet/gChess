@@ -534,6 +534,15 @@ class StandardChessRules : ChessRules {
         return false
     }
 
+    override fun hasMatingMaterial(position: ChessPosition, side: PlayerSide): Boolean {
+        val counts = countPieceTypes(position.getPiecesBySide(side))
+        val totalPieces = counts.values.sum()
+        val minorPieces = (counts[PieceType.BISHOP] ?: 0) + (counts[PieceType.KNIGHT] ?: 0)
+
+        // A lone king, or a king with a single bishop or knight, cannot checkmate
+        return !(totalPieces == 0 || (totalPieces == 1 && minorPieces == 1))
+    }
+
     /**
      * Counts the number of pieces of each type (excluding kings).
      */

@@ -636,6 +636,8 @@ components:
       description: |
         Server → Client. The opponent's clock truly reached zero.
         Broadcast to both players and all spectators.
+        `gameStatus` is `DRAW` (no winner) when the claimer no longer has the
+        material to checkmate (lone king, or king + single bishop or knight), per FIDE.
         WebSocket connections are closed ~1 second after this message.
       payload:
         type: object
@@ -650,8 +652,8 @@ components:
             example: '01HQZNR7X8A9C2D4E6F8G0H2J4'
           gameStatus:
             type: string
-            const: TIMEOUT
-            description: Game status after timeout
+            enum: [TIMEOUT, DRAW]
+            description: Game status after timeout (DRAW if the claimer cannot checkmate)
 
     TimeoutClaimRejected:
       summary: Timeout claim rejected — opponent still has time

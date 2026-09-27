@@ -97,7 +97,7 @@ val appModule = module {
     single { OfferDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { AcceptDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
     single { RejectDrawUseCase(get(), get()) }  // gameRepository, gameEventNotifier
-    single { ClaimTimeoutUseCase(get(), get()) }  // gameRepository, gameEventNotifier
+    single { ClaimTimeoutUseCase(get(), get(), get()) }  // gameRepository, gameEventNotifier, chessRules
     single { GetUserGamesUseCase(get(), get()) }  // gameRepository, usernameResolver
     single { GetGameMovesUseCase(get()) }
 
