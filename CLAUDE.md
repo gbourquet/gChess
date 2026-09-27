@@ -6,6 +6,9 @@ This file provides guidance to Claude Code when working with this repository.
 
 gChess is a Kotlin chess application using Domain-Driven Design with bounded contexts (Chess, User, Matchmaking), Hexagonal Architecture, Ktor web framework, JWT authentication, PostgreSQL, and jOOQ.
 
+- **Domain language**: [`CONTEXT.md`](CONTEXT.md) is the glossary (Player vs User, Side, Outcome, Timeout…). Use its terms in code, tests and issues.
+- **Decisions**: [`docs/adr/`](docs/adr/) records why the architecture is what it is (PlayerId per game, ACLs, in-memory queue, server-authoritative clock, in-house engine). It also holds the system-wide decisions for the front and phone clients.
+
 ## Technology Stack
 
 - **Language**: Kotlin 2.2.21, JVM: Java 21
@@ -45,7 +48,8 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 ### Bounded Contexts (DDD + Hexagonal Architecture)
 
 #### Chess Context (`com.gchess.chess`)
-- **Domain**: `Game`, `Player`, `ChessPosition` (bitboard), `Move`, `Position`, `Piece`, `PlayerSide`, `GameStatus`
+- **Domain**: `Game`, `Player`, `ChessPosition` (bitboard, the board state), `Move`, `Position` (a single square), `Piece`, `PlayerSide`, `GameStatus`, `TimeControl`
+  - The glossary calls these a **Position** and a **Square**; the code still uses the old names until GCH-3.
   - **Key Invariants**:
     - `Player.id: PlayerId` (ephemeral per-game) + `Player.userId: UserId` (permanent)
     - Factory: `Player.create(userId, side)` generates PlayerId
@@ -57,23 +61,24 @@ Environment variables: `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
     the direct dependency is an ArchUnit failure (`BoundedContextTest`).
 - **Services**: `ChessRules` interface, `StandardChessRules` (FIDE-compliant, bitboard-based)
 - **Use Cases**: `CreateGameUseCase`, `GetGameUseCase`, `MakeMoveUseCase`, `ResignGameUseCase`, `OfferDrawUseCase`, `AcceptDrawUseCase`, `RejectDrawUseCase`, `ClaimTimeoutUseCase`, `GetUserGamesUseCase`, `GetGameMovesUseCase`
-- **Infrastructure**: `GameHistoryRoutes` (REST history), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
+- **Infrastructure**: `GameWebSocketRoutes`, `GameConnectionManager`, `SpectatorConnectionManager`, `GameHistoryRoutes` (REST history), `PostgresGameRepository` (jOOQ), `WebSocketGameEventNotifier`
   - **ACL Adapter**: `UserContextUsernameResolver` (delegates to `GetUserUseCase`)
-  - **DTOs**: `GameSummaryDTO` (gameId, whiteUserId, blackUserId, status, moveCount, winnerUserId?, whiteTimeRemainingMs?, blackTimeRemainingMs?), `MoveSummaryDTO` (moveNumber, from, to, promotion, timeSpentMs?)
+  - **DTOs**: `GameSummaryDTO` (gameId, whiteUserId, blackUserId, whiteUsername, blackUsername, status, moveCount, winnerUserId?, whiteTimeRemainingMs?, blackTimeRemainingMs?, totalTimeSeconds?, incrementSeconds?, playedAt?), `MoveSummaryDTO` (moveNumber, from, to, promotion, timeSpentMs?)
 
 #### User Context (`com.gchess.user`)
 - **Domain**: `User` (id: UserId, username, email, passwordHash), `Credentials`
 - **Ports**: `UserRepository`, `PasswordHasher`
 - **Use Cases**: `RegisterUserUseCase`, `LoginUseCase`, `GetUserUseCase`
-- **Infrastructure**: `AuthRoutes`, `UserRoutes`, `PostgresUserRepository`, `BcryptPasswordHasher`
+- **Infrastructure**: `AuthRoutes`, `PostgresUserRepository`, `InMemoryUserRepository`, `BcryptPasswordHasher`
 
 #### Matchmaking Context (`com.gchess.matchmaking`)
-- **Domain**: `QueueEntry`, `Match` (with 5min TTL), `MatchmakingStatus`, `MatchmakingResult`
-- **Ports**: `MatchmakingQueue`, `MatchRepository`, `MatchmakingNotifier`
+- **Domain**: `QueueEntry`, `Match` (not persisted), `MatchmakingStatus`; `MatchmakingResult` in application
+- **Ports**: `MatchmakingQueue`, `MatchmakingNotifier`
   - **ACL Ports**: `GameCreator` (→ Chess), `UserExistenceChecker` (→ User)
-- **Use Cases**: `JoinMatchmakingUseCase`, `GetMatchStatusUseCase`, `LeaveMatchmakingUseCase`, `CreateGameFromMatchUseCase`
-- **Infrastructure**: `MatchmakingRoutes`, `InMemoryMatchmakingQueue` (thread-safe), `PostgresMatchRepository`
+- **Use Cases**: `JoinMatchmakingUseCase`, `LeaveMatchmakingUseCase`, `CreateGameFromMatchUseCase` (duplicate of Join's side assignment, see GCH-2)
+- **Infrastructure**: `MatchmakingWebsocketRoutes`, `MatchmakingConnectionManager`, `InMemoryMatchmakingQueue` (thread-safe), `WebSocketMatchmakingNotifier`
   - **ACL Adapters**: `ChessContextGameCreator`, `UserContextUserChecker`
+- Matchmaking is **WebSocket-only**: there is no REST matchmaking endpoint.
 
 #### Shared Kernel (`com.gchess.shared`)
 - **UserId**: Permanent user identity (ULID) - used by User, Matchmaking, Chess infrastructure
@@ -110,7 +115,7 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `Player`: id (PlayerId), userId, side (WHITE/BLACK) - created via `Player.create(userId, side)`
 - `Move`: from, to, promotion?, timeSpentMs? (null for first move; computed from `received_at` delta on load)
 - `ChessPosition`: Bitboard-based (12 bitboards: 6 types × 2 colors), FEN support
-- `GameStatus`: IN_PROGRESS, CHECK, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT
+- `GameStatus`: IN_PROGRESS, CHECKMATE, STALEMATE, DRAW, RESIGNED, TIMEOUT (+ DRAW_OFFERED, never assigned, see GCH-2). Check is not a status: `MoveExecuted` carries `isCheck`.
 - `Game.winnerSide`: set by use cases on game end — CHECKMATE/TIMEOUT/RESIGNED; null for draws and in-progress
 - `Game.drawOfferedBy`: Optional PlayerSide indicating who offered a draw
 
@@ -118,9 +123,9 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 - `User`: id (UserId), username (min 3), email, passwordHash (BCrypt)
 
 ### Matchmaking
-- `QueueEntry`: userId, joinedAt (FIFO)
-- `Match`: whiteUserId, blackUserId, gameId, matchedAt, expiresAt (5min TTL)
-- `MatchmakingResult`: NotFound | Waiting(queuePosition) | Matched(gameId, yourColor)
+- `QueueEntry`: userId, joinedAt, totalTimeSeconds, incrementSeconds (FIFO; two entries match only with the **same** time control)
+- `Match`: whitePlayer, blackPlayer (Player objects, sides drawn at random), gameId
+- `MatchmakingResult`: NotFound | Waiting(queuePosition) | Matched(gameId, youPlayerId, yourColor)
 
 ## Chess Rules Implementation
 
@@ -140,16 +145,10 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 ### Authentication (Public)
 - `POST /api/auth/register` - Register user
 - `POST /api/auth/login` - Login (returns JWT token)
-- `GET /api/users/{id}` - Get user profile
 
 ### Game History (**JWT required**)
 - `GET /api/history/games` - List authenticated user's games (only their own)
 - `GET /api/history/games/{gameId}/moves` - List moves of a game (participants only; 403 for non-participants, 404 for unknown game)
-
-### Matchmaking (**All require JWT**)
-- `POST /api/matchmaking/queue` - Join queue (returns WAITING or MATCHED)
-- `GET /api/matchmaking/status` - Poll status (poll every 2-3s)
-- `DELETE /api/matchmaking/queue` - Leave queue
 
 ### Health Check (Public)
 - `GET /health` - Simple health status (database connectivity, uptime)
@@ -167,8 +166,8 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 **Matchmaking**: `ws://localhost:8080/ws/matchmaking?token=<JWT>`
 - Connection indexed by UserId (permanent)
 - Client → Server:
-  - `{"type": "JoinQueue"}` - join human vs human matchmaking
-- Server → Client: `AuthSuccess`, `AuthFailed`, `QueuePositionUpdate`, `MatchFound`, `MatchmakingError`
+  - `{"type": "JoinQueue", "totalTimeMinutes": 3, "incrementSeconds": 2}` - join the queue (0/0 = untimed)
+- Server → Client: `AuthSuccess`, `AuthFailed`, `QueuePositionUpdate`, `MatchFound` (gameId, playerId, yourColor, opponentUserId?), `MatchmakingError`
 - Auto-removal from queue on disconnect
 
 **Game**: `ws://localhost:8080/ws/game/{gameId}?token=<JWT>`
@@ -178,7 +177,8 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
   - `{"type": "Resign"}`
   - `{"type": "OfferDraw"}`, `{"type": "AcceptDraw"}`, `{"type": "RejectDraw"}`
   - `{"type": "ClaimTimeout"}` — réclame le timeout de l'adversaire (uniquement le joueur qui attend)
-- Server → Client: `GameAuthSuccess`, `GameAuthFailed`, `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `GameError`, `PlayerDisconnected`, `PlayerReconnected`
+- Server → Client: `AuthSuccess`, `AuthFailed`, `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `Error`, `PlayerDisconnected`, `PlayerReconnected`
+  - `GameResigned`, `DrawOffered`, `DrawAccepted`, `DrawRejected`
   - `TimeoutConfirmed` (broadcast) `{ loserPlayerId, gameStatus: "TIMEOUT" }` — timeout confirmé
   - `TimeoutClaimRejected` (uniquement au réclamant) `{ remainingMs }` — encore du temps
 - Multi-device support (same UserId can connect to multiple games)
@@ -202,7 +202,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
 ### JWT
 - **Generation**: Login returns JWT with userId claim, 24h expiration, HMAC256
 - **Validation**: Ktor plugin validates signature, issuer, audience, expiration
-- **Protected Routes**: Game history, matchmaking (require `Authorization: Bearer <token>`)
+- **Protected Routes**: game history (`Authorization: Bearer <token>`) and every WebSocket (`?token=` or `Sec-WebSocket-Protocol`)
 - **User ID Extraction**: userId from JWT used directly in `GameHistoryRoutes` (history queries use UserId, not Player)
 
 ### Password Hashing
