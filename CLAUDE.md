@@ -138,7 +138,7 @@ HTTP Request + JWT → Authentication → Routes (Adapter) → Use Case → Doma
 ### Game Ending
 - ✅ Checkmate, Stalemate
 - ✅ Fifty-move rule, Threefold repetition, Insufficient material
-- ✅ Timeout (flag): auto-detected on move attempt + client-initiated via `ClaimTimeout`
+- ✅ Timeout (flag): auto-detected on move attempt + client-initiated via `ClaimTimeout`; a Draw when the opponent lacks mating material (`ChessRules.hasMatingMaterial`)
 
 ## API Endpoints (Port 8080)
 
@@ -179,7 +179,7 @@ JWT required via query param: `?token=<JWT>` or `Sec-WebSocket-Protocol` header
   - `{"type": "ClaimTimeout"}` — réclame le timeout de l'adversaire (uniquement le joueur qui attend)
 - Server → Client: `AuthSuccess`, `AuthFailed`, `GameStateSync` (on connect), `MoveExecuted`, `MoveRejected`, `Error`, `PlayerDisconnected`, `PlayerReconnected`
   - `GameResigned`, `DrawOffered`, `DrawAccepted`, `DrawRejected`
-  - `TimeoutConfirmed` (broadcast) `{ loserPlayerId, gameStatus: "TIMEOUT" }` — timeout confirmé
+  - `TimeoutConfirmed` (broadcast) `{ loserPlayerId, gameStatus: "TIMEOUT" | "DRAW" }` — timeout confirmé (`DRAW` si le réclamant n'a plus de quoi mater, FIDE)
   - `TimeoutClaimRejected` (uniquement au réclamant) `{ remainingMs }` — encore du temps
 - Multi-device support (same UserId can connect to multiple games)
 

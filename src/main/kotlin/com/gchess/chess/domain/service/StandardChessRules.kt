@@ -480,59 +480,39 @@ class StandardChessRules : ChessRules {
         return "${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}"
     }
 
-    override fun isInsufficientMaterial(position: ChessPosition): Boolean {
-        // Count pieces for each side
-        val whitePieces = position.getPiecesBySide(PlayerSide.WHITE)
-        val blackPieces = position.getPiecesBySide(PlayerSide.BLACK)
+    override fun isInsufficientMaterial(position: ChessPosition): Boolean =
+        // Dead position: neither side can checkmate by any series of legal moves
+        !hasMatingMaterial(position, PlayerSide.WHITE) && !hasMatingMaterial(position, PlayerSide.BLACK)
 
-        // Count piece types (excluding kings)
-        val whiteCounts = countPieceTypes(whitePieces)
-        val blackCounts = countPieceTypes(blackPieces)
+    override fun hasMatingMaterial(position: ChessPosition, side: PlayerSide): Boolean {
+        val counts = countPieceTypes(position.getPiecesBySide(side))
+        val opponentCounts = countPieceTypes(position.getPiecesBySide(side.opposite()))
+        val totalPieces = counts.values.sum()
 
-        // Total non-king pieces
-        val whiteTotalPieces = whiteCounts.values.sum()
-        val blackTotalPieces = blackCounts.values.sum()
-
-        // Case 1: King vs King
-        if (whiteTotalPieces == 0 && blackTotalPieces == 0) {
-            return true
+        return when {
+            // A lone king cannot checkmate
+            totalPieces == 0 -> false
+            // A single knight only mates when the opponent has a piece other than a queen to block its own king
+            counts.keys == setOf(PieceType.KNIGHT) && totalPieces == 1 ->
+                opponentCounts.keys.any { it != PieceType.QUEEN }
+            // Bishops only mate when the opponent has a knight or a pawn to block its own king,
+            // or when the bishops on the board stand on both square colors
+            counts.keys == setOf(PieceType.BISHOP) ->
+                PieceType.KNIGHT in opponentCounts || PieceType.PAWN in opponentCounts ||
+                    bishopSquareColors(position).size == 2
+            else -> true
         }
-
-        // Case 2: King + Bishop vs King
-        if (whiteTotalPieces == 1 && whiteCounts[PieceType.BISHOP] == 1 && blackTotalPieces == 0) {
-            return true
-        }
-        if (blackTotalPieces == 1 && blackCounts[PieceType.BISHOP] == 1 && whiteTotalPieces == 0) {
-            return true
-        }
-
-        // Case 3: King + Knight vs King
-        if (whiteTotalPieces == 1 && whiteCounts[PieceType.KNIGHT] == 1 && blackTotalPieces == 0) {
-            return true
-        }
-        if (blackTotalPieces == 1 && blackCounts[PieceType.KNIGHT] == 1 && whiteTotalPieces == 0) {
-            return true
-        }
-
-        // Case 4: King + Bishop vs King + Bishop (same color bishops)
-        if (whiteTotalPieces == 1 && whiteCounts[PieceType.BISHOP] == 1 &&
-            blackTotalPieces == 1 && blackCounts[PieceType.BISHOP] == 1) {
-            // Check if bishops are on same color squares
-            val whiteBishopSquare = whitePieces.entries.find { it.value.type == PieceType.BISHOP }?.key
-            val blackBishopSquare = blackPieces.entries.find { it.value.type == PieceType.BISHOP }?.key
-
-            if (whiteBishopSquare != null && blackBishopSquare != null) {
-                val whiteBishopColor = (whiteBishopSquare.file + whiteBishopSquare.rank) % 2
-                val blackBishopColor = (blackBishopSquare.file + blackBishopSquare.rank) % 2
-                if (whiteBishopColor == blackBishopColor) {
-                    return true
-                }
-            }
-        }
-
-        // All other cases: sufficient material for checkmate
-        return false
     }
+
+    /**
+     * Returns the square colors (0 or 1) occupied by the bishops of both sides.
+     */
+    private fun bishopSquareColors(position: ChessPosition): Set<Int> =
+        PlayerSide.entries
+            .flatMap { position.getPiecesBySide(it).entries }
+            .filter { it.value.type == PieceType.BISHOP }
+            .map { (square, _) -> (square.file + square.rank) % 2 }
+            .toSet()
 
     /**
      * Counts the number of pieces of each type (excluding kings).

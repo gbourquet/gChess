@@ -115,7 +115,7 @@ interface GameEventNotifier {
      * This should be broadcast to both players and all spectators.
      * The current player at the time of timeout is the loser.
      *
-     * @param game The game state after timeout (status = TIMEOUT)
+     * @param game The game state after timeout (status = TIMEOUT, or DRAW if the opponent cannot checkmate)
      * @param loser The player who ran out of time
      */
     suspend fun notifyTimeout(game: Game, loser: Player)

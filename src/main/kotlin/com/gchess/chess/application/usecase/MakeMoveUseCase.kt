@@ -25,6 +25,7 @@ import com.gchess.chess.domain.model.Game
 import com.gchess.chess.domain.model.GameStatus
 import com.gchess.chess.domain.model.Move
 import com.gchess.shared.domain.model.Player
+import com.gchess.shared.domain.model.PlayerSide
 import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
 import com.gchess.chess.domain.service.ChessRules
@@ -86,19 +87,17 @@ class MakeMoveUseCase(
             return Result.failure(Exception("Game is already finished"))
         }
 
-        // Apply clock tick and check for flag (timeout)
+        // Apply clock tick and check whether the player ran out of time (Timeout)
         val gameWithClock = game.applyClockTick(receivedAt)
-        val currentTimeMs = if (gameWithClock.currentSide == com.gchess.shared.domain.model.PlayerSide.WHITE) {
+        val currentTimeMs = if (gameWithClock.currentSide == PlayerSide.WHITE) {
             gameWithClock.whiteTimeRemainingMs
         } else {
             gameWithClock.blackTimeRemainingMs
         }
 
         if (currentTimeMs != null && currentTimeMs <= 0) {
-            val timedOutGame = gameWithClock.copy(
-                status = GameStatus.TIMEOUT,
-                winnerSide = gameWithClock.currentSide.opposite()
-            )
+            val opponentCanCheckmate = chessRules.hasMatingMaterial(gameWithClock.board, gameWithClock.currentSide.opposite())
+            val timedOutGame = gameWithClock.endOnTimeout(opponentCanCheckmate)
             gameRepository.save(timedOutGame)
             gameEventNotifier.notifyMoveExecuted(timedOutGame, move)
             return Result.success(timedOutGame)

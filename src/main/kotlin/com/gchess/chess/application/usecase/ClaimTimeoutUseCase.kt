@@ -24,6 +24,7 @@ package com.gchess.chess.application.usecase
 import com.gchess.chess.domain.model.GameStatus
 import com.gchess.chess.domain.port.GameEventNotifier
 import com.gchess.chess.domain.port.GameRepository
+import com.gchess.chess.domain.service.ChessRules
 import com.gchess.shared.domain.model.GameId
 import com.gchess.shared.domain.model.Player
 import com.gchess.shared.domain.model.PlayerSide
@@ -34,8 +35,11 @@ import kotlin.time.Instant
  * Result of a timeout claim.
  */
 sealed class ClaimTimeoutResult {
-    /** The opponent truly ran out of time: game is saved as TIMEOUT and broadcast. */
-    data class TimeoutConfirmed(val loserPlayerId: String) : ClaimTimeoutResult()
+    /**
+     * The opponent truly ran out of time: game is saved as TIMEOUT and broadcast,
+     * or as DRAW if the claimer no longer has the material to checkmate.
+     */
+    data class TimeoutConfirmed(val loserPlayerId: String, val gameStatus: GameStatus) : ClaimTimeoutResult()
 
     /** The opponent still has time remaining: no state change. */
     data class TimeoutRejected(val remainingMs: Long) : ClaimTimeoutResult()
@@ -50,11 +54,13 @@ sealed class ClaimTimeoutResult {
  * The claimer must be the player who is NOT currently to move.
  * The server computes the opponent's remaining time using [Clock.System.now].
  * - If time has expired: game status is set to TIMEOUT, saved, and all participants notified.
+ *   If the claimer can no longer checkmate, the game is a DRAW instead (FIDE).
  * - If time has NOT expired: the remaining milliseconds are returned to the claimer.
  */
 class ClaimTimeoutUseCase(
     private val gameRepository: GameRepository,
-    private val gameEventNotifier: GameEventNotifier
+    private val gameEventNotifier: GameEventNotifier,
+    private val chessRules: ChessRules
 ) {
     @OptIn(ExperimentalTime::class)
     suspend fun execute(gameId: GameId, claimer: Player, now: Instant): ClaimTimeoutResult {
@@ -87,16 +93,15 @@ class ClaimTimeoutUseCase(
             return ClaimTimeoutResult.TimeoutRejected(remainingMs)
         }
 
-        // Time expired: mark as TIMEOUT
+        // Time expired: TIMEOUT, or DRAW if the claimer cannot checkmate
         val loser = game.currentPlayer
+        val claimerCanCheckmate = chessRules.hasMatingMaterial(game.board, claimer.side)
         val timedOutGame = game.copy(
-            status = GameStatus.TIMEOUT,
-            winnerSide = loser.side.opposite(),
             whiteTimeRemainingMs = if (game.currentSide == PlayerSide.WHITE) remainingMs else game.whiteTimeRemainingMs,
             blackTimeRemainingMs = if (game.currentSide == PlayerSide.BLACK) remainingMs else game.blackTimeRemainingMs
-        )
+        ).endOnTimeout(claimerCanCheckmate)
         gameRepository.save(timedOutGame)
         gameEventNotifier.notifyTimeout(timedOutGame, loser)
-        return ClaimTimeoutResult.TimeoutConfirmed(loser.id.toString())
+        return ClaimTimeoutResult.TimeoutConfirmed(loser.id.toString(), timedOutGame.status)
     }
 }
