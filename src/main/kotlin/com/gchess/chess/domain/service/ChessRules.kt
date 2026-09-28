@@ -134,9 +134,16 @@ interface ChessRules {
     fun isInsufficientMaterial(position: ChessPosition): Boolean
 
     /**
-     * Checks if the given side still has enough material to checkmate.
-     * Used on Timeout: a flagged player only loses if the opponent could still checkmate.
-     * A lone king, or a king with a single bishop or knight, cannot checkmate.
+     * Checks if the given side could still checkmate by some series of legal moves,
+     * taking the opponent's material into account (it may block its own king).
+     * Used on Timeout: the player who ran out of time only loses if the opponent could still checkmate.
+     *
+     * Follows Lichess' rule (scalachess `InsufficientMatingMaterial`):
+     * - A lone king cannot checkmate
+     * - A king + single knight only mates if the opponent has a piece other than queens
+     * - A king + bishops only mate if the opponent has a knight or a pawn,
+     *   or if the bishops on the board stand on both square colors
+     * - Any other material (pawn, rook, queen, two knights, bishop + knight...) can checkmate
      *
      * @param position The current chess position
      * @param side The side whose material is evaluated

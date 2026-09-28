@@ -185,6 +185,22 @@ class ClaimTimeoutUseCaseTest : FunSpec({
         }
     }
 
+    test("TIMEOUT gagné par le réclamant avec roi + cavalier si l'adversaire a un pion pour bloquer son roi") {
+        val gameRepository = mockk<GameRepository>()
+        val gameEventNotifier = mockk<GameEventNotifier>()
+        val useCase = ClaimTimeoutUseCase(gameRepository, gameEventNotifier, StandardChessRules())
+        val game = blackOutOfTime("3qk3/p7/8/8/8/8/8/4K1N1 b - - 0 1")
+
+        coEvery { gameRepository.findById(any()) } returns game
+        coEvery { gameRepository.save(any()) } returns mockk()
+        coEvery { gameEventNotifier.notifyTimeout(any(), any()) } returns Unit
+
+        val result = useCase.execute(game.id, whitePlayer, sixSecondsLater)
+
+        result shouldBe ClaimTimeoutResult.TimeoutConfirmed(blackPlayer.id.toString(), GameStatus.TIMEOUT)
+        coVerify { gameRepository.save(match { it.status == GameStatus.TIMEOUT && it.winnerSide == PlayerSide.WHITE }) }
+    }
+
     test("TIMEOUT gagné par le réclamant s'il a encore une tour, même sur un échiquier presque vide") {
         val gameRepository = mockk<GameRepository>()
         val gameEventNotifier = mockk<GameEventNotifier>()

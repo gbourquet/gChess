@@ -636,8 +636,8 @@ components:
       description: |
         Server → Client. The opponent's clock truly reached zero.
         Broadcast to both players and all spectators.
-        `gameStatus` is `DRAW` (no winner) when the claimer no longer has the
-        material to checkmate (lone king, or king + single bishop or knight), per FIDE.
+        `gameStatus` is `DRAW` (no winner) when the claimer could not checkmate by any
+        series of legal moves, given both sides' material (FIDE, Lichess' mating-material rule).
         WebSocket connections are closed ~1 second after this message.
       payload:
         type: object

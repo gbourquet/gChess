@@ -480,38 +480,39 @@ class StandardChessRules : ChessRules {
         return "${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}"
     }
 
-    override fun isInsufficientMaterial(position: ChessPosition): Boolean {
-        // If either side can still checkmate, the material is sufficient
-        if (hasMatingMaterial(position, PlayerSide.WHITE) || hasMatingMaterial(position, PlayerSide.BLACK)) {
-            return false
-        }
-
-        // Each side now has a lone king or a king + single minor piece
-        val whitePieces = position.getPiecesBySide(PlayerSide.WHITE).filterValues { it.type != PieceType.KING }
-        val blackPieces = position.getPiecesBySide(PlayerSide.BLACK).filterValues { it.type != PieceType.KING }
-
-        // King vs King, or King + minor piece vs lone King
-        if (whitePieces.isEmpty() || blackPieces.isEmpty()) {
-            return true
-        }
-
-        // King + minor piece vs King + minor piece: only same-color bishops cannot checkmate
-        val (whiteSquare, whitePiece) = whitePieces.entries.single()
-        val (blackSquare, blackPiece) = blackPieces.entries.single()
-        if (whitePiece.type != PieceType.BISHOP || blackPiece.type != PieceType.BISHOP) {
-            return false
-        }
-        return (whiteSquare.file + whiteSquare.rank) % 2 == (blackSquare.file + blackSquare.rank) % 2
-    }
+    override fun isInsufficientMaterial(position: ChessPosition): Boolean =
+        // Dead position: neither side can checkmate by any series of legal moves
+        !hasMatingMaterial(position, PlayerSide.WHITE) && !hasMatingMaterial(position, PlayerSide.BLACK)
 
     override fun hasMatingMaterial(position: ChessPosition, side: PlayerSide): Boolean {
         val counts = countPieceTypes(position.getPiecesBySide(side))
+        val opponentCounts = countPieceTypes(position.getPiecesBySide(side.opposite()))
         val totalPieces = counts.values.sum()
-        val minorPieces = (counts[PieceType.BISHOP] ?: 0) + (counts[PieceType.KNIGHT] ?: 0)
 
-        // A lone king, or a king with a single bishop or knight, cannot checkmate
-        return !(totalPieces == 0 || (totalPieces == 1 && minorPieces == 1))
+        return when {
+            // A lone king cannot checkmate
+            totalPieces == 0 -> false
+            // A single knight only mates when the opponent has a piece other than a queen to block its own king
+            counts.keys == setOf(PieceType.KNIGHT) && totalPieces == 1 ->
+                opponentCounts.keys.any { it != PieceType.QUEEN }
+            // Bishops only mate when the opponent has a knight or a pawn to block its own king,
+            // or when the bishops on the board stand on both square colors
+            counts.keys == setOf(PieceType.BISHOP) ->
+                PieceType.KNIGHT in opponentCounts || PieceType.PAWN in opponentCounts ||
+                    bishopSquareColors(position).size == 2
+            else -> true
+        }
     }
+
+    /**
+     * Returns the square colors (0 or 1) occupied by the bishops of both sides.
+     */
+    private fun bishopSquareColors(position: ChessPosition): Set<Int> =
+        PlayerSide.entries
+            .flatMap { position.getPiecesBySide(it).entries }
+            .filter { it.value.type == PieceType.BISHOP }
+            .map { (square, _) -> (square.file + square.rank) % 2 }
+            .toSet()
 
     /**
      * Counts the number of pieces of each type (excluding kings).

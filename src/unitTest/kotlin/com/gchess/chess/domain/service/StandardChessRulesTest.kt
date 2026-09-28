@@ -1501,6 +1501,14 @@ class StandardChessRulesTest : StringSpec({
         rules.isInsufficientMaterial(position) shouldBe false
     }
 
+    "should detect insufficient material with two bishops vs a bishop all on the same color" {
+        // Arrange: White bishops on c1 and d2, Black bishop on h8 (all on the same color)
+        val position = "4k2b/8/8/8/8/8/3B4/2B1K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Dead position - no side can ever checkmate
+        rules.isInsufficientMaterial(position) shouldBe true
+    }
+
     // ========== Mating Material (per Side) Tests ==========
 
     "should detect no mating material with a lone king" {
@@ -1511,12 +1519,12 @@ class StandardChessRulesTest : StringSpec({
         rules.hasMatingMaterial(position, PlayerSide.BLACK) shouldBe false
     }
 
-    "should detect no mating material with king and a single knight" {
-        // Arrange: Black has king + knight, White still has a rook
+    "should detect mating material with king and knight against a rook" {
+        // Arrange: Black has king + knight, White has a rook that can block its own king
         val position = "4k2n/8/8/8/8/8/3R4/4K3 w - - 0 1".toChessPosition()
 
         // Act & Assert
-        rules.hasMatingMaterial(position, PlayerSide.BLACK) shouldBe false
+        rules.hasMatingMaterial(position, PlayerSide.BLACK) shouldBe true
     }
 
     "should detect no mating material with king and a single bishop" {
@@ -1525,6 +1533,54 @@ class StandardChessRulesTest : StringSpec({
 
         // Act & Assert
         rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe false
+    }
+
+    "should detect mating material with king and bishop against a knight" {
+        // Arrange: White has king + bishop, Black has a knight that can block its own king
+        val position = "4k2n/8/8/8/8/8/3B4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert
+        rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe true
+    }
+
+    "should detect mating material with king and bishop against a pawn" {
+        // Arrange: White has king + bishop, Black has a pawn that can block its own king
+        val position = "4k3/p7/8/8/8/8/3B4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert
+        rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe true
+    }
+
+    "should detect mating material with king and bishop against a bishop on the opposite color" {
+        // Arrange: White bishop on c1, Black bishop on a8 (opposite colors)
+        val position = "b3k3/8/8/8/8/8/8/2B1K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert
+        rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe true
+    }
+
+    "should detect no mating material with two bishops on the same color" {
+        // Arrange: White bishops on c1 and d2 (same color), Black has only its king
+        val position = "4k3/8/8/8/8/8/3B4/2B1K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert
+        rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe false
+    }
+
+    "should detect no mating material with king and knight against queens only" {
+        // Arrange: White has king + knight, Black has only a queen besides its king
+        val position = "3qk3/8/8/8/8/8/8/4K1N1 w - - 0 1".toChessPosition()
+
+        // Act & Assert
+        rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe false
+    }
+
+    "should detect mating material with king and two knights" {
+        // Arrange: White has king + two knights, Black has only its king
+        val position = "4k3/8/8/8/8/8/8/1N2K1N1 w - - 0 1".toChessPosition()
+
+        // Act & Assert
+        rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe true
     }
 
     "should detect mating material with king and a single pawn" {
