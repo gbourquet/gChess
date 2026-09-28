@@ -118,6 +118,21 @@ data class Game(
     )
 
     /**
+     * Ends the game on a Timeout of the side to move.
+     * The opponent wins, unless they no longer have the material to checkmate:
+     * the game is then a Draw with no winner (FIDE).
+     *
+     * @param opponentCanCheckmate Whether the opponent of the side to move can still checkmate
+     * @return A new Game instance with status TIMEOUT (opponent wins) or DRAW (no winner)
+     */
+    fun endOnTimeout(opponentCanCheckmate: Boolean): Game =
+        if (opponentCanCheckmate) {
+            copy(status = GameStatus.TIMEOUT, winnerSide = currentSide.opposite())
+        } else {
+            copy(status = GameStatus.DRAW, winnerSide = null)
+        }
+
+    /**
      * Applies a clock tick: deducts elapsed time from the current player and adds the increment.
      * No-op if timeControl is null, lastMoveAt is null, or neither player has completed their
      * first move yet (moveHistory.size < 2). Each player's clock only starts after their own

@@ -481,57 +481,27 @@ class StandardChessRules : ChessRules {
     }
 
     override fun isInsufficientMaterial(position: ChessPosition): Boolean {
-        // Count pieces for each side
-        val whitePieces = position.getPiecesBySide(PlayerSide.WHITE)
-        val blackPieces = position.getPiecesBySide(PlayerSide.BLACK)
+        // If either side can still checkmate, the material is sufficient
+        if (hasMatingMaterial(position, PlayerSide.WHITE) || hasMatingMaterial(position, PlayerSide.BLACK)) {
+            return false
+        }
 
-        // Count piece types (excluding kings)
-        val whiteCounts = countPieceTypes(whitePieces)
-        val blackCounts = countPieceTypes(blackPieces)
+        // Each side now has a lone king or a king + single minor piece
+        val whitePieces = position.getPiecesBySide(PlayerSide.WHITE).filterValues { it.type != PieceType.KING }
+        val blackPieces = position.getPiecesBySide(PlayerSide.BLACK).filterValues { it.type != PieceType.KING }
 
-        // Total non-king pieces
-        val whiteTotalPieces = whiteCounts.values.sum()
-        val blackTotalPieces = blackCounts.values.sum()
-
-        // Case 1: King vs King
-        if (whiteTotalPieces == 0 && blackTotalPieces == 0) {
+        // King vs King, or King + minor piece vs lone King
+        if (whitePieces.isEmpty() || blackPieces.isEmpty()) {
             return true
         }
 
-        // Case 2: King + Bishop vs King
-        if (whiteTotalPieces == 1 && whiteCounts[PieceType.BISHOP] == 1 && blackTotalPieces == 0) {
-            return true
+        // King + minor piece vs King + minor piece: only same-color bishops cannot checkmate
+        val (whiteSquare, whitePiece) = whitePieces.entries.single()
+        val (blackSquare, blackPiece) = blackPieces.entries.single()
+        if (whitePiece.type != PieceType.BISHOP || blackPiece.type != PieceType.BISHOP) {
+            return false
         }
-        if (blackTotalPieces == 1 && blackCounts[PieceType.BISHOP] == 1 && whiteTotalPieces == 0) {
-            return true
-        }
-
-        // Case 3: King + Knight vs King
-        if (whiteTotalPieces == 1 && whiteCounts[PieceType.KNIGHT] == 1 && blackTotalPieces == 0) {
-            return true
-        }
-        if (blackTotalPieces == 1 && blackCounts[PieceType.KNIGHT] == 1 && whiteTotalPieces == 0) {
-            return true
-        }
-
-        // Case 4: King + Bishop vs King + Bishop (same color bishops)
-        if (whiteTotalPieces == 1 && whiteCounts[PieceType.BISHOP] == 1 &&
-            blackTotalPieces == 1 && blackCounts[PieceType.BISHOP] == 1) {
-            // Check if bishops are on same color squares
-            val whiteBishopSquare = whitePieces.entries.find { it.value.type == PieceType.BISHOP }?.key
-            val blackBishopSquare = blackPieces.entries.find { it.value.type == PieceType.BISHOP }?.key
-
-            if (whiteBishopSquare != null && blackBishopSquare != null) {
-                val whiteBishopColor = (whiteBishopSquare.file + whiteBishopSquare.rank) % 2
-                val blackBishopColor = (blackBishopSquare.file + blackBishopSquare.rank) % 2
-                if (whiteBishopColor == blackBishopColor) {
-                    return true
-                }
-            }
-        }
-
-        // All other cases: sufficient material for checkmate
-        return false
+        return (whiteSquare.file + whiteSquare.rank) % 2 == (blackSquare.file + blackSquare.rank) % 2
     }
 
     override fun hasMatingMaterial(position: ChessPosition, side: PlayerSide): Boolean {

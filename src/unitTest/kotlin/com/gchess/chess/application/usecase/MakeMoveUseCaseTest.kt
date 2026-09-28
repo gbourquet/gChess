@@ -486,21 +486,21 @@ class MakeMoveUseCaseTest : FunSpec({
         result.getOrNull()?.status shouldBe GameStatus.DRAW
     }
 
-    test("timeout on a move attempt is a draw when the opponent cannot checkmate") {
+    // ========== Timeout on a move attempt ==========
+
+    // Black to move with 2s left, 10s elapsed: Black runs out of time on its move attempt
+    suspend fun blackOutOfTimeOnMove(fen: String): Result<Game> {
         val gameRepository = mockk<GameRepository>()
         val gameEventNotifier = mockk<GameEventNotifier>()
         val useCase = MakeMoveUseCase(gameRepository, StandardChessRules(), gameEventNotifier)
 
-        val whitePlayer = Player.create(UserId.generate(), PlayerSide.WHITE)
         val blackPlayer = Player.create(UserId.generate(), PlayerSide.BLACK)
         val anyMove = Move(Position.fromAlgebraic("e2"), Position.fromAlgebraic("e4"))
-
-        // Black to move with 2s left, 10s elapsed: Black flags, but White only has its king
         val game = Game(
             id = GameId.generate(),
-            whitePlayer = whitePlayer,
+            whitePlayer = Player.create(UserId.generate(), PlayerSide.WHITE),
             blackPlayer = blackPlayer,
-            board = "3qk3/8/8/8/8/8/8/4K3 b - - 0 1".toChessPosition(),
+            board = fen.toChessPosition(),
             currentSide = PlayerSide.BLACK,
             moveHistory = listOf(anyMove, anyMove, anyMove),
             timeControl = TimeControl(totalTimeSeconds = 300, incrementSeconds = 0),
@@ -508,47 +508,26 @@ class MakeMoveUseCaseTest : FunSpec({
             blackTimeRemainingMs = 2_000L,
             lastMoveAt = Instant.fromEpochMilliseconds(0L)
         )
-        val move = Move(Position.fromAlgebraic("d8"), Position.fromAlgebraic("d1"))
 
         coEvery { gameRepository.findById(any()) } returns game
         coEvery { gameRepository.save(any()) } returns mockk()
         coEvery { gameEventNotifier.notifyMoveExecuted(any(), any()) } returns Unit
 
-        val result = useCase.execute(game.id, blackPlayer, move, Instant.fromEpochMilliseconds(10_000L))
+        val move = Move(Position.fromAlgebraic("d8"), Position.fromAlgebraic("d1"))
+        return useCase.execute(game.id, blackPlayer, move, Instant.fromEpochMilliseconds(10_000L))
+    }
+
+    test("timeout on a move attempt is a draw when the opponent cannot checkmate") {
+        // White only has its king
+        val result = blackOutOfTimeOnMove("3qk3/8/8/8/8/8/8/4K3 b - - 0 1")
 
         result.getOrNull()?.status shouldBe GameStatus.DRAW
         result.getOrNull()?.winnerSide shouldBe null
     }
 
     test("timeout on a move attempt is lost when the opponent can still checkmate") {
-        val gameRepository = mockk<GameRepository>()
-        val gameEventNotifier = mockk<GameEventNotifier>()
-        val useCase = MakeMoveUseCase(gameRepository, StandardChessRules(), gameEventNotifier)
-
-        val whitePlayer = Player.create(UserId.generate(), PlayerSide.WHITE)
-        val blackPlayer = Player.create(UserId.generate(), PlayerSide.BLACK)
-        val anyMove = Move(Position.fromAlgebraic("e2"), Position.fromAlgebraic("e4"))
-
-        // Black to move with 2s left, 10s elapsed: Black flags and White still has a rook
-        val game = Game(
-            id = GameId.generate(),
-            whitePlayer = whitePlayer,
-            blackPlayer = blackPlayer,
-            board = "3qk3/8/8/8/8/8/8/R3K3 b - - 0 1".toChessPosition(),
-            currentSide = PlayerSide.BLACK,
-            moveHistory = listOf(anyMove, anyMove, anyMove),
-            timeControl = TimeControl(totalTimeSeconds = 300, incrementSeconds = 0),
-            whiteTimeRemainingMs = 60_000L,
-            blackTimeRemainingMs = 2_000L,
-            lastMoveAt = Instant.fromEpochMilliseconds(0L)
-        )
-        val move = Move(Position.fromAlgebraic("d8"), Position.fromAlgebraic("d1"))
-
-        coEvery { gameRepository.findById(any()) } returns game
-        coEvery { gameRepository.save(any()) } returns mockk()
-        coEvery { gameEventNotifier.notifyMoveExecuted(any(), any()) } returns Unit
-
-        val result = useCase.execute(game.id, blackPlayer, move, Instant.fromEpochMilliseconds(10_000L))
+        // White still has a rook
+        val result = blackOutOfTimeOnMove("3qk3/8/8/8/8/8/8/R3K3 b - - 0 1")
 
         result.getOrNull()?.status shouldBe GameStatus.TIMEOUT
         result.getOrNull()?.winnerSide shouldBe PlayerSide.WHITE

@@ -126,7 +126,7 @@ class ClaimTimeoutUseCaseTest : FunSpec({
         coVerify { gameEventNotifier.notifyTimeout(match { it.status == GameStatus.TIMEOUT }, whitePlayer) }
     }
 
-    test("TimeoutConfirmed : c'est le joueur noir qui flag") {
+    test("TimeoutConfirmed : c'est le joueur noir qui tombe au temps") {
         val gameRepository = mockk<GameRepository>()
         val gameEventNotifier = mockk<GameEventNotifier>()
         val useCase = ClaimTimeoutUseCase(gameRepository, gameEventNotifier, StandardChessRules())
@@ -137,7 +137,7 @@ class ClaimTimeoutUseCaseTest : FunSpec({
             lastMoveAt = t0,
             moveHistory = listOf(move1, move2, move1) // 3 coups
         )
-        val now = Instant.fromEpochMilliseconds(6_000L) // 6s écoulées, 2s restantes → flag
+        val now = Instant.fromEpochMilliseconds(6_000L) // 6s écoulées, 2s restantes → Timeout
 
         coEvery { gameRepository.findById(any()) } returns game
         coEvery { gameRepository.save(any()) } returns mockk()
@@ -151,28 +151,54 @@ class ClaimTimeoutUseCaseTest : FunSpec({
         coVerify { gameEventNotifier.notifyTimeout(any(), blackPlayer) }
     }
 
-    test("Draw si l'adversaire du joueur qui flag n'a plus de matériel pour mater") {
+    // ===== Timeout contre un matériel insuffisant (FIDE) =====
+
+    // Noir doit jouer avec 2s restantes, 6s se sont écoulées : Noir tombe au temps
+    fun blackOutOfTime(fen: String) = gameInProgress(
+        currentSide = PlayerSide.BLACK,
+        blackTimeRemainingMs = 2_000L,
+        lastMoveAt = t0,
+        moveHistory = listOf(move1, move2, move1)
+    ).copy(board = fen.toChessPosition())
+    val sixSecondsLater = Instant.fromEpochMilliseconds(6_000L)
+
+    listOf(
+        "roi seul" to "3qk3/8/8/8/8/8/8/4K3 b - - 0 1",
+        "roi + cavalier" to "3qk3/8/8/8/8/8/8/4K1N1 b - - 0 1",
+        "roi + fou" to "3qk3/8/8/8/8/8/8/4KB2 b - - 0 1"
+    ).forEach { (material, fen) ->
+        test("Draw sans vainqueur si le réclamant n'a plus que $material") {
+            val gameRepository = mockk<GameRepository>()
+            val gameEventNotifier = mockk<GameEventNotifier>()
+            val useCase = ClaimTimeoutUseCase(gameRepository, gameEventNotifier, StandardChessRules())
+            val game = blackOutOfTime(fen)
+
+            coEvery { gameRepository.findById(any()) } returns game
+            coEvery { gameRepository.save(any()) } returns mockk()
+            coEvery { gameEventNotifier.notifyTimeout(any(), any()) } returns Unit
+
+            val result = useCase.execute(game.id, whitePlayer, sixSecondsLater)
+
+            result shouldBe ClaimTimeoutResult.TimeoutConfirmed(blackPlayer.id.toString(), GameStatus.DRAW)
+            coVerify { gameRepository.save(match { it.status == GameStatus.DRAW && it.winnerSide == null }) }
+            coVerify { gameEventNotifier.notifyTimeout(match { it.status == GameStatus.DRAW }, blackPlayer) }
+        }
+    }
+
+    test("TIMEOUT gagné par le réclamant s'il a encore une tour, même sur un échiquier presque vide") {
         val gameRepository = mockk<GameRepository>()
         val gameEventNotifier = mockk<GameEventNotifier>()
         val useCase = ClaimTimeoutUseCase(gameRepository, gameEventNotifier, StandardChessRules())
-
-        // Noir doit jouer et flag, mais blanc n'a plus que son roi
-        val game = gameInProgress(
-            currentSide = PlayerSide.BLACK,
-            blackTimeRemainingMs = 2_000L,
-            lastMoveAt = t0,
-            moveHistory = listOf(move1, move2, move1)
-        ).copy(board = "3qk3/8/8/8/8/8/8/4K3 b - - 0 1".toChessPosition())
-        val now = Instant.fromEpochMilliseconds(6_000L)
+        val game = blackOutOfTime("3qk3/8/8/8/8/8/8/R3K3 b - - 0 1")
 
         coEvery { gameRepository.findById(any()) } returns game
         coEvery { gameRepository.save(any()) } returns mockk()
         coEvery { gameEventNotifier.notifyTimeout(any(), any()) } returns Unit
 
-        useCase.execute(game.id, whitePlayer, now)
+        val result = useCase.execute(game.id, whitePlayer, sixSecondsLater)
 
-        coVerify { gameRepository.save(match { it.status == GameStatus.DRAW && it.winnerSide == null }) }
-        coVerify { gameEventNotifier.notifyTimeout(match { it.status == GameStatus.DRAW }, blackPlayer) }
+        result shouldBe ClaimTimeoutResult.TimeoutConfirmed(blackPlayer.id.toString(), GameStatus.TIMEOUT)
+        coVerify { gameRepository.save(match { it.status == GameStatus.TIMEOUT && it.winnerSide == PlayerSide.WHITE }) }
     }
 
     // ===== ClaimError =====
@@ -204,7 +230,7 @@ class ClaimTimeoutUseCaseTest : FunSpec({
         (result as ClaimTimeoutResult.ClaimError).message shouldBe "Game is already finished"
     }
 
-    test("retourne ClaimError si c'est le tour du réclamant (il ne peut pas se flaguer lui-même)") {
+    test("retourne ClaimError si c'est le tour du réclamant (il ne peut pas réclamer son propre Timeout)") {
         val gameRepository = mockk<GameRepository>()
         val gameEventNotifier = mockk<GameEventNotifier>()
         val useCase = ClaimTimeoutUseCase(gameRepository, gameEventNotifier, StandardChessRules())

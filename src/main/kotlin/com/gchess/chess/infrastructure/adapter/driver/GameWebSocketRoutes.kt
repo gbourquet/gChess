@@ -295,7 +295,7 @@ fun Application.configureGameWebSocketRoutes() {
                                     @OptIn(ExperimentalTime::class)
                                     when (val result = claimTimeoutUseCase.execute(gameId, player, Clock.System.now())) {
                                         is ClaimTimeoutResult.TimeoutConfirmed -> {
-                                            logger.info("Timeout confirmed in game $gameId, loser=${result.loserPlayerId}")
+                                            logger.info("Timeout confirmed in game $gameId, loser=${result.loserPlayerId}, status=${result.gameStatus}")
                                             // Broadcast already handled by notifyTimeout inside the use case
                                         }
                                         is ClaimTimeoutResult.TimeoutRejected -> {

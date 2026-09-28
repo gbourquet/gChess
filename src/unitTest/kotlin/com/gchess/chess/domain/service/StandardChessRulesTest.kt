@@ -1493,9 +1493,17 @@ class StandardChessRulesTest : StringSpec({
         rules.isInsufficientMaterial(position) shouldBe false
     }
 
+    "should not detect insufficient material with king and bishop vs king and knight" {
+        // Arrange: One minor piece each, not two bishops
+        val position = "4k2n/8/8/8/8/8/3B4/4K3 w - - 0 1".toChessPosition()
+
+        // Act & Assert: Sufficient material - a helpmate is possible
+        rules.isInsufficientMaterial(position) shouldBe false
+    }
+
     // ========== Mating Material (per Side) Tests ==========
 
-    "a lone king has no mating material" {
+    "should detect no mating material with a lone king" {
         // Arrange: Black has only its king, White still has a queen
         val position = "4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1".toChessPosition()
 
@@ -1503,7 +1511,7 @@ class StandardChessRulesTest : StringSpec({
         rules.hasMatingMaterial(position, PlayerSide.BLACK) shouldBe false
     }
 
-    "a king and a single knight have no mating material" {
+    "should detect no mating material with king and a single knight" {
         // Arrange: Black has king + knight, White still has a rook
         val position = "4k2n/8/8/8/8/8/3R4/4K3 w - - 0 1".toChessPosition()
 
@@ -1511,7 +1519,7 @@ class StandardChessRulesTest : StringSpec({
         rules.hasMatingMaterial(position, PlayerSide.BLACK) shouldBe false
     }
 
-    "a king and a single bishop have no mating material" {
+    "should detect no mating material with king and a single bishop" {
         // Arrange: White has king + bishop, Black still has a queen
         val position = "3qk3/8/8/8/8/8/3B4/4K3 w - - 0 1".toChessPosition()
 
@@ -1519,7 +1527,7 @@ class StandardChessRulesTest : StringSpec({
         rules.hasMatingMaterial(position, PlayerSide.WHITE) shouldBe false
     }
 
-    "a king and a single pawn have mating material" {
+    "should detect mating material with king and a single pawn" {
         // Arrange: White has king + pawn (can promote), Black has only its king
         val position = "4k3/8/8/8/8/8/3P4/4K3 w - - 0 1".toChessPosition()
 
